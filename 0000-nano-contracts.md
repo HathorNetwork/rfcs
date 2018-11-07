@@ -78,39 +78,59 @@ It consumes two parameter from the stack: `<query> <json>`. The json must be enc
 
 
 
-Example of a contract in which two people (A and B) bet 1 token each in the price of Hathor. If the price of Hathor is above $5.00, A receives 2 tokens. Otherwise, B receives 2 tokens. Then, the script of the output would be:
+Example of a contract in which two people (A and B) bet 1 token each in the price of Hathor. If the price of Hathor is above $5.00 after 2 months, A receives 2 tokens. Otherwise, B receives 2 tokens. Then, the script of the output would be:
 
-`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+First part: `OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE`.
+
+Then: `<0> <key> OP_DATA_EQUAL_STR <1> <timestamp> OP_DATA_GREATER_THAN`.
+
+Finally: `<2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
 
 The data of the input spending this output would be:
 
 `<data> <oracleSig> <oraclePubKey>`
 
-The execution would be:
+The `<data>` should be in the format `key:timestamp:payload`.
+
+Putting everything together, the execution would be:
 
 Stack=`[]`
-Script=`<data> <oracleSig> <oraclePubKey> OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+Script=`<data> <oracleSig> <oraclePubKey> OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_STR <1> <timestamp> OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
 
 Stack=`<data> <oracleSig> <oraclePubKey>`
-Script=`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+Script=`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_STR <1> <timestamp> OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
 
 Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKey>`
-Script=`OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+Script=`OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_STR <1> <timestamp> OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
 
 Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKeyHash>`
-Script=`<oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+Script=`<oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_STR <1> <timestamp> OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
 
 Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKeyHash> <oraclePubKeyHash>`
-Script=`OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+Script=`OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_STR <1> <timestamp> OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+
 
 Stack=`<data> <oracleSig> <oraclePubKey>`
-Script=`OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+Script=`OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_STR <1> <timestamp> OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+
 
 Stack=`<data>`
-Script=`<1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+Script=`<0> <key> OP_DATA_EQUAL_STR <1> <timestamp> OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
 
-Stack=`<data> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B>`
-Script=`OP_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<data> <0> <key>`
+Script=`OP_DATA_EQUAL_STR <1> <timestamp> OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data>`
+Script=`<1> <timestamp> OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data> <1> <timestamp>`
+Script=`OP_DATA_GREATER_THAN <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data>`
+Script=`<2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data> <2> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B>`
+Script=`OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
 
 Stack=`<PubKeyHash_A>`
 Script=`OP_FIND_P2PKH`
