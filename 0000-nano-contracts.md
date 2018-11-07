@@ -66,6 +66,18 @@ The winner will be pushed to the stack in the end.
 ### (IDEA) OP_JSON_GET
 It consumes two parameter from the stack: `<query> <json>`. The json must be encoded using utf-8.
 
+
+## Examples
+
+Example of a contract in which two people (A and B) bet 1 token each in the price of Hathor. If the price of Hathor is above $5.00, A receives 2 tokens. Otherwise, B receives 2 tokens. Then, the script of the output would be:
+
+`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL`
+
+The data of the input spending this output would be:
+
+`<data> <oracleSig> <oraclePubKey>`
+
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
