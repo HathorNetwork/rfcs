@@ -62,20 +62,61 @@ It checks in which interval the number `<x>` belongs to. If it belongs to (-inf,
 
 The winner will be pushed to the stack in the end.
 
+### OP_FIND_P2PKH
+
+It consumes one parameter from the stack: `<pubKeyHash>`. It checks whether current transaction has an output with a P2PKH script with the given public key hash and the same amount as the input.
+
+If it does not exist, it fails. Otherwise, it pushes `<TRUE>` to the stack.
+
 
 ### (IDEA) OP_JSON_GET
 It consumes two parameter from the stack: `<query> <json>`. The json must be encoded using utf-8.
 
 
+
 ## Examples
+
+
 
 Example of a contract in which two people (A and B) bet 1 token each in the price of Hathor. If the price of Hathor is above $5.00, A receives 2 tokens. Otherwise, B receives 2 tokens. Then, the script of the output would be:
 
-`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL`
+`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
 
 The data of the input spending this output would be:
 
 `<data> <oracleSig> <oraclePubKey>`
+
+The execution would be:
+
+Stack=`[]`
+Script=`<data> <oracleSig> <oraclePubKey> OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data> <oracleSig> <oraclePubKey>`
+Script=`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKey>`
+Script=`OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKeyHash>`
+Script=`<oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKeyHash> <oraclePubKeyHash>`
+Script=`OP_EQUALVERIFY OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data> <oracleSig> <oraclePubKey>`
+Script=`OP_CHECKSIG_ORACLE <1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data>`
+Script=`<1> <PubKeyHash_A> <5.00> <PubKeyHash_B> OP_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<data> <1> <PubKeyHash_A> <5.00> <PubKeyHash_B>`
+Script=`OP_MATCH_INTERVAL OP_FIND_P2PKH`
+
+Stack=`<PubKeyHash_A>`
+Script=`OP_FIND_P2PKH`
+
+Stack=`<TRUE>`
+Script=``
 
 
 # Drawbacks
