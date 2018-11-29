@@ -17,13 +17,13 @@ The motivation is that in many cases we need more than one person to be responsi
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-First, to send tokens that can be spend only by multiple signatures, we need to generate a multi sig wallet.
+First, to send tokens that can be spent only by multiple signatures, we need to generate a multi sig wallet.
 
-This wallet is generated with N public keys and defining an integer M, that is the minimum quantity of signatures to spent its funds.
+This wallet is generated with N public keys and defining an integer M, that is the minimum quantity of signatures to spent its funds. We call it a M-of-N wallet.
 
 With this wallet we define a redeem script, which is the script to be executed to redeem the fund in the wallet and a multi sig address to receive funds.
 
-Multi sig addresses always start with byte 0x05, so we can know if the output will be MultiSig or P2PKH
+Multi sig addresses always start with byte 0x05, so we can know whether the output is Multisig or P2PKH.
 
 The sender of the funds does not need to know if it's a multi sig output or not, it will just send to a normal base58 address.
 
@@ -54,6 +54,7 @@ The OPCODE OP_CHECKMULTISIG will pop the first integer to know how many public k
 
 - We are using the same specifications of bitcoin, what is good because people are already used to it.
 - Multi sig is really necessary when you think about a company or a group that wants to share the responsability of control and spend the funds. Not doing multi sig would limit the use of our tokens.
+- Another alternative would be to use Shamir's Secret Sharing and a regular P2PKH transaction.
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
