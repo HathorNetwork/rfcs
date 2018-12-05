@@ -34,13 +34,13 @@ Only when you want to spend the multi sig fund you need to add the minimum numbe
 
 The redeem script is defined as `<M> <pubkey 1> <pubkey 2> ... <pubkey N> <N> <OP_CHECKMULTISIG>`
 
-The multi sig address is defined as described in the BIP 13 [https://github.com/bitcoin/bips/blob/master/bip-0013.mediawiki]. The address is `[one-byte version][20-byte hash][4-byte checksum]`, where the [one-byte version] is 0x05 for the multi sig (instead of 0x00 for P2PKG transactions), [20-byte hash] is the hash of the redeem script `RIPEMD160(SHA256(redeemScript))` and the [4-byte checksum] is the first four bytes of the double SHA256 hash of the version and hash.
+The multi sig address is defined as described in the BIP 13 [https://github.com/bitcoin/bips/blob/master/bip-0013.mediawiki]. The address is `[one-byte version][20-byte hash][4-byte checksum]`, where the [one-byte version] is 0x05 for the multi sig (instead of 0x00 for P2PKH transactions), [20-byte hash] is the hash of the redeem script `RIPEMD160(SHA256(redeemScript))` and the [4-byte checksum] is the first four bytes of the double SHA256 hash of the version and hash.
 
 Multi sig addresses always start with byte 0x05, so we can know if the output will be MultiSig or P2PKH
 
 The output script will be defined as: `OP_HASH160 [20-byte-hash-value] OP_EQUAL`, where the 20-byte-hash-value is the hash of the redeem script, defined by BIP 16 [https://github.com/bitcoin/bips/blob/master/bip-0016.mediawiki]
 
-To spend tokens from a multi sig output, the input must have at lease M signatures. The input data must have `<sig1> <sig2> ... <sigM> {redeemScript}`.
+To spend tokens from a multi sig output, the input must have at least M signatures. The input data must have `<sig1> <sig2> ... <sigM> {redeemScript}`.
 
 To validate that an input can spend an output we first check if it's a multi sig output, verifying if the script matches one multi sig script, then we have two steps to validate the input data:
 
