@@ -58,15 +58,15 @@ This data format should be agreed between the oracle and contract participants u
 
 The Nano Contract has a few special opcodes in the scripting language of the outputs.
 
-### OP_CHECKSIG_ORACLE
+### OP_CHECKDATASIG
 
-It consumes three parameters from the stack: `<oracleData> <oracleSig> and <oraclePubKey>`. It checks the data and signature against the pubkey. If the signature is valid, it pushes DATA to the stack. Otherwise, it fails.
+It consumes three parameters from the stack: `<data> <signature> and <pubKey>`. It checks the data and signature against the pubkey. If the signature is valid, it pushes DATA to the stack. Otherwise, it fails.
 
 It's important that the contract's script contains the oracle public key hash, to appoint who is the oracle for this contract. For example, the following script would check whether the data was signed by the correct oracle or not: `OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE`.
 
-The expected input data must be: `<oracleData> <oracleSig> <oraclePubKey>`.
+The expected input data must be: `<data> <signature> <pubKey>`.
 
-After running, the stack would be: `<oracleData>`.
+After running, the stack would be: `<data>`.
 
 This should be the first step when creating a nano contract most of the times.
 
@@ -80,19 +80,13 @@ After running, it pushes only the winner `<pubkeyHash>` to the stack.
 
 ### OP_MATCH_VALUE
 
-It consumes a dynamic number of parameters from stack: `<x> <pubkeyHash1> <a1> <pubkeyHash2> <a2> <pubkeyHash3> … <pubkeyHashN> <an> <n>` and checks which number `<x>` is equal to. `<n>` is the number of values to be checked.
+It consumes a dynamic number of parameters from stack: `<x> <fallbackPubkeyHash> <a1> <pubkeyHash1> <a2> <pubkeyHash2> <a3> <pubkeyHash3> … <an> <pubkeyHashN> <n>` and checks which number `<x>` is equal to. `<n>` is the number of values to be checked.
 
-If it's equal to a1, pubkeyHash1 wins, if equals to a2, pubkeyHash2 wins, and so on. If it doesn't match anything, it fails.
+If it's equal to a1, pubkeyHash1 wins, if equals to a2, pubkeyHash2 wins, and so on. If it doesn't match anything, fallbackPubkeyHash wins.
 
 After running, it pushes only the winner `<pubkeyHash>` to the stack.
 
 During contract creation, it should be enforced that each `<an>` is different; in other words, no one can bet on the same value.
-
-### OP_FIND_P2PKH
-
-It consumes one parameter from the stack: `<pubKeyHash>`. It checks whether the current transaction has an output with a P2PKH script with the given public key hash and the same amount as the input.
-
-If it does not exist, it fails. Otherwise, it pushes `<TRUE>` to the stack.
 
 ### OP_GET_DATA_STR, OP_GET_DATA_INT
 
@@ -132,70 +126,70 @@ Leaves on stack `<pubkeyHash>`; or fails, if no value matches.
 
 Eg: `<data> <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL` gets value 2 from data as an integer and finds the matching interval. Leaves `<pubkeyHash>` on stack
 
-### (IDEA) OP_JSON_GET
-It consumes two parameter from the stack: `<query> <json>`. The json must be encoded using utf-8.
-
 ## Examples
 
 ### Bet on a value
 
 Example of a contract in which two persons (A and B) bet 1 token each on the price of Hathor 2 months from now. If the price of Hathor is above $5.00, B receives 2 tokens. Otherwise, A receives 2 tokens. Then, the script of the output would be:
 
-First part: `OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE`.
-Confirms the data actually came from the oracle identified by `<oraclePubKeyHash>`
+First part: `<oraclePubKey> OP_CHECKDATASIG`.
+Confirms the data actually came from the oracle identified by `<oraclePubKey>`
 
 Then: `<0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN`.
 Checks that the first value from oracle data (field 0) is equal to `<key>`. Then, checks second value (field 1) is greater than the timestamp agreed on the contract (2 months from now in our example)
 
-Finally: `<2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
-Checks in which interval the oracle payload data (third value) is and that the winner `pubkeyHash` is in the outputs of the transaction
+And: `<2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL`
+Checks in which interval the oracle payload data (third value) is and leaves the winner `pubkeyHash` on the stack
+
+Finally: `OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
+Similar to the P2PKH sequence, but we use `OP_OVER` because top item stack will be public key hash.
 
 The data of the input spending this output would be:
 
-`<data> <oracleSig> <oraclePubKey>`, where `<data>` is in the format `key:timestamp:payload`.
+`<txSignature> <pubkey> <oracleData> <oracleSig>`, where `<oracleData>` is in the format `key:timestamp:payload` and `<txSignature>` is the transaction signature, like regular P2PKH transactions.
 
 Putting everything together, the execution would be:
 
 Stack=`[]`
-Script=`<data> <oracleSig> <oraclePubKey> OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Script=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> OP_CHECKDATASIG <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey>`
-Script=`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`
+Script=`OP_CHECKDATASIG <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKey>`
-Script=`OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData>`
+Script=`<0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKeyHash>`
-Script=`<oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData> <0> <key>`
+Script=`OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKeyHash> <oraclePubKeyHash>`
-Script=`OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData>`
+Script=`<1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey>`
-Script=`OP_CHECKSIG_ORACLE <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData> <1> <timestamp>`
+Script=`OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data>`
-Script=`<0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData>`
+Script=`<2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <0> <key>`
-Script=`OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData> <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1>`
+Script=`OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data>`
-Script=`<1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+(Suppose data says price is below $5)
 
-Stack=`<data> <1> <timestamp>`
-Script=`OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <PubKeyHash_A>`
+Script=`OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data>`
-Script=`<2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <PubKeyHash_A>`
+Script=`OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1>`
-Script=`OP_DATA_MATCH_INTERVAL OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <PubKeyHash_A> <pubkey>`
+Script=`OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-(Suppose data says price is below 5.00)
+Stack=`<txSignature> <pubkey> <PubKeyHash_A> <pubkeyHash>`
+Script=`OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<PubKeyHash_A>`
-Script=`OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey>`
+Script=`OP_CHECKSIG`
 
 Stack=`<TRUE>`
 Script=``
@@ -204,55 +198,55 @@ Script=``
 
 Example of a contract in which two persons (A and B) bet 1 token each on the Brazil x Argentina game result. If Argentina wins, A gets the tokens; if Brazil wins, B gets the tokens. Oracle will return 0 if Argentina wins; 1 if Brazil wins. Then, the script of the output would be:
 
-First part: `OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE`.
-Confirms the data actually came from the chosen identified by `<oraclePubKeyHash>`
+First part: `<oraclePubKey> OP_CHECKDATASIG`.
+Confirms the data actually came from the oracle identified by `<oraclePubKey>`
 
 Then: `<0> <key> OP_DATA_EQUAL_INT`.
 Checks that the first value from oracle data (field 0) is equal to `<key>`. We assume `<key>` is of type integer (it might be the id of this game in the oracle's database system). In this case, we don't care about timestamp. We assume the id is unique (Brazil x Argentina games in different dates would have different ids).
 
-Finally: `<1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
-Checks which value matches the oracle payload data (second value) and that the winner `pubkeyHash` is in the outputs of the transaction
+And: `<1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE`
+Checks which value matches the oracle payload data (second value) leaving the winner `pubkeyHash` on the stack.
+
+Finally: `OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
+Similar to the P2PKH sequence, but we use `OP_OVER` because top item stack will be public key hash.
 
 The data of the input spending this output would be:
 
-`<data> <oracleSig> <oraclePubKey>`, where `<data>` is in the format `key:payload`.
+`<txSignature> <pubkey> <oracleData> <oracleSig>`, where `<oracleData>` is in the format `key:payload` and `<txSignature>` is the transaction signature, like regular P2PKH transactions.
 
 Putting everything together, the execution would be:
 
 Stack=`[]`
-Script=`<data> <oracleSig> <oraclePubKey> OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_INT <1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
+Script=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> OP_CHECKDATASIG <0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey>`
-Script`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_INT <1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`
+Script=`OP_CHECKDATASIG <0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKey>`
-Script=`OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_INT <1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData>`
+Script=`<0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKeyHash>`
-Script=`<oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_INT <1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData> <0> <key>`
+Script=`OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey> <oraclePubKeyHash> <oraclePubKeyHash>`
-Script=`OP_EQUALVERIFY OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_INT <1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData>`
+Script=`<1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<data> <oracleSig> <oraclePubKey>`
-Script=`OP_CHECKSIG_ORACLE <0> <key> OP_DATA_EQUAL_INT <1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
-
-Stack=`<data>`
-Script=`<0> <key> OP_DATA_EQUAL_INT <1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
-
-Stack=`<data> <0> <key>`
-Script=`OP_DATA_EQUAL_INT <1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
-
-Stack=`<data>`
-Script=`<1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2> OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
-
-Stack=`<data> <1> <PubKeyHash_A> <0> <PubKeyHash_B> <1> <2>`
-Script=`OP_DATA_MATCH_VALUE OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <oracleData> <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2>`
+Script=`OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
 (Suppose data says Brazil won - payload is 1)
 
-Stack=`<PubKeyHash_B> `
-Script=`OP_FIND_P2PKH`
+Stack=`<txSignature> <pubkey> <PubKeyHash_B>`
+Script=`OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
+
+Stack=`<txSignature> <pubkey> <PubKeyHash_B> <pubkey>`
+Script=`OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
+
+Stack=`<txSignature> <pubkey> <PubKeyHash_B> <pubkeyHash>`
+Script=`OP_EQUALVERIFY OP_CHECKSIG`
+
+Stack=`<txSignature> <pubkey>`
+Script=`OP_CHECKSIG`
 
 Stack=`<TRUE>`
 Script=``
@@ -260,7 +254,7 @@ Script=``
 # Drawbacks
 [drawbacks]: #drawbacks
 
-Contracts might be as complex as their designers want, which may lead to bugs in their implementation. Even though this would not be a bug in the Hathor core code, this would reflect badly in our platform. Ethereum's DAO project is a prime example of this.
+Contracts might be as complex as their designers want, which may lead to bugs in their implementation. Even though this would not be a bug in the Hathor core code, this would reflect badly in our platform.
 
 The script verification also becomes a bit more complex, which means more CPU usage, but this should not be a problem.
 
