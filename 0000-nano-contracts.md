@@ -146,7 +146,7 @@ Similar to the P2PKH sequence, but we use `OP_OVER` because top item stack will 
 
 The data of the input spending this output would be:
 
-`<txSignature> <pubkey> <oracleData> <oracleSig>`, where `<oracleData>` is in the format `key:timestamp:payload` and `<txSignature>` is the transaction signature, like regular P2PKH transactions.
+`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`, where `<oracleData>` is in the format `key:timestamp:payload` and `<txSignature>` is the transaction signature, like regular P2PKH transactions.
 
 Putting everything together, the execution would be:
 
@@ -201,7 +201,7 @@ Stack=`<txSignature> <pubkey>`
 Script=`OP_CHECKSIG`
 
 Stack=`<TRUE>`  
-Script=``
+Script=
 
 ### Bet on a game result
 
@@ -221,7 +221,7 @@ Similar to the P2PKH sequence, but we use `OP_OVER` because top item stack will 
 
 The data of the input spending this output would be:
 
-`<txSignature> <pubkey> <oracleData> <oracleSig>`, where `<oracleData>` is in the format `key:payload` and `<txSignature>` is the transaction signature, like regular P2PKH transactions.
+`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`, where `<oracleData>` is in the format `key:payload` and `<txSignature>` is the transaction signature, like regular P2PKH transactions.
 
 Putting everything together, the execution would be:
 
@@ -270,7 +270,7 @@ Stack=`<txSignature> <pubkey>`
 Script=`OP_CHECKSIG`
 
 Stack=`<TRUE>`  
-Script=``
+Script=
 
 # Drawbacks
 [drawbacks]: #drawbacks
