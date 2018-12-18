@@ -29,12 +29,12 @@ This proposal has been largely influenced by Bitcoin Cash's GROUP proposal [1] -
 [reference-level-explanation]: #reference-level-explanation
 
 To support tokens, the following changes have to be made:
-1. In the transaction:
-   a. add a list of token uids. This list is limited to 16 uids and hathor uid is always index 0;
+1. In the transaction:  
+   a. add a list of token uids. This list is limited to 16 uids and hathor uid is always index 0;  
 
-2. In the transaction output:
-   a. add field 'token uid index', 4 bits: this references the token uids list in the transaction;
-   b. add field 'token authority', 4 bits: represents which authorities are given;
+2. In the transaction output:  
+   a. add field 'token uid index', 4 bits: this references the token uids list in the transaction;  
+   b. add field 'token authority', 4 bits: represents which authorities are given;  
 
 Creation of new tokens follows this sequence:
 1. Create initial token authority UTXO. As usual, the transaction should have an input (any hathor UTXO). This input is used to compute the token uid (see Token uid section). As the token authority output does not spend the hathor tokens, there should be another output to send the input hathor amount. During this first step, no new tokens are actually created, only the token uid;
