@@ -30,11 +30,11 @@ This proposal has been largely influenced by Bitcoin Cash's GROUP proposal [1] -
 
 To support tokens, the following changes have to be made:
 1. In the transaction:
-  a. add a list of token uids. This list is limited to 16 uids and hathor uid is always index 0;
+   a. add a list of token uids. This list is limited to 16 uids and hathor uid is always index 0;
 
 2. In the transaction output:
-  a. add field 'token uid index', 4 bits: this references the token uids list in the transaction;
-  b. add field 'token authority', 4 bits: represents which authorities are given;
+   a. add field 'token uid index', 4 bits: this references the token uids list in the transaction;
+   b. add field 'token authority', 4 bits: represents which authorities are given;
 
 Creation of new tokens follows this sequence:
 1. Create initial token authority UTXO. As usual, the transaction should have an input (any hathor UTXO). This input is used to compute the token uid (see Token uid section). As the token authority output does not spend the hathor tokens, there should be another output to send the input hathor amount. During this first step, no new tokens are actually created, only the token uid;
@@ -48,16 +48,17 @@ Authority operations break regular consensus rules, in which the sum of the inpu
 2. Melt: destroy the tokens. Sum of outputs may be smaller than inputs;
 
 Authority is represented by 4 bits in the UTXO, specifying which capabilities it has (bit 0 is least significant bit).
+
 | Bit | Meaning, when enabled (=1) |
 |-----|----------------------------|
 | 2,3 | Reserved for future use    |
 | 1   | Melt authority             |
 | 0   | Mint authority             |
 
-0b0000: no authority
-0b0001: mint authority
-0b0010: melt authority
-0b0011: melt and mint authority
+0b0000: no authority  
+0b0001: mint authority  
+0b0010: melt authority  
+0b0011: melt and mint authority  
 
 You can only transfer authorities that you have. So an UTXO with just melt authority cannot be used to create a new UTXO with mint authority.
 
