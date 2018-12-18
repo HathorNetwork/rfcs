@@ -150,60 +150,57 @@ The data of the input spending this output would be:
 
 Putting everything together, the execution would be:
 
-Stack=`[]`
+Stack=`[]`  
 Script=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`  
 Script=`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubKey>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubKey>`  
 Script=`OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubKeyHash>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubKeyHash>`  
 Script=`<oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubKeyHash> <oraclePubKeyHash>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubKeyHash> <oraclePubKeyHash>`  
 Script=`OP_EQUALVERIFY OP_CHECKDATASIG <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`  
 Script=`OP_CHECKDATASIG <0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData>`
+Stack=`<txSignature> <pubkey> <oracleData>`  
 Script=`<0> <key> OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <0> <key>`
+Stack=`<txSignature> <pubkey> <oracleData> <0> <key>`  
 Script=`OP_DATA_STREQUAL <1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData>`
+Stack=`<txSignature> <pubkey> <oracleData>`  
 Script=`<1> <timestamp> OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <1> <timestamp>`
+Stack=`<txSignature> <pubkey> <oracleData> <1> <timestamp>`  
 Script=`OP_DATA_GREATERTHAN <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData>`
+Stack=`<txSignature> <pubkey> <oracleData>`  
 Script=`<2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1>`
+Stack=`<txSignature> <pubkey> <oracleData> <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1>`  
 Script=`OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
 (Suppose data says price is below $5)
 
-Stack=`<txSignature> <pubkey> <PubKeyHash_A>`
-Script=`OP_DATA_MATCH_INTERVAL OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
-
-Stack=`<txSignature> <pubkey> <PubKeyHash_A>`
+Stack=`<txSignature> <pubkey> <PubKeyHash_A>`  
 Script=`OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <PubKeyHash_A> <pubkey>`
+Stack=`<txSignature> <pubkey> <PubKeyHash_A> <pubkey>`  
 Script=`OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <PubKeyHash_A> <pubkeyHash>`
+Stack=`<txSignature> <pubkey> <PubKeyHash_A> <pubkeyHash>`  
 Script=`OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey>`
+Stack=`<txSignature> <pubkey>`  
 Script=`OP_CHECKSIG`
 
-Stack=`<TRUE>`
+Stack=`<TRUE>`  
 Script=``
 
 ### Bet on a game result
@@ -228,51 +225,51 @@ The data of the input spending this output would be:
 
 Putting everything together, the execution would be:
 
-Stack=`[]`
+Stack=`[]`  
 Script=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE OP_CHECKDATASIG <0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`  
 Script=`OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG <0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubkey>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubkey>`  
 Script=`OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG <0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubkeyHash>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubkeyHash>`  
 Script=`<oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG <0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubkeyHash> <oraclePubkeyHash>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey> <oraclePubkeyHash> <oraclePubkeyHash>`  
 Script=`OP_EQUALVERIFY OP_CHECKDATASIG <0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`
+Stack=`<txSignature> <pubkey> <oracleData> <oracleSig> <oraclePubKey>`  
 Script=`OP_CHECKDATASIG <0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData>`
+Stack=`<txSignature> <pubkey> <oracleData>`  
 Script=`<0> <key> OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <0> <key>`
+Stack=`<txSignature> <pubkey> <oracleData> <0> <key>`  
 Script=`OP_DATA_EQUAL_INT <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData>`
+Stack=`<txSignature> <pubkey> <oracleData>`  
 Script=`<1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2> OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <oracleData> <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2>`
+Stack=`<txSignature> <pubkey> <oracleData> <1> <FallbackPubKeyHash> <0> <PubKeyHash_A> <1> <PubKeyHash_B> <2>`  
 Script=`OP_DATA_MATCH_VALUE OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
 (Suppose data says Brazil won - payload is 1)
 
-Stack=`<txSignature> <pubkey> <PubKeyHash_B>`
+Stack=`<txSignature> <pubkey> <PubKeyHash_B>`  
 Script=`OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <PubKeyHash_B> <pubkey>`
+Stack=`<txSignature> <pubkey> <PubKeyHash_B> <pubkey>`  
 Script=`OP_HASH160 OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey> <PubKeyHash_B> <pubkeyHash>`
+Stack=`<txSignature> <pubkey> <PubKeyHash_B> <pubkeyHash>`  
 Script=`OP_EQUALVERIFY OP_CHECKSIG`
 
-Stack=`<txSignature> <pubkey>`
+Stack=`<txSignature> <pubkey>`  
 Script=`OP_CHECKSIG`
 
-Stack=`<TRUE>`
+Stack=`<TRUE>`  
 Script=``
 
 # Drawbacks
