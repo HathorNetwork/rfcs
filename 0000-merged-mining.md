@@ -19,7 +19,7 @@ The motivation is that giving the possibility to execute merged mining attracts 
 
 First, the only thing we need from Bitcoin is a place in the block to add arbitrary data, that does not influence when the block is propagate in the network. This place is the coinbase transaction, that is the transaction generated when mining a block to send the funds to the miner and can contain any arbitrary data [1]
 
-We will need to generate a block that will be valid in both networks when propagated (Hathor and Bitcoin). This block will be called AuxPOW block. AuxPOW comes from Auxiliary Proof-of-work.
+We will need to generate a block that the work done to solve the proof-of-work can be valid in both networks when propagated (Hathor and Bitcoin). This block will be called AuxPOW block. AuxPOW comes from Auxiliary Proof-of-work.
 
 The Bitcoin blockchain will be called Parent Blockchain (the one that has the biggest difficulty) and the Hathor blockchain will be called Auxiliary Blockchain (the one that has the smallest difficulty)
 
@@ -36,7 +36,7 @@ The work to solve the Bitcoin block after the creation of the AuxPOW is sent to 
 We have 3 possibilities:
 
 1. The hash found does not solve any of pow from neither Bitcoin or Hathor block, so we just increase the nonce and continue the hash process.
-2. The hash found solves the Hathor pow and does not solves Bitcoin pow, so we just propagate the AuxPOW block in the Hathor network.
+2. The hash found solves the Hathor pow and does not solves Bitcoin pow, so we add data from the AuxPOW block to Hathor block candidate and then propagate it in the Hathor network.
   - We must add some data from the AuxPOW block to the Hathor block to confirm that the work was done
   - We add the AuxPOW block header, the coinbase transaction and the coinbase merkle informations to validate that the work is valid, that solves Hathor pow and that the coinbase transaction is linked to the Hathor block being propagated.
 3. The hash found solves the pow from both blocks. In that case we just normally propagate bitcoin block and follow the steps in possibility 2 to propagate Hathor block.
