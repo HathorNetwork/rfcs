@@ -17,7 +17,7 @@ The motivation is to increase the usability of the network. When anyone may easi
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-Token transactions will behave as regular transactions in the Hathor DAG. Each new token will have a 32-byte unique identifier (uid). It is possible to set user-friendly alias to these uids, but it is configured in each node/wallet. Users should never rely on alias; the uid of the token must all be checked.
+Token transactions will behave as regular transactions in the Hathor DAG. Each new token will have a 32-byte unique identifier (uid). It is possible to set user-friendly alias to these uids, but it is configured in each node/wallet. Users should never rely on alias; the uid of the token must always be checked.
 
 After a token has been created, it may be freely exchanged exactly like Hathor's tokens. Thus, they will have the same features, like Nano Contracts, timelock, and so on. It will be possible to create transactions with more than one token, i.e., Hathor's tokens and a sub-token, as long the verification passes for each token.
 
@@ -30,40 +30,45 @@ This proposal has been largely influenced by Bitcoin Cash's GROUP proposal [1] -
 
 To support tokens, the following changes have to be made:
 1. In the transaction:  
-   a. add a list of token uids. This list is limited to 16 uids and hathor uid is always index 0;  
+    a. add a list of token uids. This list is limited to 16 uids and hathor uid is always index 0;  
 
 2. In the transaction output:  
-   a. add field 'token uid index', 4 bits: this references the token uids list in the transaction;  
-   b. add field 'token authority', 4 bits: represents which authorities are given;  
+    a. add field 'token data', which merges 'authority flag' (left-most bit) and 'token uid index' (remaining bits): 
+        - authority flag: indicates this is an authority output. Since there's no token transfer in authority outputs, the value field is actually used for token authority flags;  
+        - token uid index: references the token uids list in the transaction;  
 
 Creation of new tokens follows this sequence:
-1. Create initial token authority UTXO. As usual, the transaction should have an input (any hathor UTXO). This input is used to compute the token uid (see Token uid section). As the token authority output does not spend the hathor tokens, there should be another output to send the input hathor amount. During this first step, no new tokens are actually created, only the token uid;
+1. Create initial token authority UTXO. As usual, the transaction should have an input (any UTXO). This input is used to compute the token uid (see Token uid section). As the token authority output does not spend the input tokens, there should be another output to send the input amount. During this first step, no new tokens are actually created, only the token uid;
 2. The authority UTXO created above is spent to mint new tokens. This is where regular consensus rules are broken and, for the given token, output amount can be greater than input amount. Besides this mint output, other authority output may be included so we still have the ability to mint/melt tokens;
 3. After the new tokens have been minted, regular consensus rules apply. This means that, for each token in a transaction, output and input amounts have to match.
 
+## Token uid
+The token unique identifier is a 32-byte unique identifier. It's computed in the initial token authority creation, using the sha256 hash of the corresponding input tx id and index. This way, there's no chance of a collision hapenning (2 tokens with same token uid). For eg, if the token authority creation output is the second on the transaction output list, we'll use the second input for computing the uid.
+
 ## Authority flags
 
-Authority operations break regular consensus rules, in which the sum of the inputs is the same as the outputs. There are, for now, 2 authority flags:
-1. Mint: we're creating new tokens, increasing its supply. Sum of outputs may be greater than inputs;
-2. Melt: destroy the tokens. Sum of outputs may be smaller than inputs;
+Authority operations break regular consensus rules, in which the sum of the inputs is the same as the outputs. There are 3 authority flags:
+1. Create token: create a new token uid;
+2. Mint: we're creating new tokens, increasing its supply. Sum of outputs may be greater than inputs;
+3. Melt: destroy the tokens. Sum of outputs may be smaller than inputs;
 
-Authority is represented by 4 bits in the UTXO, specifying which capabilities it has (bit 0 is least significant bit).
+The authority flags reuse the value field in the output, as an authority UTXO does not transfer any tokens. Each bit represents a capability (bit 0 is least significant bit).
 
 | Bit | Meaning, when enabled (=1) |
 |-----|----------------------------|
-| 2,3 | Reserved for future use    |
-| 1   | Melt authority             |
-| 0   | Mint authority             |
+| 2   | Melt authority             |
+| 1   | Mint authority             |
+| 0   | Token creation             |
 
+Value field has 4 bytes, but we'll ony show the final byte for simplicity:
 0b0000: no authority  
-0b0001: mint authority  
-0b0010: melt authority  
-0b0011: melt and mint authority  
+0b0001: token creation  
+0b0010: mint authority  
+0b0100: melt authority  
+0b0011: token creation and mint authority  
+0b0110: melt and mint authority  
 
 You can only transfer authorities that you have. So an UTXO with just melt authority cannot be used to create a new UTXO with mint authority.
-
-## Token uid
-The token unique identifier is a 32-byte unique identifier. It's computed in the initial token authority creation, using the sha256 hash of the first input tx id and index. This way, there's no chance of a collision hapenning (2 tokens with same token uid). The amount of hathors in the input does not make a difference.
 
 ## Examples
 
@@ -82,10 +87,10 @@ Input: tx_id, 0
 
 | Output | Token uid | Token authority | Amount | Script         |
 |--------|-----------|-----------------|--------|----------------|
-| 0      | tuid      | 0b0011          | 0      | P2PKH (ADDR_1) |
+| 0      | tuid      | 0b0111          | -      | P2PKH (ADDR_1) |
 | 1      | 0         | 0               | N      | P2PKH (ADDR_2) |
 
-First output is the authority UTXO, giving ADDR_1 authority to mint and melt tokens with tuid. Second output is a regular hathor output, to send the input tokens (considering input had N hathors).
+First output is the creation authority UTXO, giving ADDR_1 authority to mint and melt tokens with tuid. Second output is a regular hathor output, to send the input tokens (considering input had N hathors). This creates the token uid and, being the first output, uses the hash of the first input.
 
 2. Mint operation (TX1)
 Input: TX0, 0 (we're spending the first output of the above transaction)
@@ -118,7 +123,7 @@ Input: tx_id, 0
 
 | Output | Token uid | Token authority | Amount | Script         |
 |--------|-----------|-----------------|--------|----------------|
-| 0      | tuid      | 0b0011          | 0      | P2PKH (ADDR_1) |
+| 0      | tuid      | 0b0110          | -      | P2PKH (ADDR_1) |
 | 1      | 0         | 0               | N      | P2PKH (ADDR_2) |
 
 Same as last example.
@@ -129,9 +134,9 @@ Input: TX0, 0 (we're spending the first output of the above transaction)
 | Output | Token uid | Token authority | Amount       | Script         |
 |--------|-----------|-----------------|--------------|----------------|
 | 0      | tuid      | 0               | 1000000      | P2PKH (ADDR_3) |
-| 1      | tuid      | 0b0011          | 0            | P2PKH (ADDR_4) |
+| 1      | tuid      | 0b0110          | 0            | P2PKH (ADDR_4) |
 
-The first output is the same as last example, but we're also creating a new authority UTXO and assigning it to ADDR_4. This means that new tokens might be minted (or melted) by whoever controls ADDR_4.
+The first output is the same as last example, but we're also creating a new authority UTXO (with mint/melt authority) and assigning it to ADDR_4. This means that new tokens might be minted (or melted) by whoever controls ADDR_4.
 
 
 # Drawbacks
