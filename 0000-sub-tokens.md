@@ -134,7 +134,7 @@ Input: TX0, 0 (we're spending the first output of the above transaction)
 | Output | Token uid | Token authority | Amount       | Script         |
 |--------|-----------|-----------------|--------------|----------------|
 | 0      | tuid      | 0               | 1000000      | P2PKH (ADDR_3) |
-| 1      | tuid      | 0b0110          | 0            | P2PKH (ADDR_4) |
+| 1      | tuid      | 0b0110          | -            | P2PKH (ADDR_4) |
 
 The first output is the same as last example, but we're also creating a new authority UTXO (with mint/melt authority) and assigning it to ADDR_4. This means that new tokens might be minted (or melted) by whoever controls ADDR_4.
 
