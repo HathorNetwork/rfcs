@@ -19,7 +19,7 @@ The motivation is to increase the usability of the network. When anyone may easi
 
 Token transactions will behave as regular transactions in the Hathor DAG. Each new token will have a 32-byte unique identifier (uid). It is possible to set user-friendly alias to these uids, but it is configured in each node/wallet. Users should never rely on alias; the uid of the token must always be checked.
 
-After a token has been created, it may be freely exchanged exactly like Hathor's tokens. Thus, they will have the same features, like Nano Contracts, timelock, and so on. It will be possible to create transactions with more than one token, i.e., Hathor's tokens and a sub-token, as long the verification passes for each token.
+After a token has been created, it may be freely exchanged exactly like Hathor's tokens. Thus, they will have the same features, like Nano Contracts, timelock, and so on. It will be possible to create transactions with more than one token, i.e., Hathor's tokens and a token, as long the verification passes for each token.
 
 Token creation happens in a special transaction output, called initial authority UTXO, giving an address the authority over this token. This authority gives its holder the ability to mint or melt new tokens and may also be transferred to other addresses. As token authority is represented by an UTXO, it can only be used once. This means that using this UTXO as an input to mint tokens, for example, prevents this same output from being used again. If one wishes to keep his authority when minting tokens, he should also create an authority UTXO alongside the other output. Minting a token and removing all authority over it is useful to create tokens with a provable supply limit, as no new tokens can be minted.
 
