@@ -6,7 +6,13 @@
 # Summary
 [summary]: #summary
 
-Support very simple Smart Contracts, in which two or more people transfer their tokens to a contract and the winner takes all tokens. A contract is simply a set of rules applied to decide the final distribution of tokens.
+Nano Contracts are a simplified version of Smart Contracts, in which two or more people transfer their funds to a special transaction, called a contract, which will be decided later. A contract is simply a set of rules applied to decide the final distribution of the funds, i.e., how many tokens each participant of the contract will receive.
+
+Another important concept in Nano Contracts are the Oracles. These are agents that submit pieces of information from the real world (outside the network) to inside the network. These pieces of information will be used to complete a Nano Contract and distribute the funds to its participants.
+
+Through Nano Contracts and Oracles, people will be able to bet about facts ocurred in the real world, such as the results of games, the price of assets, or even about the weather. This bets may be used either to speculate or to hedge a position.
+
+As a proof-of-concept, we will develop two types of Nano Contracts: exact and interval. The first create exact rules, such as who will win a game, while the latter create interval rules, such as the price of an asset.
 
 # Motivation
 [motivation]: #motivation
