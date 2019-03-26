@@ -25,7 +25,7 @@ It also allows an independent network, with many peers and its own DAG, to have 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-We have a new type of transaction, with no inputs and no outputs. This transaction will have two parents connected to the Hathor's Main DAG, and two other parents to connected to the side DAG. Then, there are two possible cases when a full node is processing this transaction:
+We have to create a new type of transaction. This transaction will have two parents connected to the Hathor's Main DAG, and two other parents to connected to the side DAG. Then, there are two possible cases when a full node is processing this transaction:
 
 1. If the full node does not have the side DAG, then it always accepts the special transaction, which will have its accumulated weight growing as new blocks and transactions arrive in Hathor's Main DAG.
 
@@ -35,6 +35,13 @@ We have a new type of transaction, with no inputs and no outputs. This transacti
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
+Add a new extension of `BaseTransaction` called `ExternalVerification`, which has two new attributes: `side_genesis: bytes` and `side_parents: List[bytes]`. These attributes will work as pointers to transactions of a side-DAG. We have no information about either the side-DAG or the transactions it points to.
+
+When verifying an `ExternalVerification` vertex of the DAG, we will only verify the `side_parents` when the `side_genesis` exists. Otherwise, we just skip them. This will allow a full-node to decide which side-DAGs it will by syncing. All full-nodes must have Hathor's Main DAG.
+
+When calculating the `meta.acc_weight` of a transaction in a side-DAG, we must go through the children in the Main DAG. This will propagate the proof-of-work from Hathor's Main DAG into the side-DAG. Thus, making the transactions of the side-DAG immutable just like a transaction in the Main DAG.
+
+`ExternalVerfication` may have inputs and outputs to pay a fee (which may go to the miners or simply melt some HTRs).
 
 
 # Drawbacks
@@ -53,6 +60,7 @@ We have a new type of transaction, with no inputs and no outputs. This transacti
 [unresolved-questions]: #unresolved-questions
 
 - How to create a transaction with inputs from two different side DAGs?
+- Hathor's Main DAG has three genesis transactions. Would `side_genesis` force side-DAGs to have one, and only one, genesis?
 
 
 # Future possibilities
