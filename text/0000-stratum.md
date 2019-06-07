@@ -40,7 +40,7 @@ To subscribe to mining jobs, miner should create a JSON RPC 2 `subscribe` reques
    "id":"2085195499",
    "jsonrpc":"2.0",
    "method":"subscribe",
-   "params":null
+   "params":{"mine_txs":true}
 }
 ```
 
@@ -144,7 +144,11 @@ And all the **responses** can have either - but never both:
 
 ### `subscribe` 
 Miner subscribe for job notifications.
-`params` should be `null` or not present.
+`params` should be either `null` or `{}` if empty. If not empty, they may contain the following:
+
+| Field               | Type       | Content                                              |
+| :------------------ | :--------- | :--------------------------------------------------- |
+| mine_txs (optional) | bool       | Enable mining of transactions (which yield no reward). When not present defaults to true. |
 
 Request:
 
@@ -174,7 +178,7 @@ Miner submits a complete mining job. `params` should contain:
 
 | Field         | Type       | Content                                              |
 | :------------ | :--------- | :--------------------------------------------------- |
-| job_id        | int        | `64`-bit integer that identifies the job                      |
+| job_id        | int        | `64`-bit integer that identifies the job             |
 | nonce         | string     | String that contains the nonce that solves the job   |
 
 Note that the nonce size depends on the type of the job. `nonce_bytes = block_job ? 16 : 4`.
