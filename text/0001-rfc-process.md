@@ -1,22 +1,24 @@
-- Start Date: 2014-03-11
-- RFC PR: [rust-lang/rfcs#2](https://github.com/rust-lang/rfcs/pull/2), [rust-lang/rfcs#6](https://github.com/rust-lang/rfcs/pull/6)
-- Rust Issue: N/A
+- Start Date: 2019-07-24
+
+# Disclosure
+
+This whole document is an adaptation of the [rust-rfc-process].
 
 # Summary
 
 The "RFC" (request for comments) process is intended to provide a
-consistent and controlled path for new features to enter the language
+consistent and controlled path for new features to enter the platform
 and standard libraries, so that all stakeholders can be confident about
-the direction the language is evolving in.
+the direction the platform is evolving in.
 
 # Motivation
 
-The freewheeling way that we add new features to Rust has been good for
-early development, but for Rust to become a mature platform we need to
+The freewheeling way that we add new features to Hathor has been good for
+early development, but for Hathor to become a mature platform we need to
 develop some more self-discipline when it comes to changing the system.
 This is a proposal for a more principled RFC process to make it
 a more integral part of the overall development process, and one that is
-followed consistently to introduce features to Rust.
+followed consistently to introduce features to Hathor.
 
 # Detailed design
 
@@ -24,20 +26,20 @@ Many changes, including bug fixes and documentation improvements can be
 implemented and reviewed via the normal GitHub pull request workflow.
 
 Some changes though are "substantial", and we ask that these be put
-through a bit of a design process and produce a consensus among the Rust
+through a bit of a design process and produce a consensus among the Hathor
 community and the [core team].
 
 ## When you need to follow this process
 
 You need to follow this process if you intend to make "substantial"
-changes to the Rust distribution. What constitutes a "substantial"
+changes to the Hathor distribution. What constitutes a "substantial"
 change is evolving based on community norms, but may include the following.
 
-   - Any semantic or syntactic change to the language that is not a bugfix.
-   - Removing language features, including those that are feature-gated.
-   - Changes to the interface between the compiler and libraries,
-including lang items and intrinsics.
-   - Additions to `std`
+   - Any change that affects the transaction or block's serialization format.
+   - Changes to the validation of transactions and blocks.
+   - Changes to the opcodes of the script language.
+   - Changes that affects the consensus of the network, i.e., which transactions
+are voided and which are executed.
 
 Some changes do not require an RFC:
 
@@ -46,7 +48,7 @@ does not change meaning".
    - Additions that strictly improve objective, numerical quality
 criteria (warning removal, speedup, better platform coverage, more
 parallelism, trap more errors, etc.)
-   - Additions only likely to be _noticed by_ other developers-of-rust,
+   - Additions only likely to be _noticed by_ other developers-of-hathor,
 invisible to users-of-rust.
 
 If you submit a pull request to implement a new feature without going
@@ -55,12 +57,12 @@ submit an RFC first.
 
 ## What the process is
 
-In short, to get a major feature added to Rust, one must first get the
+In short, to get a major feature added to Hathor, one must first get the
 RFC merged into the RFC repo as a markdown file. At that point the RFC
 is 'active' and may be implemented with the goal of eventual inclusion
-into Rust.
+into Hathor.
 
-* Fork the RFC repo https://github.com/rust-lang/rfcs
+* Fork the RFC repo https://github.com/HathorNetwork/rfcs
 * Copy `0000-template.md` to `text/0000-my-feature.md` (where
 'my-feature' is descriptive. don't assign an RFC number yet).
 * Fill in the RFC
@@ -80,14 +82,14 @@ Whomever merges the RFC should do the following:
   has multiple pull requests associated with it, choose one PR number,
   preferably the minimal one.)
 * Add the file in the `text/` directory.
-* Create a corresponding issue on [Rust repo](https://github.com/rust-lang/rust)
+* Create a corresponding issue on [Hathor repo](https://github.com/HathorNetwork/hathor-core)
 * Fill in the remaining metadata in the RFC header, including links for
-  the original pull request(s) and the newly created Rust issue.
+  the original pull request(s) and the newly created Hathor issue.
 * Add an entry in the [Active RFC List] of the root `README.md`.
 * Commit everything.
 
 Once an RFC becomes active then authors may implement it and submit the
-feature as a pull request to the Rust repo. An 'active' is not a rubber
+feature as a pull request to the Hathor repo. An 'active' is not a rubber
 stamp, and in particular still does not mean the feature will ultimately
 be merged; it does mean that in principle all the major stakeholders
 have agreed to the feature and are amenable to merging it.
@@ -106,7 +108,7 @@ designed to improve over the informal process in the following ways:
 
 * Discourage unactionable or vague RFCs
 * Ensure that all serious RFCs are considered equally
-* Give confidence to those with a stake in Rust's development that they
+* Give confidence to those with a stake in Hathor's development that they
 understand why new features are being merged
 
 As an alternative alternative, we could adopt an even stricter RFC process than the one proposed here. If desired, we should likely look to Python's [PEP] process for inspiration.
@@ -118,5 +120,6 @@ As an alternative alternative, we could adopt an even stricter RFC process than 
    informal RFC process?
 3. Should we retain rejected RFCs in the archive?
 
-[core team]: https://www.rust-lang.org/en-US/team.html
+[core team]: https://hathor.network/team/
 [PEP]: http://legacy.python.org/dev/peps/pep-0001/
+[rust-rfc-process]: https://github.com/rust-lang/rfcs/blob/master/text/0002-rfc-process.md
