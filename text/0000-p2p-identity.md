@@ -82,6 +82,7 @@ The HELLO command is used to exchange the configuration of the peer. Its payload
 	"remote_address": "192.168.0.1:51095",
 	"genesis_short_hash": "0788746",
 	"timestamp": 1564658478,
+    "settings_hash": "f9d86028c6e0d64e225186f96acb69338b2c59764df79162107f5c4bb34d1310",
 }
 ```
 
@@ -92,9 +93,13 @@ The description of each field is:
 - `remote_address`: Remote IP:PORT seen by this socket.
 - `genesis_short_hash`: First 7 chars of the hash of the genesis to prevent syncing incompatible DAGs.
 - `timestamp`: Current time according to node's clock. This field can help other nodes to determine that their clock is wrong and is important because nodes will reject blocks that are more than one hour in the future.
+- `settings_hash`: Hash of a dict containing some of the settings of the full node. The fields that are considered are: `P2PKH_VERSION_BYTE`, `MULTISIG_VERSION_BYTE`, `MIN_BLOCK_WEIGHT`, `MIN_TX_WEIGHT`, `BLOCK_DIFFICULTY_MAX_DW`, and `BLOCK_DATA_MAX_SIZE`. The hash is calculated in the following method (d is the dict with the settings):
 
+```
+    settings_hash = hashlib.sha256(json.dumps(d).encode('utf-8')).digest()
+```
 
-TODO: Should we add extra parameters of the settings, such as `BLOCK_DIFFICULTY_MAX_DW`, `BLOCK_DATA_MAX_SIZE`, `MIN_TX_WEIGHT`, etc? We can also include a `GET-SETTINGS` command to check them.
+If `settings_hash` is different in both peers, an ERROR command will be sent to the peer who sent the HELLO with the settings and the connection will be closed.
 
 ## Peer-Id State
 
@@ -125,6 +130,8 @@ The PING command is used to verify that the connection is still alive. There is 
 
 The PONG command is the response for a received PING command. There is no payload. When the node receives a PONG command, it updates the last_message field of the peer connection with the timestamp.
 
+Using PING and PONG commands we can calculate the RTT between two nodes. We just need to make sure the PONG response is sent as soon as the PING arrives, without any delay.
+
 ### GET-PEERS Command
 
 The GET-PEERS command is used to request a list of peers. There is no payload. When the node receives this command, it replies with a PEERS command.
@@ -143,7 +150,7 @@ The PEERS command is the response when the peer receives a GET-PEERS command and
 ]
 ```
 
-When the node receives this payload, it update its peer list and tries to connect to the new ones.
+When the node receives this payload, it update its peer list and if it's not connected to the peer, try to connect, otherwise do nothing. This approach prevents a sybil attack, however we might reach a connection limit, since we are connecting to all the peers without any other option. In the future we will have another RFC that will approach this situation and propose a solution where a node can connect only to a subset of all the nodes in the network, also avoiding a possible sybil attack.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -156,7 +163,7 @@ Another drawback is that all connections to use TLS 1.3, which creates a secure 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
-- We could use UDP instead of TCP for the transport protocol. This would increase the message exchange speed, however would increase the complexity of the code, because right now we are assuming that all messages arrive in the correct order (which is not true when using UDP);
+- We could use UDP instead of TCP for the transport protocol. This would increase the message exchange speed, however would increase the complexity of the code, because right now we are assuming that all messages arrive in the correct order (which is not true when using UDP). If we decide to use UDP we could use DTLS (Datagram Transport Layer Security) to use libssl over UDP;
 
 - We could use WebSocket instead of LineReceiver for the messaging protocol but the advantage is not real clear, so we've decided to keep the LineReceiver.
 
@@ -175,6 +182,8 @@ Another drawback is that all connections to use TLS 1.3, which creates a secure 
 [future-possibilities]: #future-possibilities
 
 - Peer reputation: with a secure method to define a peer id and to estabilish a connection between two peers we could start developing the reputation of one peer, so users can trust more in peers with higher reputation.
+- White list and black list of entrypoints. We could define that all base Hathor endpoints are trustworthy and are always in the white list and that any node must be connected to at least one node that is in the white list.
+- Define a maximum number of connections per IP address, to prevent a possible attack from the same IP.
 
 # References
 [references]: #references
