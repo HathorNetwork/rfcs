@@ -27,7 +27,7 @@ After a connection has been established, there are two steps before getting read
 
 2. The second step is the peer identification. In this step, the peers exchange their Peer-IDs and Entrypoints, then they verify whether they are connected directly to each other (without a man-in-the-middle).
 
-Finally, they are ready to freely exchange messages, i.e., they will exchanges their peers, sync their blocks and transactions, and so on.
+Finally, they are ready to freely exchange messages, i.e., they will exchange their peers, sync their blocks and transactions, and so on.
 
 ## Bootstraping
 
@@ -81,6 +81,7 @@ The HELLO command is used to exchange the configuration of the peer. Its payload
 	"network": "testnet-bravo",
 	"remote_address": "192.168.0.1:51095",
 	"genesis_short_hash": "0788746",
+	"timestamp": 1564658478,
 }
 ```
 
@@ -89,14 +90,15 @@ The description of each field is:
 - `app`: Version of the full-node.
 - `network`: The network this full-node is connected to. Anything different from "mainnet" is considered a testnet.
 - `remote_address`: Remote IP:PORT seen by this socket.
-- `genesis_short_hash`: Hash of the genesis to prevent syncing incompatible DAGs.
+- `genesis_short_hash`: First 7 chars of the hash of the genesis to prevent syncing incompatible DAGs.
+- `timestamp`: Current time according to node's clock. This field can help other nodes to determine that their clock is wrong and is important because nodes will reject blocks that are more than one hour in the future.
 
 
 TODO: Should we add extra parameters of the settings, such as `BLOCK_DIFFICULTY_MAX_DW`, `BLOCK_DATA_MAX_SIZE`, `MIN_TX_WEIGHT`, etc? We can also include a `GET-SETTINGS` command to check them.
 
 ## Peer-Id State
 
-This is state is respondible for the Peer Identification. So, it starts making a `STARTTLS` to enable TLS. During the TLS handshake, the peers will exchange their certificates and generate session keys. After the TLS has been enabled, only two commands are allowed: PEER-ID and ERROR.
+This state is responsible for the Peer Identification. So, it starts making a `STARTTLS` to enable TLS. During the TLS handshake, the peers will exchange their certificates and generate session keys. After the TLS has been enabled, only two commands are allowed: PEER-ID and ERROR.
 
 ### PEER-ID Command
 
@@ -109,7 +111,39 @@ The PEER-ID command is used to exchange the peer identity of the peer. Its paylo
 }
 ```
 
-When the PEER-ID command is received, the full-node compares the `id` with the sha256d of the public key. Then, it checks whether it is connected to one of the entrypoints.
+When the PEER-ID command is received, the full-node compares the `id` with the sha256d of the public key. Then, it checks whether it is connected to one of the entrypoints. If the `id` and entrypoints checks are valid, the peer state changes to READY.
+
+## Ready State
+
+This state is responsible for keeping the connection alive and exchange information about peers, blocks and transactions on the network. It starts requesting all the peers to the connected node and a ping message loop, to assure that the connection is still alive. This state allows five commands (besides the sync commands that won't be discussed in this RFC): PING, PONG, GET-PEERS, PEERS, and ERROR.
+
+### PING Command
+
+The PING command is used to verify that the connection is still alive. There is no payload. When the node receives a PING command, it replies with a PONG.
+
+### PONG Command
+
+The PONG command is the response for a received PING command. There is no payload. When the node receives a PONG command, it updates the last_message field of the peer connection with the timestamp.
+
+### GET-PEERS Command
+
+The GET-PEERS command is used to request a list of peers. There is no payload. When the node receives this command, it replies with a PEERS command.
+
+### PEERS Command
+
+The PEERS command is the response when the peer receives a GET-PEERS command and sends a list of known peers. Its payload is a JSON-formatted string in the following format:
+
+```
+[
+    {
+        "id": "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5590",
+        "entrypoints": ["tcp:54.211.192.182:40403"],
+        "last_message": 1564658478,
+    }
+]
+```
+
+When the node receives this payload, it update its peer list and tries to connect to the new ones.
 
 # Drawbacks
 [drawbacks]: #drawbacks
