@@ -77,11 +77,11 @@ The HELLO command is used to exchange the configuration of the peer. Its payload
 
 ```
 {
-	"app": "Hathor v0.26.0-beta",
-	"network": "testnet-bravo",
-	"remote_address": "192.168.0.1:51095",
-	"genesis_short_hash": "0788746",
-	"timestamp": 1564658478,
+    "app": "Hathor v0.26.0-beta",
+    "network": "testnet-bravo",
+    "remote_address": "192.168.0.1:51095",
+    "genesis_short_hash": "0788746",
+    "timestamp": 1564658478,
     "settings_hash": "f9d86028c6e0d64e225186f96acb69338b2c59764df79162107f5c4bb34d1310",
 }
 ```
