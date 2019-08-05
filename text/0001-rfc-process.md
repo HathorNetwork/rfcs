@@ -1,12 +1,12 @@
 - Start Date: 2019-07-24
 
 # Disclosure
-[Disclosure]: #disclosure
+[disclosure]: #disclosure
 
 This whole document is an adaptation of the [rust-rfc-process].
 
 # Summary
-[Summary]: #summary
+[summary]: #summary
 
 The "RFC" (request for comments) process is intended to provide a consistent and
 controlled path for new features to enter the platform and standard libraries,
@@ -14,7 +14,7 @@ so that all stakeholders can be confident about the direction the platform is
 evolving in.
 
 # Motivation
-[Motivation]: #motivation
+[motivation]: #motivation
 
 The freewheeling way that we add new features to Hathor has been good for early
 development, but for Hathor to become a mature platform we need to develop some
@@ -24,7 +24,7 @@ development process, and one that is followed consistently to introduce features
 to Hathor.
 
 # Detailed design
-[Detailed design]: #detailed-design
+[detailed-design]: #detailed-design
 
 Many changes, including bug fixes and documentation improvements can be
 implemented and reviewed via the normal GitHub pull request workflow.
@@ -34,7 +34,7 @@ bit of a design process and produce a consensus among the Hathor community and
 the [core team].
 
 ## When you need to follow this process
-[When you need to follow this process]: #when-you-need-to-follow-this-process
+[when-you-need-to-follow-this-process]: #when-you-need-to-follow-this-process
 
 You need to follow this process if you intend to make "substantial" changes to
 the Hathor distribution. What constitutes a "substantial" change is evolving
@@ -61,7 +61,7 @@ If you submit a pull request to implement a new feature without going through
 the RFC process, it may be closed with a polite request to submit an RFC first.
 
 ## What the process is
-[What the process is]: #what-the-process-is
+[what-the-process-is]: #what-the-process-is
 
 In short, to get a major feature added to Hathor, one must first get the RFC
 merged into the RFC repo as a markdown file. At that point the RFC is 'active'

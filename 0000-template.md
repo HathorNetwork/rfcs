@@ -4,18 +4,18 @@
 - Hathor Issue: (leave this empty)
 
 # Summary
-[Summary]: #summary
+[summary]: #summary
 
 One paragraph explanation of the feature.
 
 # Motivation
-[Motivation]: #motivation
+[motivation]: #motivation
 
 Why are we doing this? What use cases does it support? What is the expected
 outcome?
 
 # Guide-level explanation
-[Guide-level explanation]: #guide-level-explanation
+[guide-level-explanation]: #guide-level-explanation
 
 Explain the proposal as if it was already included in the language and you were
 teaching it to another Hathor programmer. That generally means:
@@ -37,7 +37,7 @@ provide an example-driven introduction to the policy, and explain its impact in
 concrete terms.
 
 # Reference-level explanation
-[Reference-level explanation]: #reference-level-explanation
+[reference-level-explanation]: #reference-level-explanation
 
 This is the technical portion of the RFC. Explain the design in sufficient
 detail that:
@@ -50,12 +50,12 @@ The section should return to the examples given in the previous section, and
 explain more fully how the detailed proposal makes those examples work.
 
 # Drawbacks
-[Drawbacks]: #drawbacks
+[drawbacks]: #drawbacks
 
 Why should we *not* do this?
 
 # Rationale and alternatives
-[Rationale and alternatives]: #rationale-and-alternatives
+[rationale-and-alternatives]: #rationale-and-alternatives
 
 - Why is this design the best in the space of possible designs?
 - What other designs have been considered and what is the rationale for not
@@ -63,7 +63,7 @@ Why should we *not* do this?
 - What is the impact of not doing this?
 
 # Prior art
-[Prior art]: #prior-art
+[prior-art]: #prior-art
 
 Discuss prior art, both the good and the bad, in relation to this proposal.
 A few examples of what this can include are:
@@ -89,7 +89,7 @@ on its own motivate an RFC.  Please also take into consideration that rust
 sometimes intentionally diverges from common language features.
 
 # Unresolved questions
-[Unresolved questions]: #unresolved-questions
+[unresolved-questions]: #unresolved-questions
 
 - What parts of the design do you expect to resolve through the RFC process
   before this gets merged?
@@ -100,7 +100,7 @@ sometimes intentionally diverges from common language features.
   RFC?
 
 # Future possibilities
-[Future possibilities]: #future-possibilities
+[future-possibilities]: #future-possibilities
 
 Think about what the natural extension and evolution of your proposal would
 be and how it would affect the language and project as a whole in a holistic

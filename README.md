@@ -1,5 +1,5 @@
 # Hathor RFCs
-[Hathor RFCs]: #hathor-rfcs
+[hathor-rfcs]: #hathor-rfcs
 
 Many changes, including bug fixes and documentation improvements can be
 implemented and reviewed via the normal GitHub pull request workflow.
@@ -14,7 +14,7 @@ so that all stakeholders can be confident about the direction Hathor is evolving
 in.
 
 ## Table of Contents
-[Table of Contents]: #table-of-contents
+[table-of-contents]: #table-of-contents
 
 - [Opening](#hathor-rfcs)
 - [Table of Contents]
@@ -29,7 +29,7 @@ in.
 - [License]
 
 ## When you need to follow this process
-[When you need to follow this process]: #when-you-need-to-follow-this-process
+[when-you-need-to-follow-this-process]: #when-you-need-to-follow-this-process
 
 You need to follow this process if you intend to make "substantial" changes to
 the Hathor protocol, network or the RFC process itself. What constitutes a
@@ -58,7 +58,7 @@ If you submit a pull request to implement a new feature without going through
 the RFC process, it may be closed with a polite request to submit an RFC first.
 
 ## Before creating an RFC
-[Before creating an RFC]: #before-creating-an-rfc
+[before-creating-an-rfc]: #before-creating-an-rfc
 
 A hastily-proposed RFC can hurt its chances of acceptance. Low quality
 proposals, proposals for previously-rejected features, or those that don't fit
@@ -81,7 +81,7 @@ developers, and particularly members of the core team is a good indication that
 the RFC is worth pursuing.
 
 ## What the process is
-[What the process is]: #what-the-process-is
+[what-the-process-is]: #what-the-process-is
 
 In short, to get a major feature added to Hathor, one must first get the RFC
 merged into the RFC repository as a markdown file. At that point the RFC is
@@ -135,7 +135,7 @@ merged into the RFC repository as a markdown file. At that point the RFC is
   FCP is canceled, and the RFC goes back into development mode.
 
 ## The RFC life-cycle
-[The RFC life-cycle]: #the-rfc-life-cycle
+[the-rfc-life-cycle]: #the-rfc-life-cycle
 
 Once an RFC becomes "active" then authors may implement it and submit the
 feature as a pull request to the Hathor repo. Being "active" is not a rubber
@@ -163,7 +163,7 @@ be new RFCs, with a note added to the original RFC. Exactly what counts as a
 "very minor change" is up to the core team to decide.
 
 ## Reviewing RFCs
-[Reviewing RFCs]: #reviewing-rfcs
+[reviewing-rfcs]: #reviewing-rfcs
 
 While the RFC pull request is up, the core team may schedule meetings with the
 author and/or relevant stakeholders to discuss the issues in greater detail, and
@@ -178,7 +178,7 @@ from the discussion in thread, the core team will add a comment describing the
 rationale for the decision.
 
 ## Implementing an RFC
-[Implementing an RFC]: #implementing-an-rfc
+[implementing-an-rfc]: #implementing-an-rfc
 
 Some accepted RFCs represent vital features that need to be implemented right
 away. Other accepted RFCs can represent features that can wait until some
@@ -196,7 +196,7 @@ cannot determine if someone else is already working on it, feel free to ask
 (e.g. by leaving a comment on the associated issue).
 
 ## RFC Postponement
-[RFC Postponement]: #rfc-postponement
+[rfc-postponement]: #rfc-postponement
 
 Some RFC pull requests are tagged with the "postponed" label when they are
 closed (as part of the rejection process). An RFC closed with "postponed" is
@@ -213,14 +213,14 @@ some semi-obvious variation of it." (When the answer to the latter question is
 "no", then the appropriate response is to close the RFC, not postpone it.)
 
 ### Help this is all too informal!
-[Help this is all too informal!]: #help-this-is-all-too-informal
+[help-this-is-all-too-informal]: #help-this-is-all-too-informal
 
 The process is intended to be as lightweight as reasonable for the present
 circumstances. As usual, we are trying to let the process be driven by consensus
 and community norms, not impose more structure than necessary.
 
 ## License
-[License]: #license
+[license]: #license
 
 This repository is currently in licensed under either of
 
@@ -229,7 +229,7 @@ This repository is currently in licensed under either of
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 ### Contributions
-[Contributions]: #contributions
+[contributions]: #contributions
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
