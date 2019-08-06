@@ -1,6 +1,6 @@
 - Feature Name: Peer-to-Peer Network
 - Start Date: 2019-07-30
-- RFC PR: [MR !12](https://gitlab.com/HathorNetwork/rfcs/merge_requests/12)
+- RFC PR: [MR !13](https://gitlab.com/HathorNetwork/rfcs/merge_requests/13)
 - Hathor Issue: (leave this empty)
 - Author: Pedro Ferreira <pedro@hathor.network>
 
