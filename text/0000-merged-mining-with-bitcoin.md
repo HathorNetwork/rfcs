@@ -49,10 +49,10 @@ operation in the parent blockchain is called *parent block* and the set of
 additional information needed by the auxiliary blockchain to accept the proof of
 work is referred as *AuxPOW* (for auxiliary proof-of-work).
 
-The required changes to the Hathor network is mainly detecting when a block has
-AuxPOW and to validate this AuxPOW. The Hathor network does not need to interact
-with the Bitcoin network in any way besides knowing the location of a few fields
-and how to build the merkle root of a parent block.
+The required changes to the Hathor network is mainly appending optional AuxPOW
+data to a block and to validating it accordingly. The Hathor network does not
+need to interact with the Bitcoin network in any way besides knowing the
+location of a few fields and how to build the merkle root of a parent block.
 
 An AuxPOW consists of:
 - the Bitcoin coinbase transaction that includes a hash of the Hathor's
