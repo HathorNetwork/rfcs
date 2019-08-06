@@ -63,7 +63,7 @@ An AuxPOW consists of:
 It is necessary to have a daemon that requests mining information to both
 networks and build a valid Bitcoin mining job that clients can work on. This
 daemon can be used by solo-miners or mining pool operators. Unfortunately it
-cannot be used by pool miners.
+cannot be used by mining pool members.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
