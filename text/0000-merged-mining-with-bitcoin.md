@@ -41,7 +41,7 @@ Because of these facts it is possible to include a pointer to Hathor's
 can be valid on either network if we accept additional data on the Hathor block
 to verify the work originally made for the Bitcoin network.
 
-This mechanism is [commonly known] as "merged mining" or "merge mining",
+This mechanism is [commonly known][1] as "merged mining" or "merge mining",
 famously implemented on the Namecoin blockchain since 2014. It is typical to say
 that Bitcoin is the *parent blockchain* and Namecoin is the *auxiliary
 blockchain* in this case. Similarly the individual block used on a merged mining
@@ -94,8 +94,8 @@ The new `aux_pow` structure consists of:
 | 80   | `bitcoin_header`     | validation is slightly different from Bitcoin |
 | 1+   | `coinbase_tx` length | byte length of the next field |
 | 41+  | `coinbase_tx`        | includes the hash of `block_data` |
-| 1+   | `merkle_path` count  | the number of hashes on the `merkle_path` |
-| 32+  | `merkle_path`        | each hash is 32 bytes long |
+| 1+   | `merkle_path` count  | the number of links on the `merkle_path` |
+| 32+  | `merkle_path`        | array of links, each one is 32 bytes long |
 
 ## The hashing algorithm
 [the-hashing-algorithm]: #the-hashing-algorithm
@@ -146,17 +146,17 @@ accordingly to allow such operations.
 
 This is outline of how the coordinator works:
 
-- Call [GetBlockTemplate] RPC on the Bitcoin fullnode
+- Call [GetBlockTemplate][2] RPC on the Bitcoin fullnode
 - Request work to the Hathor stratum server
 - Build a coinbase transaction suitable to both, inclusion on the Bitcoin
   network and usable a in AuxPOW:
-  - Add `[magic_number][block_data]` after the [block height] on the transaction
+  - Add `[magic_number][block_data]` after the [block height][3] on the transaction
     input signature script
 - When a stratum client connects, send `mining.set_difficulty` such that work
   can suit the easier network to mine in (most certainly Hathor).
 - Send the `mining.notify` identical to what a typical client expects
 - When work is submitted check which networks difficulties it is valid for and
-  resubmit it to each of them (through [SubmitBlock] on Bitcoin and
+  resubmit it to each of them (through [SubmitBlock][4] on Bitcoin and
   `mining.submit` on Hathor)
 
 ## Example
@@ -200,16 +200,16 @@ be done before accepting it.
 The merged mining mechanism proposed here is very similar to the one implemented
 by several blockchains:
 
-- [Namecoin with Bitcoin]
-- [Dogecoin with Litecoin]
-- [Elastos with Bitcoin]
+- [Namecoin with Bitcoin][5]
+- [Dogecoin with Litecoin][6]
+- [Elastos with Bitcoin][7]
 - and many others (Rootstock, Devcoin, ixcoin, i0coin, Groupcoin)
 
 Mining pool operators are familiar with the concept, and many do merge mining,
 such as:
 
-- [Bitcoin Merged Mining Pool](http://mmpool.org/)
-- [Slush Pool](https://support.slushpool.com/en-us/section/23-merged-mining)
+- [Bitcoin Merged Mining Pool][8]
+- [Slush Pool][9]
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
@@ -228,10 +228,12 @@ For example, simultaneour merged mining on Bitcoin Core and Bitcoin Cash.
 Althought more work is needed to understand the exact requirements or if it even
 is possible.
 
-[commonly known]: https://en.bitcoinwiki.org/wiki/Merged_mining_specification
-[GetBlockTemplate]: https://bitcoin.org/en/developer-reference#getblocktemplate
-[SubmitBlock]: https://bitcoin.org/en/developer-reference#submitblock
-[block height]: https://github.com/bitcoin/bips/blob/master/bip-0034.mediawiki
-[Namecoin with Bitcoin]: https://github.com/namecoin/wiki/blob/master/Merged-Mining.mediawiki)
-[Dogecoin with Litecoin]: https://www.reddit.com/r/dogecoin/comments/2ci90m/dogecoin_to_enable_auxpow_soon_all_infos_inside/)
-[Elastos with Bitcoin]: https://github.com/elastos/Elastos.ELA/wiki/Merged-mining-guide)
+[1]: https://en.bitcoinwiki.org/wiki/Merged_mining_specification
+[2]: https://bitcoin.org/en/developer-reference#getblocktemplate
+[3]: https://github.com/bitcoin/bips/blob/master/bip-0034.mediawiki
+[4]: https://bitcoin.org/en/developer-reference#submitblock
+[5]: https://github.com/namecoin/wiki/blob/master/Merged-Mining.mediawiki
+[6]: https://www.reddit.com/r/dogecoin/comments/2ci90m/dogecoin_to_enable_auxpow_soon_all_infos_inside/
+[7]: https://github.com/elastos/Elastos.ELA/wiki/Merged-mining-guide
+[8]: http://mmpool.org/
+[9]: https://support.slushpool.com/en-us/section/23-merged-mining
