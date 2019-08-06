@@ -243,11 +243,6 @@ sometimes intentionally diverges from common language features.
 Should we change the block mining reward for blocks with AuxPOW? This can be
 used to balance the incentive of doing merged mining versus direct mining.
 
-Should we prepare ourselves to allow merged mining as the parent blockchain?
-That is, allowing other coins to use our network for merge mining. We would need
-a place to add arbitrary data that does not influence when propagating to
-the network.
-
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
