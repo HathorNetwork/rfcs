@@ -210,6 +210,7 @@ such as:
 
 - [Bitcoin Merged Mining Pool][8]
 - [Slush Pool][9]
+- [and others][a]
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
@@ -237,3 +238,4 @@ is possible.
 [7]: https://github.com/elastos/Elastos.ELA/wiki/Merged-mining-guide
 [8]: http://mmpool.org/
 [9]: https://support.slushpool.com/en-us/section/23-merged-mining
+[a]: https://en.bitcoin.it/wiki/Comparison_of_mining_pools
