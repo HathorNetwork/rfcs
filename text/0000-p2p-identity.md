@@ -96,14 +96,14 @@ The description of each field is:
 - `settings_hash`: Hash of a dict containing some of the settings of the full node. The fields that are considered are: `P2PKH_VERSION_BYTE`, `MULTISIG_VERSION_BYTE`, `MIN_BLOCK_WEIGHT`, `MIN_TX_WEIGHT`, `BLOCK_DIFFICULTY_MAX_DW`, and `BLOCK_DATA_MAX_SIZE`. The hash is calculated in the following method (d is the dict with the settings):
 
 ```
-    settings_hash = hashlib.sha256(json.dumps(d).encode('utf-8')).digest()
+    settings_hash = hashlib.sha256(json.dumps(d).encode('utf-8')).digest().hex()
 ```
 
 If `settings_hash` is different in both peers, an ERROR command will be sent to the peer who sent the HELLO with the settings and the connection will be closed.
 
 ## Peer-Id State
 
-This state is responsible for the Peer Identification. So, it starts making a `STARTTLS` to enable TLS. During the TLS handshake, the peers will exchange their certificates and generate session keys. After the TLS has been enabled, only two commands are allowed: PEER-ID and ERROR.
+This state is responsible for the Peer Identification. So, it starts the TLS connection and, during the handshake, the peers will exchange their certificates and generate session keys. After the TLS has been enabled, only two commands are allowed: PEER-ID and ERROR.
 
 ### PEER-ID Command
 
@@ -112,7 +112,7 @@ The PEER-ID command is used to exchange the peer identity of the peer. Its paylo
 ```
 {
 	"id": "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5590",
-	"entrypoints": ["tcp:54.211.192.182:40403"],
+	"entrypoints": ["tcp://54.211.192.182:40403"],
 }
 ```
 
@@ -144,7 +144,7 @@ The PEERS command is the response when the peer receives a GET-PEERS command and
 [
     {
         "id": "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5590",
-        "entrypoints": ["tcp:54.211.192.182:40403"],
+        "entrypoints": ["tcp://54.211.192.182:40403"],
         "last_message": 1564658478,
     }
 ]
@@ -173,17 +173,16 @@ Another drawback is that all connections to use TLS 1.3, which creates a secure 
 
 -
 
-# Unresolved questions
-[unresolved-questions]: #unresolved-questions
-
--
-
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
 - Peer reputation: with a secure method to define a peer id and to estabilish a connection between two peers we could start developing the reputation of one peer, so users can trust more in peers with higher reputation.
 - White list and black list of entrypoints. We could define that all base Hathor endpoints are trustworthy and are always in the white list and that any node must be connected to at least one node that is in the white list.
 - Define a maximum number of connections per IP address, to prevent a possible attack from the same IP.
+- If the peers connections are not estabilished with TLS we should include a DH Key Exchange, so we can sign the messages when exchanging them.
+
 
 # References
 [references]: #references
+
+- https://bitcoin.org/en/developer-reference#version
