@@ -41,14 +41,13 @@ Because of these facts it is possible to include a pointer to Hathor's
 can be valid on either network if we accept additional data on the Hathor block
 to verify the work originally made for the Bitcoin network.
 
-This mechanism is commonly known as "merged mining" or "merge mining", famously
-implemented on [the Namecoin blockchain](https://github.com/namecoin/wiki/blob/master/Merged-Mining.mediawiki)
-since 2014. It is typical to say that Bitcoin is the *parent blockchain* and
-Namecoin is the *auxiliary blockchain* in this case. Similarly the individual
-block used on a merged mining operation in the parent blockchain is called
-*parent block* and the set of additional information needed by the auxiliary
-blockchain to accept the proof of work is referred as *AuxPOW* (for auxiliary
-proof-of-work).
+This mechanism is [commonly known] as "merged mining" or "merge mining",
+famously implemented on the Namecoin blockchain since 2014. It is typical to say
+that Bitcoin is the *parent blockchain* and Namecoin is the *auxiliary
+blockchain* in this case. Similarly the individual block used on a merged mining
+operation in the parent blockchain is called *parent block* and the set of
+additional information needed by the auxiliary blockchain to accept the proof of
+work is referred as *AuxPOW* (for auxiliary proof-of-work).
 
 The required changes to the Hathor network is mainly detecting when a block has
 AuxPOW and to validate this AuxPOW. The Hathor network does not need to interact
@@ -160,6 +159,11 @@ This is outline of how the coordinator works:
   resubmit it to each of them (through [SubmitBlock] on Bitcoin and
   `mining.submit` on Hathor)
 
+## Example
+[example]: #example
+
+> **TODO**
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
@@ -193,49 +197,19 @@ be done before accepting it.
 # Prior art
 [prior-art]: #prior-art
 
-**TODO**
+The merged mining mechanism proposed here is very similar to the one implemented
+by several blockchains:
 
-<!--
+- [Namecoin with Bitcoin]
+- [Dogecoin with Litecoin]
+- [Elastos with Bitcoin]
+- and many others (Rootstock, Devcoin, ixcoin, i0coin, Groupcoin)
 
-IDEAS:
+Mining pool operators are familiar with the concept, and many do merge mining,
+such as:
 
-- Notorious coins with merged mining support:
-  - Namecoin (NMC) with Bitcoin
-  - Dogecoin (DOGE) with Litecoin
-  - [RootStock (RSK)](https://www.rsk.co/) with Bitcoin
-  - to look into:
-    - Devcoin (DVC), ixcoin (IXC), i0coin (I0C) and Groupcoin (GRP)
-    - UNO, SYS
-- Precedent software/pool:
-  - [Bitcoin Merge Mining Pool](http://mmpool.org/)
-- List comparison of merged mining in practice by large pools
-
-TEMPALTE:
-
-Discuss prior art, both the good and the bad, in relation to this proposal.
-A few examples of what this can include are:
-
-- For language, library, cargo, tools, and compiler proposals: Does this feature
-  exist in other programming languages and what experience have their community
-  had?
-- For community proposals: Is this done by some other community and what were
-  their experiences with it?
-- For other teams: What lessons can we learn from what other communities have
-  done here?
-- Papers: Are there any published papers or great posts that discuss this? If
-  you have some relevant papers to refer to, this can serve as a more detailed
-  theoretical background.
-
-This section is intended to encourage you as an author to think about the
-lessons from other languages, provide readers of your RFC with a fuller picture.
-If there is no prior art, that is fine - your ideas are interesting to us
-whether they are brand new or if it is an adaptation from other languages.
-
-Note that while precedent set by other languages is some motivation, it does not
-on its own motivate an RFC.  Please also take into consideration that rust
-sometimes intentionally diverges from common language features.
-
--->
+- [Bitcoin Merged Mining Pool](http://mmpool.org/)
+- [Slush Pool](https://support.slushpool.com/en-us/section/23-merged-mining)
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
@@ -254,13 +228,10 @@ For example, simultaneour merged mining on Bitcoin Core and Bitcoin Cash.
 Althought more work is needed to understand the exact requirements or if it even
 is possible.
 
+[commonly known]: https://en.bitcoinwiki.org/wiki/Merged_mining_specification
 [GetBlockTemplate]: https://bitcoin.org/en/developer-reference#getblocktemplate
 [SubmitBlock]: https://bitcoin.org/en/developer-reference#submitblock
 [block height]: https://github.com/bitcoin/bips/blob/master/bip-0034.mediawiki
-
-<!-- TODO: sort these references and include them directly on the text  -->
-[]: https://www.mycryptopedia.com/coinbase-transaction-explained/
-[]: https://en.bitcoin.it/wiki/Merged_mining_specification
-[]: https://medium.com/@alexeiZamyatin/a-technical-deep-dive-into-merged-mining-5b67706e1a19
-[]: https://bitcoin.stackexchange.com/a/275/19178
-[]: https://blog.cyberrepublic.org/2018/12/10/elastos-in-a-nutshell-a-laymans-perspective-merged-mining-part-2-2/
+[Namecoin with Bitcoin]: https://github.com/namecoin/wiki/blob/master/Merged-Mining.mediawiki)
+[Dogecoin with Litecoin]: https://www.reddit.com/r/dogecoin/comments/2ci90m/dogecoin_to_enable_auxpow_soon_all_infos_inside/)
+[Elastos with Bitcoin]: https://github.com/elastos/Elastos.ELA/wiki/Merged-mining-guide)
