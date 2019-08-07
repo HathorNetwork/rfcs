@@ -26,7 +26,7 @@ feedback looping.
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-When direct minina on the Hathor network, a client searchs for a `nonce` that
+When mining directly on the Hathor network, a client searchs for a `nonce` that
 when appended to `block_data` can be hashed and the hash is inside a certain
 difficulty requirement. The similar is also true on the Bitcoin network, but
 the difficulty requirements are different.
@@ -34,7 +34,7 @@ the difficulty requirements are different.
 Bitcoin mining clients typically accept being told to mine on a different
 difficulty than what is specified on the header, because this is useful for
 pools to estimate the hash power of a client and divide the rewards accordingly.
-Also, on a Bitcoin coinbase, there is space of arbitrary data to be included.o
+Also, on a Bitcoin coinbase, there is space for arbitrary data to be included.
 
 Because of these facts it is possible to include a pointer to Hathor's
 `block_data` on the Bitcoin coinbase such that the result of the work of a miner
@@ -50,9 +50,9 @@ additional information needed by the auxiliary blockchain to accept the proof of
 work is referred as *AuxPOW* (for auxiliary proof-of-work).
 
 The required changes to the Hathor network is mainly appending optional AuxPOW
-data to a block and to validating it accordingly. The Hathor network does not
-need to interact with the Bitcoin network in any way besides knowing the
-location of a few fields and how to build the merkle root of a parent block.
+data to a block and validating it accordingly. The Hathor network does not need
+to interact with the Bitcoin network in any way besides knowing the location of
+a few fields and how to build the merkle root of a parent block.
 
 An AuxPOW consists of:
 - the Bitcoin coinbase transaction that includes a hash of the Hathor's
@@ -61,9 +61,9 @@ An AuxPOW consists of:
 - the bitcoin block header that includes that merkle root
 
 It is necessary to have a daemon that requests mining information to both
-networks and build a valid Bitcoin mining job that clients can work on. This
-daemon can be used by solo-miners or mining pool operators. Unfortunately it
-cannot be used by mining pool members.
+networks and builds a valid Bitcoin mining job that clients can work on. This
+daemon can be used by solo-miners or mining pool operators. Unfortunately, due
+to how mining pools work, it cannot be used by pool members.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
@@ -91,7 +91,7 @@ The new `aux_pow` structure consists of:
 
 | Size | Description          | Comments |
 |------|----------------------|----------|
-| 80   | `bitcoin_header`     | validation is slightly different from Bitcoin |
+| 80   | `bitcoin_header`     | validation is slightly different from Bitcoin's |
 | 1+   | `coinbase_tx` length | byte length of the next field |
 | 41+  | `coinbase_tx`        | includes the hash of `block_data` |
 | 1+   | `merkle_path` count  | the number of links on the `merkle_path` |
@@ -149,9 +149,9 @@ This is outline of how the coordinator works:
 - Call [GetBlockTemplate][2] RPC on the Bitcoin fullnode
 - Request work to the Hathor stratum server
 - Build a coinbase transaction suitable to both, inclusion on the Bitcoin
-  network and usable a in AuxPOW:
-  - Add `[magic_number][block_data]` after the [block height][3] on the transaction
-    input signature script
+  network and usable as an AuxPOW:
+  - Add `[magic_number][block_data]` after the [block height][3] on the
+    transaction input signature script
 - When a stratum client connects, send `mining.set_difficulty` such that work
   can suit the easier network to mine in (most certainly Hathor).
 - Send the `mining.notify` identical to what a typical client expects
@@ -225,7 +225,7 @@ Doing merged mining with Litecoin is a possibility that is not far in the
 future, it mostly depends on accepting more than one hash algorithm.
 
 We may want to support simultaneous merged mining with more than one blockchain.
-For example, simultaneour merged mining on Bitcoin Core and Bitcoin Cash.
+For example, simultaneously merged mining on Bitcoin Core and Bitcoin Cash.
 Althought more work is needed to understand the exact requirements or if it even
 is possible.
 
