@@ -10,6 +10,8 @@ Tokens issued in Hathor, as of now, have a single anti-fraud mechanism: the Toke
 
 I suggest, after discussion with msbrogli (it was his idea how to technically build this) that we issue, in our wallets, something that the human brain is _extremely_ good at: recognizing human faces.  Each token has a 'token-captain' (alternative names are discussed below), and, as you receive a token, you can immediately recognize that the ID is correct.  If you recognize the captain's face, that's the correct token.
 
+![img](./Piggy-captain.jpeg)
+
 A natural extension of this idea is to create the Hathor-QR-Code, which is a QR code with enough noise-cleaning to include the image of the 'token-captain' inside the image of the QR-Code itself.  A single image is immediately identified by humans and computers.  
 
 Alternative names to captain, ranging from serious to silly, are:
@@ -29,7 +31,8 @@ character
 personality  
 tycoon  
 moonstronaut (a play on the _to-the-moon_ meme)  
-moon-captain (same)
+moon-captain (same)  
+moon-commander
 
 This is such that when you build the 'piggy-piggy' token, the image of the captain appears (and a text:  "piggy-piggy champion", or "piggy-piggy moonstronaut", or "piggy-piggy head").
 
@@ -47,6 +50,8 @@ I can easily imagine people playing with creating tokens and seeing the captains
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
+(to be written)
+
 Explain the proposal as if it was already included in the language and you were teaching it to another Hathor programmer. That generally means:
 
 - Introducing new named concepts.
@@ -59,6 +64,10 @@ For implementation-oriented RFCs (e.g. for compiler internals), this section sho
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
+
+See [the AIs that create 'fake celebrities'.](https://github.com/tkarras/progressive_growing_of_gans) I will write more if there is sufficient early interest. 
+
+
 
 This is the technical portion of the RFC. Explain the design in sufficient detail that:
 
