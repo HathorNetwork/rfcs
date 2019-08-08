@@ -67,9 +67,13 @@ All messages have the same format: "COMMAND [PAYLOAD]", where the PAYLOAD is opt
 
 The full-node does a DNS Query of type TXT to a given list of hosts. Each DNS Query returns a list of URLs where the node should connect to. The URLs have the following format: `scheme://host:port[/?id=<peer-id>]`, where the `id` is optional. When the `id` is given, the full-node should enforce it during the peer identity step.
 
+For each URL resolved in the DNS query, a TLS connection is started and, during the handshake, the peers will exchange their certificates and generate session keys. After the TLS is enabled, both peers will move to the HELLO state.
+
 ## Hello State
 
 This state is responsible for the Network Configuration. In this state, only two commands are allowed: HELLO and ERROR.
+
+As soon as the peers move to this state, they will exchange a HELLO message.
 
 ### HELLO Command
 
@@ -99,11 +103,11 @@ The description of each field is:
     settings_hash = hashlib.sha256(json.dumps(d).encode('utf-8')).digest().hex()
 ```
 
-If `settings_hash` is different in both peers, an ERROR command will be sent to the peer who sent the HELLO with the settings and the connection will be closed.
+If `settings_hash` is different in both peers, an ERROR command (with the expected settings) will be sent to the peer who sent the HELLO with the different `settings_hash` and the connection will be closed.
 
 ## Peer-Id State
 
-This state is responsible for the Peer Identification. So, it starts the TLS connection and, during the handshake, the peers will exchange their certificates and generate session keys. After the TLS has been enabled, only two commands are allowed: PEER-ID and ERROR.
+This state is responsible for the Peer Identification. During this state only two commands are allowed: PEER-ID and ERROR.
 
 ### PEER-ID Command
 
@@ -116,7 +120,17 @@ The PEER-ID command is used to exchange the peer identity of the peer. Its paylo
 }
 ```
 
-When the PEER-ID command is received, the full-node compares the `id` with the sha256d of the public key. Then, it checks whether it is connected to one of the entrypoints. If the `id` and entrypoints checks are valid, the peer state changes to READY.
+When the PEER-ID command is received, the full-node does some validations before changing the state to READY.
+
+1. Compares the `id` with the sha256d of the public key;
+2. If the DNS query return had the `peer_id` parameter on it we validate here if they both match;
+3. Validates that the public key is the same as the one that generated the certificate;
+4. Checks whether it is connected to one of the entrypoints (the entrypoint has the format `tcp://name|IP:port`)
+  - If the peer is the server, it has access only to the client host and not port entrypoint, so we just validate the host;
+  - If the peer is the client, we validate that the URL used to connect is one of the entrypoints;
+  - In both cases, if the entrypoint does not have the IP directly (if it's the name), a DNS query must be made to validate if the corresponding URL matches the one connected.
+
+If all four steps are valid, the peer state moves to READY.
 
 ## Ready State
 
