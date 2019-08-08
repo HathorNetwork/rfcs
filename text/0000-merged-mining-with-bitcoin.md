@@ -73,19 +73,20 @@ Currently the sequence of bytes used to serialize a block, consits of:
 | Size     |  Description  | Comments |
 |----------|---------------|----------|
 | variable | `block_data`  | header, graph and script data |
-| 4        | `nonce`       | any unsigned 32-bit is a valid value value |
+| 16        | `nonce`       | any unsigned 32-bit is a valid value value |
 
 The proposed sequence of bytes to serialize a block is:
 
 | Size     |  Description  | Comments |
 |----------|---------------|----------|
 | variable | `block_data`  | unchanged |
-| 4        | `nonce`       | `0xffff` is used to indicate presence of aux\_pow |
+| 16       | `nonce`       | `0xff..ff` used to indicate presence of aux\_pow |
 | 155+     | `aux_pow`     | optional |
 
-Thus a `nonce` value of `0xffff` will no longer be accepted. Since this breaking
-change will be implemented on a new testnet and there is no mainnet yet, the
-only impact is changing the current Hathor mining clients to skip that value.
+Thus a `nonce` value of `0xff..ff` (2^128 -1) will no longer be accepted. Since
+this breaking change will be implemented on a new testnet and there is no
+mainnet yet, the only impact is changing the current Hathor mining clients to
+skip that value.
 
 The new `aux_pow` structure consists of:
 
