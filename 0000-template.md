@@ -2,6 +2,7 @@
 - Start Date: (fill me in with today's date, YYYY-MM-DD)
 - RFC PR: (leave this empty)
 - Hathor Issue: (leave this empty)
+- Author: (fill this with Your Name <your@email>, Other Author <other@email>)
 
 # Summary
 [summary]: #summary
