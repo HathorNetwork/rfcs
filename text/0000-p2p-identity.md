@@ -194,6 +194,7 @@ Another drawback is that all connections to use TLS 1.3, which creates a secure 
 - White list and black list of entrypoints. We could define that all base Hathor endpoints are trustworthy and are always in the white list and that any node must be connected to at least one node that is in the white list.
 - Define a maximum number of connections per IP address, to prevent a possible attack from the same IP.
 - If the peers connections are not estabilished with TLS we should include a DH Key Exchange, so we can sign the messages when exchanging them.
+- We should add a rule for the peer to stop trying to connect to another peer. Right now we are trying to connect forever but after some connection fails we should stop trying.
 
 
 # References
