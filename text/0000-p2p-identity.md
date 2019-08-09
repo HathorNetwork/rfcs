@@ -7,7 +7,7 @@
 # Summary
 [summary]: #summary
 
-Define how a peer will be identified and the secure protocol of connection between two of them. The Peer-Id is designed in a secure way, so you can trust the peer you are connecting to.
+Define how a peer will be identified and the secure protocol of connection between two of them. The Peer-Id is designed in a secure way, so you can trust you are directly connected with whom you are supposed to.
 
 # Motivation
 [motivation]: #motivation
@@ -19,7 +19,7 @@ The motivation is to increase security in the peer connections and real time com
 
 The communication protocol between two peers is message oriented, and it assumes that all messages arrive ordered. Because of this, we are using TCP as the transport protocol, and we are also using a text-based protocol with EOL to mark the end of each message.
 
-When a brand new full-node is run for the first time, it needs to discover at least one peer of the p2p network to open connection and exchange messages. This process is called bootstrap. After the full-node discovers a few peers, it connects to them, identify itself, and then start to exchange messages to both discover other peers and sync the blocks and transactions.
+When a brand new full-node is run for the first time, it needs to discover at least one peer of the p2p network to open connection and exchange messages. This process is called bootstrap. After the full-node discovers a few peers, it connects to them, identifies itself, and then starts to exchange messages to both discover other peers and sync the blocks and transactions.
 
 After a connection has been established, there are two steps before getting ready to freely exchange messages (peer A is trying to connect to peer B):
 
@@ -97,13 +97,20 @@ The description of each field is:
 - `remote_address`: Remote IP:PORT seen by this socket.
 - `genesis_short_hash`: First 7 chars of the hash of the genesis to prevent syncing incompatible DAGs.
 - `timestamp`: Current time according to node's clock. This field can help other nodes to determine that their clock is wrong and is important because nodes will reject blocks that are more than one hour in the future.
-- `settings_hash`: Hash of a dict containing some of the settings of the full node. The fields that are considered are: `P2PKH_VERSION_BYTE`, `MULTISIG_VERSION_BYTE`, `MIN_BLOCK_WEIGHT`, `MIN_TX_WEIGHT`, `BLOCK_DIFFICULTY_MAX_DW`, and `BLOCK_DATA_MAX_SIZE`. The hash is calculated in the following method (d is the dict with the settings):
+- `settings_hash`: Hash of a dict containing some of the settings of the full node. The fields that are considered are: `P2PKH_VERSION_BYTE`, `MULTISIG_VERSION_BYTE`, `MIN_BLOCK_WEIGHT`, `MIN_TX_WEIGHT`, `BLOCK_DIFFICULTY_MAX_DW`, and `BLOCK_DATA_MAX_SIZE`. The hash is calculated in the following method (d is the array with the settings values):
 
 ```
     settings_hash = hashlib.sha256(json.dumps(d).encode('utf-8')).digest().hex()
 ```
 
+Some validations are executed when the peer receives the HELLO command:
+
+1. All fields must be presented in the payload;
+2. `app`, `network`, `genesis_short_hash`, and `settings_hash` values must be the same;
+
 If `settings_hash` is different in both peers, an ERROR command (with the expected settings) will be sent to the peer who sent the HELLO with the different `settings_hash` and the connection will be closed.
+
+If all verifications are valid, the peer state moves to PEER-ID.
 
 ## Peer-Id State
 
@@ -134,7 +141,7 @@ If all four steps are valid, the peer state moves to READY.
 
 ## Ready State
 
-This state is responsible for keeping the connection alive and exchange information about peers, blocks and transactions on the network. It starts requesting all the peers to the connected node and a ping message loop, to assure that the connection is still alive. This state allows five commands (besides the sync commands that won't be discussed in this RFC): PING, PONG, GET-PEERS, PEERS, and ERROR.
+This state is responsible for keeping the connection alive and exchanging information about peers, blocks and transactions on the network. It starts requesting all the peers to the connected node and a ping message loop, to assure that the connection is still alive. This state allows five commands (besides the sync commands that won't be discussed in this RFC): PING, PONG, GET-PEERS, PEERS, and ERROR.
 
 ### PING Command
 
@@ -164,14 +171,14 @@ The PEERS command is the response when the peer receives a GET-PEERS command and
 ]
 ```
 
-When the node receives this payload, it update its peer list and if it's not connected to the peer, try to connect, otherwise do nothing. This approach prevents a sybil attack, however we might reach a connection limit, since we are connecting to all the peers without any other option. In the future we will have another RFC that will approach this situation and propose a solution where a node can connect only to a subset of all the nodes in the network, also avoiding a possible sybil attack.
+When the node receives this payload, it update its peer list and if it's not connected to the peer, try to connect, otherwise do nothing. This approach prevents a sybil attack, however we might reach a connection limit, since we are connecting to all the peers without any other option. In the future we will have another RFC that will address this situation and propose a solution where a node can connect only to a subset of all the nodes in the network, also avoiding a possible sybil attack.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
 The current protocol assumes that all messages ordered, i.e., they are delivered in the same order as they are sent. However, we may remove this requirement to allow peers to use simpler transport protocols, such as UDP.
 
-Another drawback is that all connections to use TLS 1.3, which creates a secure channel between the peers, but also requires extra processing for each message.
+Another drawback is that all connections use TLS 1.3, which creates a secure channel between the peers, but also requires extra processing for each message.
 
 
 # Rationale and alternatives
