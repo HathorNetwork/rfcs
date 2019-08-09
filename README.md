@@ -9,7 +9,7 @@ bit of a design process and produce a consensus among the Hathor community and
 the core developers.
 
 The "RFC" (request for comments) process is intended to provide a consistent and
-controlled path for new features to enter the language and standard libraries,
+controlled path for new features to enter the network and official libraries,
 so that all stakeholders can be confident about the direction Hathor is evolving
 in.
 
