@@ -137,7 +137,15 @@ When the PEER-ID command is received, the full-node does some validations before
   - If the peer is the client, we validate that the URL used to connect is one of the entrypoints;
   - In both cases, if the entrypoint does not have the IP directly (if it's the name), a DNS query must be made to validate if the corresponding URL matches the one connected.
 
-If all four steps are valid, the peer state moves to READY.
+### READY Command
+
+The READY command is used to tell the peer you are connected to that you are ready to change to the next state. This command is sent as soon as all PEER-ID validation steps are completed.
+
+This command is needed because in the step 4 of the PEER-ID validation, when a DNS query is needed, it becomes an asyncronous task, so it can take a while for one of the peers to validate the connection. So we must change state only after both peers confirm all the above validations.
+
+When changing from the HELLO state to the PEER-ID state this extra care is not needed because the validations are always syncronous, so we guarantee that the new message will be handled only after the Hello message was finished. If we add an async validation there in the future we would need to handle the state change in a similar way.
+
+After the peer finish the PEER-ID validation and receive the READY command from the other peer, it changes the state to READY state.
 
 ## Ready State
 
@@ -188,12 +196,6 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 
 - We could use WebSocket instead of LineReceiver for the messaging protocol but the advantage is not real clear, so we've decided to keep the LineReceiver.
 
-
-# Prior art
-[prior-art]: #prior-art
-
--
-
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
@@ -202,6 +204,8 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 - Define a maximum number of connections per IP address, to prevent a possible attack from the same IP.
 - If the peers connections are not estabilished with TLS we should include a DH Key Exchange, so we can sign the messages when exchanging them.
 - We should add a rule for the peer to stop trying to connect to another peer. Right now we are trying to connect forever but after some connection fails we should stop trying.
+- Persist the list of known and connected peers, so if we need to reconnect in the future we can use this list without the need of a DNS query.
+- We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection).
 
 
 # References
