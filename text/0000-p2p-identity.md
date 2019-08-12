@@ -43,7 +43,7 @@ This step checks whether the peers are compatible to connect. For instance, a fu
 
 The Peer-ID is important because it allows peers to establish a confidence level for other peers. It may be useful when the network is under attack, and the peers are working together to recover the network.
 
-As there is no central authority to distribute certificates to the peers, we chose to use a self-generated certificate for the peers, and the Peer-ID is defined as the hash (sha256d) of the public key of the certificate. To exchange the certificates and establish a secure connection, a Transport Layer Security (TLS) will be enabled over the TCP connection.
+As there is no central authority to distribute certificates to the peers, we chose to use a self-generated certificate for the peers, and the Peer-ID is defined as the hash (sha256d) of the public key of the certificate. To exchange the certificates and establish a secure connection, a Transport Layer Security (TLS 1.3) will be enabled over the TCP connection.
 
 During this step, the peers exchange their Peer-Id and Entrypoints. Thus, the other part validates the Peer-Id and checks whether it is directly connected to one of the given entrypoints. If the Peer-Id does not match or it is not directly connected, the connection is closed.
 
@@ -212,3 +212,4 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 [references]: #references
 
 - https://bitcoin.org/en/developer-reference#version
+- https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_1.3
