@@ -55,7 +55,19 @@ All GET_TIPS messages are stored in a deferred dictionary and return a deferred 
 
 ### TIPS Command
 
-The TIPS command is used as a reply of a GET_TIPS command.
+The TIPS command is used as a reply of a GET_TIPS command and it returns the tips of the requested timestamp. Its payload is a JSON-formatted string in the following format:
+
+```
+    {
+        "length": 12,
+        "timestamp": 1564658478,
+        "merkle_tree": "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5590",
+    }
+```
+
+The `lenght` is the quantity of tips in the requested `timestamp` and the `merkle_tree` is explained how is calculated below in the 'Find synced timestamp' section.
+
+When a peer receives a TIPS message, it searches for a deferred of a GET_TIPS to be resolved.
 
 ### GET_NEXT Command
 
@@ -95,6 +107,25 @@ All GET_NEXT messages are stored in a deferred dictionary and return a deferred 
 
 ### NEXT Command
 
+The NEXT command is used as a reply of a GET_NEXT command and it returns the transactions starting from the requested timestamp and offset. Its payload is a JSON-formatted string in the following format:
+
+```
+    {
+        "timestamp": 1564658478,
+        "next_timestamp": 1564658479,
+        "next_offset": 12,
+        "hashes": [
+            "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5592",
+            "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5594",
+            "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5596",
+        ],
+    }
+```
+
+The `next_timestamp` and `next_offset` are the parameters to be used in the following GET_NEXT message, so it continues getting the hashes in sequence. The `hashes` are the hashes of the requested transactions.
+
+When a peer receives a NEXT message, it searches for a deferred of a GET_NEXT to be resolved.
+
 ### GET_DATA Command
 
 The GET_DATA command is used to request the data of a transaction. Its payload is a string with the hash of the requested transaction in hexadecimal.
@@ -102,6 +133,10 @@ The GET_DATA command is used to request the data of a transaction. Its payload i
 All GET_DATA messages are stored in a deferred dictionary (each key is unique for each transaction request) and return a deferred that resolves when the expected reply (a DATA message) arrives.
 
 ### DATA Command
+
+The DATA command is used as a reply of a GET_DATA command or when you receive a new transaction in the network and want to propagate it to your peers. Its payload is a string with the payload type and the transaction struct in hexadecimal in the following format: `payload_type:transaction_struct`, where the`payload_type` is either 'tx' or 'block' to indicate the type of the struct.
+
+---
 
 There are two steps from the beggining of the syncing until both peers are synced.
 
@@ -119,6 +154,7 @@ To optimize the search, it starts with an exponential search in the timestamp, w
 Then we do a binary search between the previous and current timestamp using the same process of sending a GET_TIPS command and comparing the merkle tree.
 
 After both searches are finished we will have the highest timestamp where the peers are synced (defined as `synced_timestamp`), then we start downloading the transactions from this timestamp until the latest timestamp.
+
 
 ### Sync from synced_timestamp
 
