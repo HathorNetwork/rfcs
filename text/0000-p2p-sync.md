@@ -44,9 +44,9 @@ During the syncing phase the peers can exchange 6 different commands: GET_TIPS, 
 The GET_TIPS command is used to request the tips of a peer in a given timestamp. Its payload is a JSON-formatted string in the following format:
 
 ```
-    {
-        "timestamp": 1564658478,
-    }
+{
+    "timestamp": 1564658478,
+}
 ```
 
 The `timestamp` field is optional and, if not passed, the peer that receives this message will assume is the latest timestamp.
@@ -58,11 +58,11 @@ All GET_TIPS messages are stored in a deferred dictionary and return a deferred 
 The TIPS command is used as a reply of a GET_TIPS command and it returns the tips of the requested timestamp. Its payload is a JSON-formatted string in the following format:
 
 ```
-    {
-        "length": 12,
-        "timestamp": 1564658478,
-        "merkle_tree": "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5590",
-    }
+{
+    "length": 12,
+    "timestamp": 1564658478,
+    "merkle_tree": "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5590",
+}
 ```
 
 The `lenght` is the quantity of tips in the requested `timestamp` and the `merkle_tree` is explained how is calculated below in the 'Find synced timestamp' section.
@@ -74,10 +74,10 @@ When a peer receives a TIPS message, it searches for a deferred of a GET_TIPS to
 The GET_NEXT command is used to request all the transactions in a given timestamp. Its payload is a JSON-formatted string in the following format:
 
 ```
-    {
-        "timestamp": 1564658478,
-        "offset": 25,
-    }
+{
+    "timestamp": 1564658478,
+    "offset": 25,
+}
 ```
 
 The reply for this command is paginated, so we don't get back all transactions if there are many in the same timestamp. In this case we use the `offset` field to say to the pagination where to start returning.
@@ -85,19 +85,19 @@ The reply for this command is paginated, so we don't get back all transactions i
 For e.g. the first request has the following payload:
 
 ```
-    {
-        "timestamp": 1564658478,
-        "offset": 0,
-    }
+{
+    "timestamp": 1564658478,
+    "offset": 0,
+}
 ```
 
 The NEXT message will return 10 hashes (assuming this is the maximum quantity to be returned) but if there are 22 transactions in this timestamp, we will need to keep requesting with a GET_NEXT having the following payload:
 
 ```
-    {
-        "timestamp": 1564658478,
-        "offset": 10,
-    }
+{
+    "timestamp": 1564658478,
+    "offset": 10,
+}
 ```
 
 The reply will start in the 10th transaction that has the timestamp `1564658478`.
@@ -110,16 +110,16 @@ All GET_NEXT messages are stored in a deferred dictionary and return a deferred 
 The NEXT command is used as a reply of a GET_NEXT command and it returns the transactions starting from the requested timestamp and offset. Its payload is a JSON-formatted string in the following format:
 
 ```
-    {
-        "timestamp": 1564658478,
-        "next_timestamp": 1564658479,
-        "next_offset": 12,
-        "hashes": [
-            "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5592",
-            "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5594",
-            "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5596",
-        ],
-    }
+{
+    "timestamp": 1564658478,
+    "next_timestamp": 1564658479,
+    "next_offset": 12,
+    "hashes": [
+        "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5592",
+        "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5594",
+        "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5596",
+    ],
+}
 ```
 
 The `next_timestamp` and `next_offset` are the parameters to be used in the following GET_NEXT message, so it continues getting the hashes in sequence. The `hashes` are the hashes of the requested transactions.
@@ -167,7 +167,7 @@ This request is made to a download coordinator, who will send a GET_DATA command
 After theses two steps are completed, both peers are in sync. Every second the two steps above are executed again to validate that they are still synced. This check that two peers are synced is made with the following formula:
 
 ```
-    tx_storage.latest_timestamp - synced_timestamp <= sync_threshold
+tx_storage.latest_timestamp - synced_timestamp <= sync_threshold
 ```
 
 If this is true, the peers are synced. Where `tx_storage.latest_timestamp` is the highest timestamp of a transaction that your node has in the storage and the `sync_threshold` is a delta value of acceptance that they might be unsync. Right now this value is 60 seconds, i.e. two synced peers can have a difference of transactions and blocks at most of one minute.
