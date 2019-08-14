@@ -19,6 +19,8 @@ When a new peer connects to the network it must have a way of download all past 
 
 During the sync stage both peers must be in the READY state, which is the last one of the connection states, and is responsible to do an initial sync and keep them synced when new transactions (from now on 'transactions' can represent transactions or blocks) arrive in the network.
 
+We assume that a new transaction may arrive at any time and have any timestamp, including old ones. When an old transaction arrives we will reject it if its timestamp is smaller than a threshold compared with the current timestamp.
+
 Two peers are defined to be synced in a timestamp T when they both have the same transactions in all timestamps from the genesis to T. They are defined to be synced if the highest timestamp when they are synced is bigger than the current timestamp minus a delta value.
 
 The first step of the sync protocol is to discover until what timestamp both peers are already synced between them. To discover that we iterate from the current timestamp until the genesis to see the first timestamp when the tips of both peers match. We run this algorithm every second because new transactions can arrive in the past, so we must always check that we are synced and not just rely on the real time message exchange.
