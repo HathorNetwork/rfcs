@@ -94,7 +94,7 @@ The new `aux_pow` structure consists of:
 |------|----------------------|----------|
 | 80   | `bitcoin_header`     | validation is slightly different from Bitcoin's |
 | 1+   | `coinbase_tx` length | byte length of the next field |
-| 41+  | `coinbase_tx`        | includes the hash of `block_data` |
+| 97+  | `coinbase_tx`        | includes the hash of `block_data` |
 | 1+   | `merkle_path` count  | the number of links on the `merkle_path` |
 | 32+  | `merkle_path`        | array of links, each one is 32 bytes long |
 
