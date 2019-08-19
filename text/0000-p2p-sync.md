@@ -12,22 +12,30 @@ Description of the algorithm for two peers to do an initial sync and keep synced
 # Motivation
 [motivation]: #motivation
 
-When a new peer connects to the network it must have a way of download all past transactions and get in sync with peers that are already connected. Besides that, when a new transaction arrives into the network, it must be propagated through all the peers in the network. This document describes how the peers propagate new transactions and keep their storage in sync with the others.
+When a new peer connects to the network it must have a way of downloading all past transactions and get in sync with peers that are already connected. Besides that, when a new transaction arrives into the network, it must be propagated through all the peers in the network. This document describes how the peers propagate new transactions and keep their storage in sync with the others.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
 During the sync stage both peers must be in the READY state, which is the last one of the connection states, and is responsible to do an initial sync and keep them synced when new transactions (from now on 'transactions' can represent transactions or blocks) arrive in the network.
 
-We assume that a new transaction may arrive at any time and have any timestamp, including old ones. When an old transaction arrives we will reject it if its timestamp is smaller than a threshold compared with the current timestamp.
+We assume that a new transaction may arrive at any time and have any timestamp, including old ones.
 
-Two peers are defined to be synced in a timestamp T when they both have the same transactions in all timestamps from the genesis to T. They are defined to be synced if the highest timestamp when they are synced is bigger than the current timestamp minus a delta value.
+Two peers are defined to be synced at a timestamp T when they both have the same transactions in all timestamps from the genesis to T. They are defined to be synced if the timestamp of the latest transaction received minus the highest timestamp in which they are synced is smaller or equal than an acceptable threshold
 
-The first step of the sync protocol is to discover until what timestamp both peers are already synced between them. To discover that we iterate from the current timestamp until the genesis to see the first timestamp when the tips of both peers match. We run this algorithm every second because new transactions can arrive in the past, so we must always check that we are synced and not just rely on the real time message exchange.
+```
+latest_timestamp - synced_timestamp <= threshold
+```
 
-After discover the first timestamp both peers are synced, we must download all the transactions from the unsynced timestamps. We request a list of transaction passing the synced timestamp and it returns a list of hashes. We validate which of these hashes I need to download and request the full data for them. We execute this algorithm until the peers are synced.
+For example, peers P1 and P2 are synced at timestamp 1564658478 (`synced_timestamp`) and the latest transaction P1 has is from timestamp 1564658492 (`latest_timestamp`), so the difference between their timestamps is 14 seconds which is less than the acceptable difference (currently 60 seconds - `threshold`), so P1 and P2 are synced.
 
-From this first moment when we are synced, we keep receiving all transactions the are propagated into the network in real time and check every second that both peers are still in sync. This is important for the case that some problem happened when propagating a transaction and one of the peers don't receive the message. In the real time syncing blocks have priority to be propagated and sent to peers, so full nodes can mine with the newest data.
+The first step of the sync protocol is to discover the highest timestamp where both peers are synced. To do that, we use an exponential search starting at the current timestamp going backwards, followed by a binary search. We run this algorithm every second because new transactions from the past may arrive at anytime, so we must always check that we are still synced and not just rely on the real time message exchange.
+
+After finding the highest timestamp in which both peers are synced, peers must exchange the missing transactions. It is done in two steps: (i) first, they send each other a list of transactions that will be used to check which transactions are missing, (ii) then, they will download the missing transactions.
+
+The download of the transactions must occur in topological order, which means that every new transaction will be ready to be included in the DAG, i.e., its parents and inputs will all have already be known.
+
+After we are synced, we start receiving and propagating transactions in real time. The sync algorithm keeps running in the background and ensures that the peers are still synced. If, for any reason, the peers get not-synced, the sync algorithm will download the missing transactions until they are synced again.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
@@ -39,11 +47,11 @@ During the sync period there are two stages:
 
 ## Syncing
 
-During the syncing phase the peers can exchange 6 different commands: GET_TIPS, TIPS, GET_NEXT, GET_DATA, DATA.
+During the syncing phase the peers can exchange 6 different commands: GET-TIPS, TIPS, GET-NEXT, GET-DATA, DATA.
 
-### GET_TIPS Command
+### GET-TIPS Command
 
-The GET_TIPS command is used to request the tips of a peer in a given timestamp. Its payload is a JSON-formatted string in the following format:
+The GET-TIPS command is used to request the tips of a peer in a given timestamp. Its payload is a JSON-formatted string in the following format:
 
 ```
 {
@@ -51,13 +59,13 @@ The GET_TIPS command is used to request the tips of a peer in a given timestamp.
 }
 ```
 
-The `timestamp` field is optional and, if not passed, the peer that receives this message will assume is the latest timestamp.
+The `timestamp` field is optional and, if not passed, the peer that receives this message will assume it is the latest timestamp.
 
-All GET_TIPS messages are stored in a deferred dictionary and return a deferred that resolves when the expected reply (a TIPS message) arrives.
+All GET-TIPS messages expect as a TIPS message back.
 
 ### TIPS Command
 
-The TIPS command is used as a reply of a GET_TIPS command and it returns the tips of the requested timestamp. Its payload is a JSON-formatted string in the following format:
+The TIPS command is used as a reply of a GET-TIPS command and it returns the tips of the requested timestamp. Its payload is a JSON-formatted string in the following format:
 
 ```
 {
@@ -69,11 +77,11 @@ The TIPS command is used as a reply of a GET_TIPS command and it returns the tip
 
 The `lenght` is the quantity of tips in the requested `timestamp` and the `merkle_tree` is explained how is calculated below in the 'Find synced timestamp' section.
 
-When a peer receives a TIPS message, it searches for a deferred of a GET_TIPS to be resolved.
+When a peer receives a TIPS message, it finds the corresponding GET-TIPS that requested it. Unexpected TIPS messages are discarded.
 
-### GET_NEXT Command
+### GET-NEXT Command
 
-The GET_NEXT command is used to request all the transactions in a given timestamp. Its payload is a JSON-formatted string in the following format:
+The GET-NEXT command is used to request all the transactions in a given timestamp. Its payload is a JSON-formatted string in the following format:
 
 ```
 {
@@ -81,6 +89,8 @@ The GET_NEXT command is used to request all the transactions in a given timestam
     "offset": 25,
 }
 ```
+
+This command requests all transactions starting at `timestamp` but may return also some from higher timestamps, in order to make sync faster and avoid sending more messages than necessary.
 
 The reply for this command is paginated, so we don't get back all transactions if there are many in the same timestamp. In this case we use the `offset` field to say to the pagination where to start returning.
 
@@ -93,7 +103,7 @@ For e.g. the first request has the following payload:
 }
 ```
 
-The NEXT message will return 10 hashes (assuming this is the maximum quantity to be returned) but if there are 22 transactions in this timestamp, we will need to keep requesting with a GET_NEXT having the following payload:
+The NEXT message will return 10 hashes (assuming this is the maximum quantity to be returned) but if there are 18 transactions in this timestamp, we will need to keep requesting with a GET-NEXT having the following payload:
 
 ```
 {
@@ -102,41 +112,56 @@ The NEXT message will return 10 hashes (assuming this is the maximum quantity to
 }
 ```
 
-The reply will start in the 10th transaction that has the timestamp `1564658478`.
+The reply will start in the 10th transaction that has the timestamp `1564658478` and, since we only have 8 transactions left with timestamp `1564658478`, it will also return 2 transactions from the next timestamp (`1564658479`). The next GET-NEXT message will have the following payload:
 
+```
+{
+    "timestamp": 1564658479,
+    "offset": 2,
+}
+```
 
-All GET_NEXT messages are stored in a deferred dictionary and return a deferred that resolves when the expected reply (a NEXT message) arrives.
+All GET-NEXT messages expect a NEXT message back.
 
 ### NEXT Command
 
-The NEXT command is used as a reply of a GET_NEXT command and it returns the transactions starting from the requested timestamp and offset. Its payload is a JSON-formatted string in the following format:
+The NEXT command is used as a reply of a GET-NEXT command and it returns the transactions starting from the requested timestamp and offset. Its payload is a JSON-formatted string in the following format:
 
 ```
 {
     "timestamp": 1564658478,
     "next_timestamp": 1564658479,
-    "next_offset": 12,
+    "next_offset": 2,
     "hashes": [
         "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5592",
         "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5594",
         "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5596",
+        ... and 7 more hashes ...
     ],
 }
 ```
 
-The `next_timestamp` and `next_offset` are the parameters to be used in the following GET_NEXT message, so it continues getting the hashes in sequence. The `hashes` are the hashes of the requested transactions.
+- `timestamp`: requested timestamp;
+- `next_timestamp`: timestamp to be used as parameter in the next GET-NEXT message. May be different from `timestamp` when hashes from different timestamps are being returned;
+- `next_offset`: offset to be used as parameter in the next GET-NEXT message. We may have more than one hash for the same timestamp, so this value says the index of the last hash returned in the `next_timestamp`, so it continues to return the hashes in sequence;
+- `hashes`: hashes of the requested transactions.
 
-When a peer receives a NEXT message, it searches for a deferred of a GET_NEXT to be resolved.
+When a peer receives a NEXT message, it finds the corresponding GET-NEXT that requested it. Unexpected NEXT messages are discarded.
 
-### GET_DATA Command
+### GET-DATA Command
 
-The GET_DATA command is used to request the data of a transaction. Its payload is a string with the hash of the requested transaction in hexadecimal.
+The GET-DATA command is used to request the data of a transaction. Its payload is a string with the hash of the requested transaction in hexadecimal.
 
-All GET_DATA messages are stored in a deferred dictionary (each key is unique for each transaction request) and return a deferred that resolves when the expected reply (a DATA message) arrives.
+All GET-DATA messages expect a DATA message back.
 
 ### DATA Command
 
-The DATA command is used as a reply of a GET_DATA command or when you receive a new transaction in the network and want to propagate it to your peers. Its payload is a string with the payload type and the transaction struct in hexadecimal in the following format: `payload_type:transaction_struct`, where the`payload_type` is either 'tx' or 'block' to indicate the type of the struct.
+The DATA message can be received in two different moments:
+
+- During the sync algorithm and the peer has requested this data and is expecting it;
+- During the real time propagation when a new transaction arrives into the network and the peer is not expecting it.
+
+Its payload is a string with the payload type and the transaction struct in hexadecimal in the following format: `payload_type:transaction_struct`, where the`payload_type` is either 'tx' or 'block' to indicate the type of the struct.
 
 ---
 
@@ -147,22 +172,71 @@ There are two steps from the beggining of the syncing until both peers are synce
 
 ### Find synced timestamp
 
-To find the first timestamp where both are synced we iterate starting from the latest timestamp and decreasing it until we have a match. We define that two peers are synced in a given timestamp when the merkle tree of their tips are the same.
+To find the synced timestamp we start a loop from the latest timestamp and decreasing it until we have a match. We define that two peers are synced in a given timestamp when the merkle tree of their tips are the same.
 
 The merkle tree is calculated as the `sha256` of the hashes of all transactions in a given timestamp.
 
-To optimize the search, it starts with an exponential search in the timestamp, where in each iteration we send a GET_TIPS command to the peer and compare its merkle tree with ours in this timestamp, until we have a match. In each iteration we decrease the timestamp (the decrease amount depends on the step of the exponential search) and we always hold the previous searched timestamp.
-
-Then we do a binary search between the previous and current timestamp using the same process of sending a GET_TIPS command and comparing the merkle tree.
+To optimize the search, it starts with an exponential search in the timestamp, where in each iteration we decrease the timestamp searched and send a GET-TIPS command to the peer and compare its merkle tree with ours in this timestamp, until we find a timestamp in which both peers are synced (`t0`). In this case, there is an interval `[t0, t1)`, where the peers are synced at `t0` and not-synced at `t1`. Finally, a binary search is used in the `[t0, t1)` interval.
 
 After both searches are finished we will have the highest timestamp where the peers are synced (defined as `synced_timestamp`), then we start downloading the transactions from this timestamp until the latest timestamp.
 
+#### Example
+
+Given two peers (P1 and P2) that are synced at timestamp 1564658493 and P1 latest timestamp is 1564658498 (5 seconds more than the synced timestamp). P1 will try to find in which timestamp they are both synced. The algorithm will execute the following steps:
+
+##### Step 1
+
+Start exponential search
+
+| ------------------ | ------------- | -------- | -------------- |
+| Searched timestamp | Hashes match? | Decrease | Last timestamp |
+| ------------------ | ------------- | -------- | -------------- |
+| 1564658498         | No            | 1        | None           |
+| ------------------ | ------------- | -------- | -------------- |
+
+##### Step 2
+
+| ------------------ | ------------- | -------- | -------------- |
+| Searched timestamp | Hashes match? | Decrease | Last timestamp |
+| ------------------ | ------------- | -------- | -------------- |
+| 1564658497         | No            | 2        | 1564658498     |
+| ------------------ | ------------- | -------- | -------------- |
+
+##### Step 3
+
+| ------------------ | ------------- | -------- | -------------- |
+| Searched timestamp | Hashes match? | Decrease | Last timestamp |
+| ------------------ | ------------- | -------- | -------------- |
+| 1564658495         | No            | 4        | 1564658497     |
+| ------------------ | ------------- | -------- | -------------- |
+
+##### Step 4
+
+| ------------------ | ------------- | -------- | -------------- |
+| Searched timestamp | Hashes match? | Decrease | Last timestamp |
+| ------------------ | ------------- | -------- | -------------- |
+| 1564658491         | Yes           | 8        | 1564658495     |
+| ------------------ | ------------- | -------- | -------------- |
+
+End of exponential search, they are synced at timestamp 1564658491 but are not synced at timestamp 1564658495. So we need to find in the interval `[1564658491, 1564658495)` what's the highest timestamp in which they are synced.
+
+##### Step 5
+
+Start of binary search
+
+| ------------- | -------------- | ------------------ | ------------- |
+| Low timestamp | High timestamp | Searched timestamp | Hashes match? |
+| ------------- | -------------- | ------------------ | ------------- |
+| 1564658491    | 1564658494     | 1564658493         | Yes           |
+| ------------- | -------------- | ------------------ | ------------- |
+
+So 1564658493 is the highest timestamp in which both peers are synced and the algorithm is stopped here and both peers start syncing from this `synced_timestamp`.
 
 ### Sync from synced_timestamp
 
-In this step we iterate until we have downloaded all transactions until the latest timestamp. In each iteration we send a GET_NEXT command to get the hashes of the requested timestamp and offset. After receiving these hashes, we check which one of them the node still don't have and send a request to download them.
+In this step we iterate until we have downloaded all transactions until the latest timestamp. In each iteration we send a GET-NEXT command to get the hashes of the requested timestamp and offset. After receiving these hashes, we check which one of them the node still don't have and send a request to download them.
 
-This request is made to a download coordinator, who will send a GET_DATA command only one time, replying a deferred that will be resolved when the corresponding DATA command arrives. This prevent from sending a GET_DATA command to all connected peers to transaction.
+This request is made to a download coordinator, who will send a GET-DATA command only one time, replying a deferred that will be resolved when the corresponding DATA command arrives. This prevents from sending a GET-DATA command to all connected peers to transaction.
 
 ---
 
@@ -176,20 +250,56 @@ If this is true, the peers are synced. Where `tx_storage.latest_timestamp` is th
 
 ## Real Time
 
-During real time update both peers are already in sync, so every moment they receive a new transactions that were propagated in the network, they send it to all connected peers that are ready to receive it.
+New transactions may arrive at any time in the network and, when they were not requested by the peer, it means that is a new transaction that must be propagated to the connected peers. We only propagate the transactions to a peer in some conditions:
 
-Each peer has two different queues, one for blocks that has a higher priority and must be propagated before the other, and another for transactions. To propagate a new transaction, the peer adds the data to one of the queues and wait for the queue do be consumed.
+- You are in sync with this peer;
+- You are not synced but this peer is in the READY state and your `synced_timestamp` is higher than the parents timestamps, i.e. the destination peer must have all the parents before downloading the new transaction.
 
-It does not propagate the data to all connected peers, the peer must be in the READY state and the `synced_timestamp` of the destination peer must be higher than the parents timestamps, i.e. the destination peer must have all the parents before download the new transaction.
+The propagation is done sending a DATA message to the destination peer with the new transaction. It follows a priority order explained below.
 
-After this validation, a DATA message is sent to the peer with the data of the new transaction.
+### Propagation Priority
+
+Each peer connection has two different queues, one with higher priority over the other. The one with priority is used to add blocks and their parents (in case they are not downloaded yet), while transactions are added to the lower priority one. When we are propagating a transaction we first check if there is any element in the priority queue and send all of them and, only after this queue is empty, we start sending the elements from the other.
+
+#### Example
+
+Given peer P1 that already has block B1 and transactions Tx1, Tx2 and Tx3. Some new blocks and transactions arrive from the network in the following order:
+
+| ----------- | ------------ |
+| Transaction | Parents      |
+| ----------- | ------------ |
+| B2          | B1, Tx1, Tx2 |
+| ----------- | ------------ |
+| Tx4         | Tx2, Tx3     |
+| ----------- | ------------ |
+| B3          | B2, Tx4, Tx6 |
+| ----------- | ------------ |
+| Tx5         | Tx3, Tx4     |
+| ----------- | ------------ |
+| B4          | B3, Tx5, Tx7 |
+| ----------- | ------------ |
+| Tx6         | Tx4, Tx5     |
+| ----------- | ------------ |
+| Tx7         | Tx4, Tx6     |
+| ----------- | ------------ |
+
+1. B2 arrives and is added to the priority queue, because it's a block;
+2. Tx4 arrives and is added to the normal queue, because it's a transaction;
+3. B3 arrives and will be added to the priority queue (because it's a block) but Tx5 is one of its parents and the peer must download it before downloading B3. So we will also add Tx5 to the priority queue before B3 (even though it's a transaction);
+4. B4 arrives and will be added to the priority queue but Tx7 is one of its parents and the peer must download it before B4. However, Tx7 also has a parent (Tx6) that is not downloaded yet by the peer. So we first add Tx6 to the priority queue, then Tx7 and finally B4.
+
+# Unresolved questions
+[unresolved-questions]: #unresolved-questions
+
+- We are currently accepting transaction from any time in the past. How should we define a threshold to reject past transactions while still being able to recover from a split brain that lasted more than this threshold.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
-- Currently we are connecting to all the peers in the network, so with a small increase of full nodes connected the naive algorithms that are being used could generate a huge traffic in the network. Right now we check with all peers in the network our synced timestamp every second and also propagate new transactions to all of them.
+- Currently we are connecting to all available peers in the network and each peer propagates a new transaction to all of its connections, so it requires O(n^2) propagations of each new transaction, where n is the number of peers connected.
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-- In the real time sync we should not propagate the new transaction to all connected peers.
+- We should not connect to all available peers, or we should not propagate the new transaction to all connected peers in the real time sync. This floods the network with repeated messages.
+- GET-TIPS command could accept more than one timestamp as payload, to reduce the number of messages exchanged and get tips from many timestamps faster.
