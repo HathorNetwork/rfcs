@@ -68,12 +68,12 @@ to how mining pools work, it cannot be used by pool members.
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-Currently the sequence of bytes used to serialize a block, consits of:
+Currently the sequence of bytes used to serialize a block, consists of:
 
 | Size     |  Description  | Comments |
 |----------|---------------|----------|
 | variable | `block_data`  | header, graph and script data |
-| 16        | `nonce`       | any unsigned 32-bit is a valid value value |
+| 16       | `nonce`       | any unsigned 32-bit is a valid value value |
 
 The proposed sequence of bytes to serialize a block is:
 
@@ -81,7 +81,7 @@ The proposed sequence of bytes to serialize a block is:
 |----------|---------------|----------|
 | variable | `block_data`  | unchanged |
 | 16       | `nonce`       | `0xff..ff` used to indicate presence of aux\_pow |
-| 155+     | `aux_pow`     | optional |
+| 211+     | `aux_pow`     | optional |
 
 Thus a `nonce` value of `0xff..ff` (2^128 -1) will no longer be accepted. Since
 this breaking change will be implemented on a new testnet and there is no
@@ -168,7 +168,7 @@ This is outline of how the coordinator works:
 # Drawbacks
 [drawbacks]: #drawbacks
 
-Block size increases by at lease 155 bytes in the case there is an AuxPOW, and
+Block size increases by at lease 211 bytes in the case there is an AuxPOW, and
 we have one less valid value for `nonce`.  Although this could be reduced by 4
 bytes (is it even significant?) when using the version field to indicate the
 presence of AuxPOW.
