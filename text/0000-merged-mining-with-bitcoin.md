@@ -27,9 +27,9 @@ feedback looping.
 [guide-level-explanation]: #guide-level-explanation
 
 When mining directly on the Hathor network, a client searchs for a `nonce` that
-when appended to `block_data` can be hashed and the hash is inside a certain
-difficulty requirement. The similar is also true on the Bitcoin network, but
-the difficulty requirements are different.
+when appended to `block_without_nonce` can be hashed and the hash is inside a
+certain difficulty requirement. The similar is also true on the Bitcoin network,
+but the difficulty requirements are different.
 
 Bitcoin mining clients typically accept being told to mine on a different
 difficulty than what is specified on the header, because this is useful for
@@ -37,9 +37,9 @@ pools to estimate the hash power of a client and divide the rewards accordingly.
 Also, on a Bitcoin coinbase, there is space for arbitrary data to be included.
 
 Because of these facts it is possible to include a pointer to Hathor's
-`block_data` on the Bitcoin coinbase such that the result of the work of a miner
-can be valid on either network if we accept additional data on the Hathor block
-to verify the work originally made for the Bitcoin network.
+`block_without_nonce` on the Bitcoin coinbase such that the result of the work
+of a miner can be valid on either network if we accept additional data on the
+Hathor block to verify the work originally made for the Bitcoin network.
 
 This mechanism is [commonly known][1] as "merged mining" or "merge mining",
 famously implemented on the Namecoin blockchain since 2014. It is typical to say
@@ -56,7 +56,7 @@ a few fields and how to build the merkle root of a parent block.
 
 An AuxPOW consists of:
 - the Bitcoin coinbase transaction that includes a hash of the Hathor's
-  `block_data`
+  `block_without_nonce`
 - the merkle path of that coinbase to rebuild the merkle root
 - the bitcoin block header that includes that merkle root
 
@@ -70,18 +70,18 @@ to how mining pools work, it cannot be used by pool members.
 
 Currently the sequence of bytes used to serialize a block, consists of:
 
-| Size     |  Description  | Comments |
-|----------|---------------|----------|
-| variable | `block_data`  | header, graph and script data |
-| 16       | `nonce`       | any unsigned 32-bit is a valid value value |
+| Size     |  Description          | Comments |
+|----------|-----------------------|----------|
+| variable | `block_without_nonce` | header, graph and script data |
+| 16       | `nonce`               | any unsigned 32-bit is a valid value |
 
 The proposed sequence of bytes to serialize a block is:
 
-| Size     |  Description  | Comments |
-|----------|---------------|----------|
-| variable | `block_data`  | unchanged |
-| 16       | `nonce`       | `0xff..ff` used to indicate presence of aux\_pow |
-| 211+     | `aux_pow`     | optional |
+| Size     |  Description          | Comments |
+|----------|-----------------------|----------|
+| variable | `block_without_nonce` | unchanged |
+| 16       | `nonce`        | `0xff..ff` used to indicate presence of aux\_pow |
+| 211+     | `aux_pow`             | optional |
 
 Thus a `nonce` value of `0xff..ff` (2^128 -1) will no longer be accepted. Since
 this breaking change will be implemented on a new testnet and there is no
@@ -94,14 +94,14 @@ The new `aux_pow` structure consists of:
 |------|----------------------|----------|
 | 80   | `bitcoin_header`     | validation is slightly different from Bitcoin's |
 | 1+   | `coinbase_tx` length | byte length of the next field |
-| 97+  | `coinbase_tx`        | includes the hash of `block_data` |
+| 97+  | `coinbase_tx`        | includes the hash of `block_without_nonce` |
 | 1+   | `merkle_path` count  | the number of links on the `merkle_path` |
 | 32+  | `merkle_path`        | array of links, each one is 32 bytes long |
 
 ## The hashing algorithm
 [the-hashing-algorithm]: #the-hashing-algorithm
 
-If there is no AuxPOW there is no change: hash `[block_data][nonce]`.
+If there is no AuxPOW there is no change: hash `[block_without_nonce][nonce]`.
 
 If there is AuxPOW, then hash `[bitcoin_header]`.
 
@@ -122,13 +122,13 @@ assert calculated_merkle_root == auxpow_merkle_root
 There is no need to specify the sides of the merkle links because the coinbase
 is always the first transaction.
 
-The coinbase transaction must contain the sequence `[magic_number][block_data]`
-in its binary sequence. No specific location is mandated, but in practice it
-will usually be on the scriptSig of the single input. The magic number is
-defined as the follwing sequence of 4 bytes: `48 61 74 68` (which is 'Hath' in
-ASCII).
+The coinbase transaction must contain the sequence
+`[magic_number][block_without_nonce]` in its binary sequence. No specific
+location is mandated, but in practice it will usually be on the scriptSig of the
+single input. The magic number is defined as the follwing sequence of 4 bytes:
+`48 61 74 68` (which is 'Hath' in ASCII).
 
-All of the validations for `block_data` remain. Notably the difficulty
+All of the validations for `block_without_nonce` remain. Notably the difficulty
 validation will use the new hash which may not have reached the target
 difficulty for the Bitcoin network but must do so for the Hathor network.
 
@@ -151,7 +151,7 @@ This is outline of how the coordinator works:
 - Request work to the Hathor stratum server
 - Build a coinbase transaction suitable to both, inclusion on the Bitcoin
   network and usable as an AuxPOW:
-  - Add `[magic_number][block_data]` after the [block height][3] on the
+  - Add `[magic_number][block_without_nonce]` after the [block height][3] on the
     transaction input signature script
 - When a stratum client connects, send `mining.set_difficulty` such that work
   can suit the easier network to mine in (most certainly Hathor).
