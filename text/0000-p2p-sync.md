@@ -29,7 +29,7 @@ latest_timestamp - synced_timestamp <= threshold
 
 For example, peers P1 and P2 are synced at timestamp 1564658478 (`synced_timestamp`) and the latest transaction P1 has is from timestamp 1564658492 (`latest_timestamp`), so the difference between their timestamps is 14 seconds which is less than the acceptable `threshold` (currently 60 seconds), so P1 and P2 are synced.
 
-This threshold is important because when we have a high number of transactions per second being exchanged in the network, it's really hard for two peers to have the same transactions every moment but that does not mean they are not in sync, they are just updating the latest data. So this threshold is a tolerance that to support this situation.
+This threshold is important because when we have a high number of transactions per second being exchanged in the network, it's really hard for two peers to have all of them at every moment but that does not mean they are not in sync, they are just updating the latest data. So this threshold is a tolerance to support this situation.
 
 The first step of the sync protocol is to discover the highest timestamp where both peers are synced. To do that, we use an exponential search starting at the current timestamp going backwards, followed by a binary search. We run this algorithm every second because new transactions from the past may arrive at anytime, so we must always check that we are still synced and not just rely on the real time message exchange.
 
