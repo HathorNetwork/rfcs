@@ -27,7 +27,9 @@ Two peers are defined to be synced at a timestamp T when they both have the same
 latest_timestamp - synced_timestamp <= threshold
 ```
 
-For example, peers P1 and P2 are synced at timestamp 1564658478 (`synced_timestamp`) and the latest transaction P1 has is from timestamp 1564658492 (`latest_timestamp`), so the difference between their timestamps is 14 seconds which is less than the acceptable difference (currently 60 seconds - `threshold`), so P1 and P2 are synced.
+For example, peers P1 and P2 are synced at timestamp 1564658478 (`synced_timestamp`) and the latest transaction P1 has is from timestamp 1564658492 (`latest_timestamp`), so the difference between their timestamps is 14 seconds which is less than the acceptable `threshold` (currently 60 seconds), so P1 and P2 are synced.
+
+This threshold is important because when we have a high number of transactions per second being exchanged in the network, it's really hard for two peers to have the same transactions every moment but that does not mean they are not in sync, they are just updating the latest data. So this threshold is a tolerance that to support this situation.
 
 The first step of the sync protocol is to discover the highest timestamp where both peers are synced. To do that, we use an exponential search starting at the current timestamp going backwards, followed by a binary search. We run this algorithm every second because new transactions from the past may arrive at anytime, so we must always check that we are still synced and not just rely on the real time message exchange.
 
@@ -56,10 +58,14 @@ The GET-TIPS command is used to request the tips of a peer in a given timestamp.
 ```
 {
     "timestamp": 1564658478,
+    "include_hashes": false,
+    "offset": 0,
 }
 ```
 
 The `timestamp` field is optional and, if not passed, the peer that receives this message will assume it is the latest timestamp.
+
+`include_hashes` is an optional boolean (false by default) that, in case it's true, requests also the hashes of the tips (and not only the `merkle_tree`). These hashes have a pagination limit and that's why we also have the `offset` parameter, so we can request more hashes from the same timestamp.
 
 All GET-TIPS messages expect as a TIPS message back.
 
@@ -72,10 +78,14 @@ The TIPS command is used as a reply of a GET-TIPS command and it returns the tip
     "length": 12,
     "timestamp": 1564658478,
     "merkle_tree": "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5590",
+    "hashes": [],
+    "has_more": false,
 }
 ```
 
 The `lenght` is the quantity of tips in the requested `timestamp` and the `merkle_tree` is explained how is calculated below in the 'Find synced timestamp' section.
+
+`hashes` is an array with the hashes of the tips, if requested from the GET-TIPS command, and `has_more` indicates if has more hashes in the requested timestamp (in which case the `offset` parameter should be used to continue requesting in sequence)
 
 When a peer receives a TIPS message, it finds the corresponding GET-TIPS that requested it. Unexpected TIPS messages are discarded.
 
@@ -163,6 +173,10 @@ The DATA message can be received in two different moments:
 
 Its payload is a string with the payload type and the transaction struct in hexadecimal in the following format: `payload_type:transaction_struct`, where the`payload_type` is either 'tx' or 'block' to indicate the type of the struct.
 
+### NOT-FOUND Command
+
+The NOT-FOUND command is used when a peer receives a GET-DATA message but does not have the requested transaction. Its payload is a string with the hash of the requested transaction in hexadecimal.
+
 ---
 
 There are two steps from the beggining of the syncing until both peers are synced.
@@ -174,7 +188,20 @@ There are two steps from the beggining of the syncing until both peers are synce
 
 To find the synced timestamp we start a loop from the latest timestamp and decreasing it until we have a match. We define that two peers are synced in a given timestamp when the merkle tree of their tips are the same.
 
-The merkle tree is calculated as the `sha256` of the hashes of all transactions in a given timestamp.
+#### Merkle tree
+
+We calculate the merkle tree as the `sha256` of the hashes of a list of transactions, as described below:
+
+```
+merkle = hashlib.sha256()
+for h in hashes:
+    merkle.update(h)
+merkle_tree = merkle.digest()
+```
+
+This is not exactly a merkle tree, since we are just calculating the `sha256` of each transaction's hash in sequence but it's good enough to validate the difference between two sets of transactions. We should change this in the future to use a proper merkle tree.
+
+---
 
 To optimize the search, it starts with an exponential search in the timestamp, where in each iteration we decrease the timestamp searched and send a GET-TIPS command to the peer and compare its merkle tree with ours in this timestamp, until we find a timestamp in which both peers are synced (`t0`). In this case, there is an interval `[t0, t1)`, where the peers are synced at `t0` and not-synced at `t1`. Finally, a binary search is used in the `[t0, t1)` interval.
 
@@ -227,6 +254,70 @@ So 1564658493 is the highest timestamp in which both peers are synced and the al
 In this step we iterate until we have downloaded all transactions until the latest timestamp. In each iteration we send a GET-NEXT command to get the hashes of the requested timestamp and offset. After receiving these hashes, we check which one of them the node still don't have and send a request to download them.
 
 This request is made to a download coordinator, who will send a GET-DATA command only one time, replying a deferred that will be resolved when the corresponding DATA command arrives. This prevents from sending a GET-DATA command to all connected peers to transaction.
+
+#### Download coordinator
+
+During the sync stage, when we are downloading unsynced transactions, we might request the same data for more than one connected peer, what ends up flooding the network with repeated and unecessary messages. To solve this problem we've created a download coordinator, which is responsible to receive the requests and avoid sending a duplicate message.
+
+When the coordinator receives a new request, it checkes wether this transaction was already requested and, in case it was, it saves the connection that requested it to return the data after the download is concluded.
+
+A downloaded transaction must be propagated to the network only after all its parents, however a request for a parent data might arrive later and we need to wait for it. To handle this situation, the downloader has two deques to control the order and a sliding window to control the download flow.
+
+The first deque holds the transactions that still need to be downloaded (`waiting_deque`) and the second one the transactions that are being downloaded (`downloading_deque`). The sliding window size is the maximum simultaneous downloads allowed. This proccess is similar to the one used for the [TCP Protocol][1]
+
+##### Example
+
+__Step 1__
+
+Both deques are empty and the following requests arrive: connection C1 requests tx1, tx2 and tx3 and connection C2 requests tx1.
+
+*Waiting deque:* [tx1, tx2, tx3]
+
+*Downloading deque:* []
+
+When the second tx1 request arrives it won't be added again into the waiting_deque, we just save which connection requested to return the data later to it.
+
+__Step 2__
+
+Remove the element from the beginning in the waiting deque and add in the end in the downloading deque, so we keep the same order.
+
+*Waiting deque:* [tx2, tx3]
+
+*Downloading deque:* [tx1]
+
+We start downloading tx1.
+
+__Step 3__
+
+The tx1 download finishes and, since it's the first element of the downloading_deque, we don't need to wait for any other download to finish. So we remove it from the deque, propagate to the network and return it to C1 and C2. Then we remove tx2 from the waiting_deque and add to the downloading_deque.
+
+*Waiting deque:* [tx3]
+
+*Downloading deque:* [tx2]
+
+We start downloading tx2.
+
+__Step 4__
+
+The window size is bigger than 1, so we can start another download while we are still waiting for tx2 to finish.
+
+*Waiting deque:* []
+
+*Downloading deque:* [tx2, tx3]
+
+We start downloading tx3.
+
+__Step 5__
+
+The tx3 download finishes but it's not the first element in the downloading_queue, so we need to wait for tx2 to finish before propagating tx3 to the network.
+
+__Step 6__
+
+Download of tx2 finishes, so we propagate tx2 and tx3 to the network and return both to C1.
+
+##### Error handling
+
+When sending a request for data to a peer we might have some errors. The peer might not have the requested transaction (we receive back a NOT-FOUND message) or the request could also takes more time than the timeout. In this case, when we have more than one connection waiting for a transaction that had an error, we start a new download for the same transaction to a different peer.
 
 ---
 
@@ -285,3 +376,6 @@ Given peer P1 that already has block B1 and transactions Tx1, Tx2 and Tx3. Some 
 
 - We should not connect to all available peers, or we should not propagate the new transaction to all connected peers in the real time sync. This floods the network with repeated messages.
 - GET-TIPS command could accept more than one timestamp as payload, to reduce the number of messages exchanged and get tips from many timestamps faster.
+- We should cache the interval tree, which is responsible for storing the tips in a given timestamp. The biggest problem of that is to invalidate this cache when an old transaction arrives.
+
+[1]: https://en.wikipedia.org/wiki/Sliding_window_protocol
