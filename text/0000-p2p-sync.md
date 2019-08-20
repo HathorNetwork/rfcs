@@ -188,35 +188,27 @@ Given two peers (P1 and P2) that are synced at timestamp 1564658493 and P1 lates
 
 Start exponential search
 
-| ------------------ | ------------- | -------- | -------------- |
 | Searched timestamp | Hashes match? | Decrease | Last timestamp |
 | ------------------ | ------------- | -------- | -------------- |
 | 1564658498         | No            | 1        | None           |
-| ------------------ | ------------- | -------- | -------------- |
 
 ##### Step 2
 
-| ------------------ | ------------- | -------- | -------------- |
 | Searched timestamp | Hashes match? | Decrease | Last timestamp |
 | ------------------ | ------------- | -------- | -------------- |
 | 1564658497         | No            | 2        | 1564658498     |
-| ------------------ | ------------- | -------- | -------------- |
 
 ##### Step 3
 
-| ------------------ | ------------- | -------- | -------------- |
 | Searched timestamp | Hashes match? | Decrease | Last timestamp |
 | ------------------ | ------------- | -------- | -------------- |
 | 1564658495         | No            | 4        | 1564658497     |
-| ------------------ | ------------- | -------- | -------------- |
 
 ##### Step 4
 
-| ------------------ | ------------- | -------- | -------------- |
 | Searched timestamp | Hashes match? | Decrease | Last timestamp |
 | ------------------ | ------------- | -------- | -------------- |
 | 1564658491         | Yes           | 8        | 1564658495     |
-| ------------------ | ------------- | -------- | -------------- |
 
 End of exponential search, they are synced at timestamp 1564658491 but are not synced at timestamp 1564658495. So we need to find in the interval `[1564658491, 1564658495)` what's the highest timestamp in which they are synced.
 
@@ -224,11 +216,9 @@ End of exponential search, they are synced at timestamp 1564658491 but are not s
 
 Start of binary search
 
-| ------------- | -------------- | ------------------ | ------------- |
 | Low timestamp | High timestamp | Searched timestamp | Hashes match? |
 | ------------- | -------------- | ------------------ | ------------- |
 | 1564658491    | 1564658494     | 1564658493         | Yes           |
-| ------------- | -------------- | ------------------ | ------------- |
 
 So 1564658493 is the highest timestamp in which both peers are synced and the algorithm is stopped here and both peers start syncing from this `synced_timestamp`.
 
@@ -265,23 +255,15 @@ Each peer connection has two different queues, one with higher priority over the
 
 Given peer P1 that already has block B1 and transactions Tx1, Tx2 and Tx3. Some new blocks and transactions arrive from the network in the following order:
 
-| ----------- | ------------ |
 | Transaction | Parents      |
 | ----------- | ------------ |
 | B2          | B1, Tx1, Tx2 |
-| ----------- | ------------ |
 | Tx4         | Tx2, Tx3     |
-| ----------- | ------------ |
 | B3          | B2, Tx4, Tx6 |
-| ----------- | ------------ |
 | Tx5         | Tx3, Tx4     |
-| ----------- | ------------ |
 | B4          | B3, Tx5, Tx7 |
-| ----------- | ------------ |
 | Tx6         | Tx4, Tx5     |
-| ----------- | ------------ |
 | Tx7         | Tx4, Tx6     |
-| ----------- | ------------ |
 
 1. B2 arrives and is added to the priority queue, because it's a block;
 2. Tx4 arrives and is added to the normal queue, because it's a transaction;
