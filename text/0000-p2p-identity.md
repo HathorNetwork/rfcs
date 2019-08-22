@@ -23,7 +23,7 @@ When a brand new full-node is run for the first time, it needs to discover at le
 
 After a connection has been established, there are two steps before getting ready to freely exchange messages (peer A is trying to connect to peer B):
 
-1. The first step is the network configuration. In this step, the connected peers checks whether they are running compatible versions of the protocol and the same network configuration (mainnet, testnet-alpha, testnet-bravo, etc). If any error occurs, the connection is closed.
+1. The first step is the network configuration. In this step, the connected peers checks whether they are running compatible versions of the protocol and the same network configuration (mainnet, testnet-alpha, testnet-bravo, etc). If any error occurs, the connection is closed. This is similar to what Bitcoin does in its [version message][1]
 
 2. The second step is the peer identification. In this step, the peers exchange their Peer-IDs and Entrypoints, then they verify whether they are connected directly to each other (without a man-in-the-middle).
 
@@ -43,13 +43,13 @@ This step checks whether the peers are compatible to connect. For instance, a fu
 
 The Peer-ID is important because it allows peers to establish a confidence level for other peers. It may be useful when the network is under attack, and the peers are working together to recover the network.
 
-As there is no central authority to distribute certificates to the peers, we chose to use a self-generated certificate for the peers, and the Peer-ID is defined as the hash (sha256d) of the public key of the certificate. To exchange the certificates and establish a secure connection, a Transport Layer Security (TLS 1.3) will be enabled over the TCP connection.
+As there is no central authority to distribute certificates to the peers, we chose to use a self-generated certificate for the peers, and the Peer-ID is defined as the hash (sha256d) of the public key of the certificate. To exchange the certificates and establish a secure connection, a Transport Layer Security ([TLS 1.3][2]) will be enabled over the TCP connection.
 
 During this step, the peers exchange their Peer-Id and Entrypoints. Thus, the other part validates the Peer-Id and checks whether it is directly connected to one of the given entrypoints. If the Peer-Id does not match or it is not directly connected, the connection is closed.
 
-Let's say that peer A has opened a connection to peer B. In this case, B must have at least one entrypoint and the connection URL used by A must match one of these entrypoints. But A may have no entrypoints, which means A does not accept connections (e.g. A is behind a NAT). In this case, B does not know whether it is directly connected to A.
+Let's say that peer A has opened a connection to peer B. In this case, B must have at least one entrypoint and the connection URL used by A must match one of these entrypoints. But A may have no entrypoints, which means A does not accept connections (e.g. A is behind [NAT][3]). In this case, B does not know whether it is directly connected to A.
 
-If A has no entrypoints, B doesn't close the connection, but it marks the connection with the flag ENTRYPOINT-VERIFICATION-FAILS.
+If A has no entrypoints, B doesn't close the connection, because we need to accept connections from peers behind NAT but we mark those connections with a flag NO_ENTRYPOINTS, so we know that we couldn't validate if we are directly connected to A because it has no entrypoints.
 
 After these verifications, the connection is ready to freely exchange messages.
 
@@ -65,9 +65,11 @@ All messages have the same format: "COMMAND [PAYLOAD]", where the PAYLOAD is opt
 
 ## DNS Bootstraping
 
-The full-node does a DNS Query of type TXT to a given list of hosts. Each DNS Query returns a list of URLs where the node should connect to. The URLs have the following format: `scheme://host:port[/?id=<peer-id>]`, where the `id` is optional. When the `id` is given, the full-node should enforce it during the peer identity step.
+The full-node does a DNS Query of type TXT to a given list of hosts. Each DNS Query returns a list of URLs where the node should connect to. The URLs have the following format: `scheme://host:port[/?id=<peer-id>]`, where the `id` is optional. When the `id` is given, the full-node should enforce it during the peer identity step and, if not given, we add in this connection the NO_PEER_ID_URL flag to save that we haven't double checked the peer id of this connection.
 
 For each URL resolved in the DNS query, a TLS connection is started and, during the handshake, the peers will exchange their certificates and generate session keys. After the TLS is enabled, both peers will move to the HELLO state.
+
+Another bootstraping possibility is to pass the URL of the peer you want to connect when starting your node using the `--bootstrap` parameter. The connection process is the same of the other case.
 
 ## Hello State
 
@@ -108,7 +110,9 @@ Some validations are executed when the peer receives the HELLO command:
 1. All fields must be presented in the payload;
 2. `app`, `network`, `genesis_short_hash`, and `settings_hash` values must be the same;
 
-If `settings_hash` is different in both peers, an ERROR command (with the expected settings) will be sent to the peer who sent the HELLO with the different `settings_hash` and the connection will be closed.
+If any validation fails, an ERROR command will be sent and the connection will be closed.
+
+In the case when the `settings_hash` is different, the ERROR command will have a payload, which is the expected settings.
 
 If all verifications are valid, the peer state moves to PEER-ID.
 
@@ -145,11 +149,11 @@ This command is needed because in the step 4 of the PEER-ID validation, when a D
 
 When changing from the HELLO state to the PEER-ID state this extra care is not needed because the validations are always syncronous, so we guarantee that the new message will be handled only after the Hello message was finished. If we add an async validation there in the future we would need to handle the state change in a similar way.
 
-After the peer finish the PEER-ID validation and receive the READY command from the other peer, it changes the state to READY state.
+After the peer finishes the PEER-ID validation and receives the READY command from the other peer, it changes the state to READY state.
 
 ## Ready State
 
-This state is responsible for keeping the connection alive and exchanging information about peers, blocks and transactions on the network. It starts requesting all the peers to the connected node and a ping message loop, to assure that the connection is still alive. This state allows five commands (besides the sync commands that won't be discussed in this RFC): PING, PONG, GET-PEERS, PEERS, and ERROR.
+This state is responsible for keeping the connection alive and exchanging information about peers, blocks and transactions on the network. It starts requesting all the peers to the connected node and a ping message loop, to ensure that the connection is still alive. This state allows five commands (besides the sync commands that won't be discussed in this RFC): PING, PONG, GET-PEERS, PEERS, and ERROR.
 
 ### PING Command
 
@@ -192,7 +196,7 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
-- We could use UDP instead of TCP for the transport protocol. This would increase the message exchange speed, however would increase the complexity of the code, because right now we are assuming that all messages arrive in the correct order (which is not true when using UDP). If we decide to use UDP we could use DTLS (Datagram Transport Layer Security) to use libssl over UDP;
+- We could use UDP instead of TCP for the transport protocol. This would increase the message exchange throughput, however would increase the complexity of the code, because right now we are assuming that all messages arrive in the correct order (which is not true when using UDP). If we decide to use UDP we could use DTLS (Datagram Transport Layer Security) to use libssl over UDP;
 
 - We could use WebSocket instead of LineReceiver for the messaging protocol but the advantage is not real clear, so we've decided to keep the LineReceiver.
 
@@ -202,14 +206,26 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 - Peer reputation: with a secure method to define a peer id and to estabilish a connection between two peers we could start developing the reputation of one peer, so users can trust more in peers with higher reputation.
 - White list and black list of entrypoints. We could define that all base Hathor endpoints are trustworthy and are always in the white list and that any node must be connected to at least one node that is in the white list.
 - Define a maximum number of connections per IP address, to prevent a possible attack from the same IP.
-- If the peers connections are not estabilished with TLS we should include a DH Key Exchange, so we can sign the messages when exchanging them.
-- We should add a rule for the peer to stop trying to connect to another peer. Right now we are trying to connect forever but after some connection fails we should stop trying.
+- If the peers connections are not estabilished with TLS we should use an Authenticated DH Key Exchange algorithm, so we can sign the messages when exchanging them.
+- We should add a rule for the peer to stop trying to connect to another peer. Right now we are trying to connect forever but after some connection fails we should stop trying. We can add a `RETRIES_EXCEEDED` flag and stop trying to connect, then the peer can manually retry.
 - Persist the list of known and connected peers, so if we need to reconnect in the future we can use this list without the need of a DNS query.
-- We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection).
+- We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection). Even though we won't connect to all peers, we still need to keep a full list of all peers in the network.
+
+#### Peer selection
+
+According to [6], in the introduction, random graphs with `p > log(n)/n` are almost surely k-connected for any `k`. This means that, if the number of peers n has at least `log(n)*(n-1)/n` connections, the random graph would not be easily partitioned. To generate a random graph, we can use a strategy based on Reservoir sampling [7].
+
+References:
+
+[1] On Random Node Selection in P2P and Overlay Networks, Vivek Vishnumurthy. (http://www.cs.cornell.edu/people/francis/RandSelection19.pdf)
+[2] On Overlay Construction and Random Node Selection in Heterogeneous Unstructured P2P Networks, Vivek Vishnumurthy. (https://people.mpi-sws.org/~francis/infocom06-swaplinks.pdf)
+[3] Introduction to Random Graphs, Alan Frieze, Section 4.2.
+[4] Random Graphs, 2nd Edition, Bollobás, Section 7.2.
+[5] On the strength of connectedness of a random graph, Erdös
+[6] k-Connectivity in Random Undirected Graphs, Reif & Spirakis.
+[7] https://en.wikipedia.org/wiki/Reservoir_sampling
 
 
-# References
-[references]: #references
-
-- https://bitcoin.org/en/developer-reference#version
-- https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_1.3
+[1]: https://bitcoin.org/en/developer-reference#version
+[2]: https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_1.3
+[3]: https://en.wikipedia.org/wiki/Network_address_translation
