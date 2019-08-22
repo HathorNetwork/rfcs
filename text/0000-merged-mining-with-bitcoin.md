@@ -104,8 +104,8 @@ The new `aux_pow` structure consists of:
 In order to preserve the property the hash of a block has of representing the
 difficulty, we have to change what is hashed. Note that this is different from
 what Namecoin does, which is changing how the difficutly is calculated instead
-of how the hash is calculated, also note that the hash function is still the
-same, only the function input changes depending if the block as an AuxPOW.
+of how the hash is calculated. Also note that the hash function is still the
+same, only the function input changes depending if the block has an AuxPOW.
 
 - If there is no AuxPOW there is no change: hash `[block_without_nonce][nonce]`.
 - If there is AuxPOW, then hash `[bitcoin_header]`.
