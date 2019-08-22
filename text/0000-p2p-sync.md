@@ -377,5 +377,7 @@ Given peer P1 that already has block B1 and transactions Tx1, Tx2 and Tx3. Some 
 - We should not connect to all available peers, or we should not propagate the new transaction to all connected peers in the real time sync. This floods the network with repeated messages.
 - GET-TIPS command could accept more than one timestamp as payload, to reduce the number of messages exchanged and get tips from many timestamps faster.
 - We should cache the interval tree, which is responsible for storing the tips in a given timestamp. The biggest problem of that is to invalidate this cache when an old transaction arrives.
+- NEXT command could return also the timestamp of each hash and, in the downloader, we can know what is the timestamp of each hash, so when we have a situation like `tx1` and `tx2` with the same timestamp `t` and the downloading deque is `[tx1, tx2]`. If the `tx2` download finishes first, we can safely add it to the DAG before `tx1`, since they have the same timestamp.
+- Nowadays, when two peers (P1 and P2) start a connection, the syncing phase is done by both of them. The stages find synced timestamp and sync from timestamp is done twice but if P1 is synced with P2 at timestamp T, P2 will be synced with P1 at timestamp T also. So we can do this phase only in one peer and then send a message to the other indicating the result.
 
 [1]: https://en.wikipedia.org/wiki/Sliding_window_protocol
