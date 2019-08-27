@@ -47,9 +47,9 @@ In the World Cup example, that means someone (most likely, but not necessarily, 
 
 The oracle has a somewhat rigid format for its data. It should be in the format `value1:value2:value3:...:valueN`.
 
-An example of data is `key:timestamp:payload`. where:
-`key`: identifies the event this nano contract is about. In a stock futures contract, it could be the stock ticker symbol;
-`timestamp`: when was this information provided. A stock can have value X at time T1 and value Y at time T2;
+An example of data is `key:timestamp:payload`. where:  
+`key`: identifies the event this nano contract is about. In a stock futures contract, it could be the stock ticker symbol;  
+`timestamp`: when was this information provided. A stock can have value X at time T1 and value Y at time T2;  
 `payload`: the actual value, the stock price.
 
 Another example: let's say it's a bet on a game result (Brazil x Argentina). The oracle's id for this game is 55 (some unique identifier), and it will return the results as follows:
@@ -68,13 +68,13 @@ The Nano Contract has a few special opcodes in the scripting language of the out
 
 It consumes three parameters from the stack: `<data> <signature> and <pubKey>`. It checks the data and signature against the pubkey. If the signature is valid, it pushes DATA to the stack. Otherwise, it fails.
 
-It's important that the contract's script contains the oracle public key hash, to appoint who is the oracle for this contract. For example, the following script would check whether the data was signed by the correct oracle or not: `OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKSIG_ORACLE`.
+It's important that the contract's script contains the oracle public key hash, to appoint who is the oracle for this contract. For example, the following script would check whether the data was signed by the correct oracle or not: `OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG`.
 
 The expected input data must be: `<data> <signature> <pubKey>`.
 
 After running, the stack would be: `<data>`.
 
-This should be the first step when creating a nano contract most of the times.
+This would be the first step when creating a nano contract most of the times. Basically, it garantees that the data has been provided by the correct oracle and leaves the data on the stack so it can be used to settle the contract.
 
 ### OP_MATCH_INTERVAL
 
@@ -96,9 +96,9 @@ During contract creation, it should be enforced that each `<an>` is different; i
 
 ### OP_GET_DATA_STR, OP_GET_DATA_INT
 
-It consumes two parameters from the stack: `<data> <k>`. Extracts the kth value from `<data>` as a string (_STR) or an integer (_INT). Remember that the oracle data has the format `value1:value2:value3:...:valueN`
+It consumes two parameters from the stack: `<data> <k>`. Extracts the kth value from `<data>` as a string (_STR) or an integer (_INT). Remember that the oracle data has the format `value1:value2:value3:...:valueN`, so we're extracting `valueK`.
 
-Leaves on the stack <oracleData> <extractedValue>
+Leaves on the stack <oracleData> <valueK>.
 
 ### OP_DATA_STREQUAL
 
@@ -106,7 +106,7 @@ Equivalent to an OP_GET_DATA_STR followed by an OP_EQUALVERIFY. Consumes three p
 
 Leaves on stack `<data>`; or fails, if not equal.
 
-Eg: `<data> <0> <key> OP_DATA_STREQUAL` gets the first value from `<data>` and compares it to `<key>`. Leaves `<data>` on stack.
+Eg: `<data> <0> <value> OP_DATA_STREQUAL` gets the first value from `<data>` and compares it to `<value>`. Leaves `<data>` on stack.
 
 ### OP_DATA_GREATERTHAN
 
@@ -122,7 +122,7 @@ Equivalent to an OP_GET_DATA_INT followed by an OP_MATCH_INTERVAL.
 
 Leaves on stack `<pubkeyHash>`.
 
-Eg: `<data> <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL` gets third value from `<data>` as an integer and finds the matching interval. Leaves `<pubkeyHash>` on stack.
+Eg: `<data> <2> <PubKeyHash_A> <5> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL` gets third value from `<data>` as an integer and finds the matching interval. Leaves `<PubKeyHash_X>` on stack.
 
 ### OP_DATA_MATCH_VALUE
 
@@ -130,13 +130,13 @@ Equivalent to an OP_GET_DATA_INT followed by an OP_MATCH_VALUE.
 
 Leaves on stack `<pubkeyHash>`; or fails, if no value matches.
 
-Eg: `<data> <2> <PubKeyHash_A> <5.00> <PubKeyHash_B> <1> OP_DATA_MATCH_INTERVAL` gets value 2 from data as an integer and finds the matching interval. Leaves `<pubkeyHash>` on stack
+Eg: `<data> <2> <PubKeyHash_A> <5> <PubKeyHash_B> <10> <PubKeyHash_C> <2> OP_DATA_MATCH_INTERVAL` gets third value from data as an integer and finds the matching value. Leaves `<PubKeyHash_X>` on stack. `<PubKeyHash_A>` is the fallback public key in this example.
 
 ## Examples
 
 ### Bet on a value
 
-Example of a contract in which two persons (A and B) bet 1 token each on the price of Hathor 2 months from now. If the price of Hathor is above $5.00, B receives 2 tokens. Otherwise, A receives 2 tokens. Then, the script of the output would be:
+Example of a contract in which two people (A and B) bet 1 token each on the price of Hathor 2 months from now. If the price of Hathor is above $5.00, B receives 2 tokens. Otherwise, A receives 2 tokens. The output script is:
 
 First part: `OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG`.
 Confirms the data actually came from the oracle identified by `<oraclePubKeyHash>`
@@ -211,7 +211,7 @@ Script=
 
 ### Bet on a game result
 
-Example of a contract in which two persons (A and B) bet 1 token each on the Brazil x Argentina game result. If Argentina wins, A gets the tokens; if Brazil wins, B gets the tokens. Oracle will return 0 if Argentina wins; 1 if Brazil wins. Then, the script of the output would be:
+Example of a contract in which two people (A and B) bet 1 token each on the Brazil x Argentina game result. If Argentina wins, A gets the tokens; if Brazil wins, B gets the tokens. Oracle will return 0 if Argentina wins; 1 if Brazil wins. The output script is:
 
 First part: `OP_DUP OP_HASH160 <oraclePubKeyHash> OP_EQUALVERIFY OP_CHECKDATASIG`.
 Confirms the data actually came from the oracle identified by `<oraclePubKeyHash>`
