@@ -44,7 +44,7 @@ After we are synced, we start receiving and propagating transactions in real tim
 
 During the sync period there are two stages:
 
-1. The syncing phase, where the peer must download all past blocks and transactions from the peer its connecting to, so they both have the same history and get in sync.
+1. The syncing phase, where the peer must download all past blocks and transactions from the peer it's connecting to, so they both have the same history and get in sync.
 2. After the peers are synced, they both receive new transactions in real time when they are propagated into the network.
 
 ## Syncing
