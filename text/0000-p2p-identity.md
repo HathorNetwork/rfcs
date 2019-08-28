@@ -43,7 +43,7 @@ This step checks whether the peers are compatible to connect. For instance, a fu
 
 The Peer-ID is important because it allows peers to establish a confidence level for other peers. It may be useful when the network is under attack, and the peers are working together to recover the network.
 
-As there is no central authority to distribute certificates to the peers, we chose to use a self-generated certificate for the peers, and the Peer-ID is defined as the hash (sha256d) of the public key of the certificate. To exchange the certificates and establish a secure connection, a Transport Layer Security ([TLS 1.3][2]) will be enabled over the TCP connection.
+We use a public key based authentication and we have created a central authority certificate that signs certificates created by the peers and is used to validate the certificates when starting the connection. The Peer-ID is defined as the hash (sha256d) of the public key of the certificate of each peer. To exchange the certificates and establish a secure connection, a Transport Layer Security ([TLS 1.3][2]) will be enabled over the TCP connection.
 
 During this step, the peers exchange their Peer-Id and Entrypoints. Thus, the other part validates the Peer-Id and checks whether it is directly connected to one of the given entrypoints. If the Peer-Id does not match or it is not directly connected, the connection is closed.
 
@@ -53,6 +53,9 @@ If A has no entrypoints, B doesn't close the connection, because we need to acce
 
 After these verifications, the connection is ready to freely exchange messages.
 
+## Retry connection
+
+Every time a peer disconnects, its data is kept in a peer storage and a reconnect policy starts. We try to reconnect at most 3 times and multiply the interval time between retries by a multiplier (currently 5). If we still can't reconnect after all the retries, we add a flag `RETRIES_EXCEEDED` to the peer, so we can manually try to reconnect again in the future.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
@@ -70,6 +73,12 @@ The full-node does a DNS Query of type TXT to a given list of hosts. Each DNS Qu
 For each URL resolved in the DNS query, a TLS connection is started and, during the handshake, the peers will exchange their certificates and generate session keys. After the TLS is enabled, both peers will move to the HELLO state.
 
 Another bootstraping possibility is to pass the URL of the peer you want to connect when starting your node using the `--bootstrap` parameter. The connection process is the same of the other case.
+
+## Certificate generation
+
+The first idea was that each peer would create a self signed certificate and exchange them during the TLS connection. However the python wrapper for the openssl lib do not expose the method `SSL_CTX_set_cert_verify_callback` which was an important part to verify the certificates.
+
+Because of that, we've decided to create a central authority certificate and all generated certificates for each peer are not self signed anymore, they are signed by this central authority and have the public key of the peer. This is important to guarantee that the certificate exchange happens when starting the connection.
 
 ## Hello State
 
@@ -127,6 +136,7 @@ The PEER-ID command is used to exchange the peer identity of the peer. Its paylo
 ```
 {
 	"id": "214ec65c20889d3be888921b7a65b522c55d18004ce436dffd44b48c117e5590",
+	"pubKey": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6UelAkULrDmTx3djJhAMZ2p8ziXBGHZW0YZQsmN08mcfCkPJVOtfH0ep8OfhkKkzzBAptsZmOMi0/HZ/ytiyoG6gr4/aot3keh1DL5RqJOeku/L7RyvETOG3zdklz2rf5fgmtdp7EHUqy16imd6pGZzyavyuQx+D1paxn7tVK2fTgvlGIPPWwVC9zsbd9gYCaVw8chDQq3v0xF9FRw2CxDSp2A3zVqbWI+NHfQB7TwMVydFZLl2Z9OO71CfKweNivU7pagaOf49j1jjTXEFRWpUu2w3tUH/QyLz/AJiYdedKhr9a9fGldYu5sAkd07lJPnpq9W32tUe4tJ5eUiOuOQIDAQAB",
 	"entrypoints": ["tcp://54.211.192.182:40403"],
 }
 ```
@@ -135,11 +145,15 @@ When the PEER-ID command is received, the full-node does some validations before
 
 1. Compares the `id` with the sha256d of the public key;
 2. If the DNS query return had the `peer_id` parameter on it we validate here if they both match;
-3. Validates that the public key is the same as the one that generated the certificate;
+3. Validates that the public key of the peer is the same as the one that generated the certificate;
 4. Checks whether it is connected to one of the entrypoints (the entrypoint has the format `tcp://name|IP:port`)
   - If the peer is the server, it has access only to the client host and not port entrypoint, so we just validate the host;
   - If the peer is the client, we validate that the URL used to connect is one of the entrypoints;
   - In both cases, if the entrypoint does not have the IP directly (if it's the name), a DNS query must be made to validate if the corresponding URL matches the one connected.
+
+If any vaidation fails, an ERROR command will be sent and the connection will be closed.
+
+If all verifications are valid, the peer sends a READY command to the other peer, to indicates it can move to the next state. If had already received a READY command from the other peer, it moves to the READY state.
 
 ### READY Command
 
@@ -207,7 +221,6 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 - White list and black list of entrypoints. We could define that all base Hathor endpoints are trustworthy and are always in the white list and that any node must be connected to at least one node that is in the white list.
 - Define a maximum number of connections per IP address, to prevent a possible attack from the same IP.
 - If the peers connections are not estabilished with TLS we should use an Authenticated DH Key Exchange algorithm, so we can sign the messages when exchanging them.
-- We should add a rule for the peer to stop trying to connect to another peer. Right now we are trying to connect forever but after some connection fails we should stop trying. We can add a `RETRIES_EXCEEDED` flag and stop trying to connect, then the peer can manually retry.
 - Persist the list of known and connected peers, so if we need to reconnect in the future we can use this list without the need of a DNS query.
 - We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection). Even though we won't connect to all peers, we still need to keep a full list of all peers in the network.
 
