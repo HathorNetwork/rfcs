@@ -12,7 +12,7 @@ Define how a peer will be identified and the secure protocol of connection betwe
 # Motivation
 [motivation]: #motivation
 
-The motivation is to increase security in the peer connections and real time communication. 
+The motivation is to have a safe p2p network with: (i) real time communication, (ii) messages broadcasted to all peers, (iii) new peers easily discovered, and (iv) protected from partition attacks.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -23,7 +23,7 @@ When a brand new full-node is run for the first time, it needs to discover at le
 
 After a connection has been established, there are two steps before getting ready to freely exchange messages (peer A is trying to connect to peer B):
 
-1. The first step is the network configuration. In this step, the connected peers checks whether they are running compatible versions of the protocol and the same network configuration (mainnet, testnet-alpha, testnet-bravo, etc). If any error occurs, the connection is closed. This is similar to what Bitcoin does in its [version message][1]
+1. The first step is the network configuration. In this step, the connected peers check whether they are running compatible versions of the protocol and the same network configuration (mainnet, testnet-alpha, testnet-bravo, etc). If any error occurs, the connection is closed. This is similar to what Bitcoin does in its [version message][1]
 
 2. The second step is the peer identification. In this step, the peers exchange their Peer-IDs and Entrypoints, then they verify whether they are connected directly to each other (without a man-in-the-middle).
 
@@ -121,7 +121,7 @@ Some validations are executed when the peer receives the HELLO command:
 
 If any validation fails, an ERROR command will be sent and the connection will be closed.
 
-In the case when the `settings_hash` is different, the ERROR command will have a payload, which is the expected settings.
+In the case when the `settings_hash` is different, the ERROR command will have a payload, which is the peer's settings.
 
 If all verifications are valid, the peer state moves to PEER-ID.
 
@@ -159,9 +159,9 @@ If all verifications are valid, the peer sends a READY command to the other peer
 
 The READY command is used to tell the peer you are connected to that you are ready to change to the next state. This command is sent as soon as all PEER-ID validation steps are completed.
 
-This command is needed because in the step 4 of the PEER-ID validation, when a DNS query is needed, it becomes an asyncronous task, so it can take a while for one of the peers to validate the connection. So we must change state only after both peers confirm all the above validations.
+This command is needed because in the step 4 of the PEER-ID validation, when a DNS query is needed, it can take a while for one of the peers to validate the connection. So we must change state only after both peers confirm all the above validations.
 
-When changing from the HELLO state to the PEER-ID state this extra care is not needed because the validations are always syncronous, so we guarantee that the new message will be handled only after the Hello message was finished. If we add an async validation there in the future we would need to handle the state change in a similar way.
+When changing from the HELLO state to the PEER-ID state this extra care is not needed because the validations are fast, so we guarantee that the new message will be handled only after the Hello message was finished. If we add a slow validation there in the future we would need to handle the state change in a similar way.
 
 After the peer finishes the PEER-ID validation and receives the READY command from the other peer, it changes the state to READY state.
 
@@ -177,7 +177,7 @@ The PING command is used to verify that the connection is still alive. There is 
 
 The PONG command is the response for a received PING command. There is no payload. When the node receives a PONG command, it updates the last_message field of the peer connection with the timestamp.
 
-Using PING and PONG commands we can calculate the RTT between two nodes. We just need to make sure the PONG response is sent as soon as the PING arrives, without any delay.
+Using PING and PONG commands we can calculate the RTT between two nodes. We just need to make sure the PONG response is sent as soon as the PING arrives, without any delay and we also need a sequence number in the payload, to know which PING message the PONG is replying.
 
 ### GET-PEERS Command
 
@@ -222,23 +222,10 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 - Define a maximum number of connections per IP address, to prevent a possible attack from the same IP.
 - If the peers connections are not estabilished with TLS we should use an Authenticated DH Key Exchange algorithm, so we can sign the messages when exchanging them.
 - Persist the list of known and connected peers, so if we need to reconnect in the future we can use this list without the need of a DNS query.
-- We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection). Even though we won't connect to all peers, we still need to keep a full list of all peers in the network.
-
-#### Peer selection
-
-According to [6], in the introduction, random graphs with `p > log(n)/n` are almost surely k-connected for any `k`. This means that, if the number of peers n has at least `log(n)*(n-1)/n` connections, the random graph would not be easily partitioned. To generate a random graph, we can use a strategy based on Reservoir sampling [7].
-
-References:
-
-[1] On Random Node Selection in P2P and Overlay Networks, Vivek Vishnumurthy. (http://www.cs.cornell.edu/people/francis/RandSelection19.pdf)
-[2] On Overlay Construction and Random Node Selection in Heterogeneous Unstructured P2P Networks, Vivek Vishnumurthy. (https://people.mpi-sws.org/~francis/infocom06-swaplinks.pdf)
-[3] Introduction to Random Graphs, Alan Frieze, Section 4.2.
-[4] Random Graphs, 2nd Edition, Bollobás, Section 7.2.
-[5] On the strength of connectedness of a random graph, Erdös
-[6] k-Connectivity in Random Undirected Graphs, Reif & Spirakis.
-[7] https://en.wikipedia.org/wiki/Reservoir_sampling
+- We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection). Even though we won't connect to all peers, we still need to keep a full list of all peers in the network. Some aspects of a solution were discussed in a [RFC comment][4].
 
 
 [1]: https://bitcoin.org/en/developer-reference#version
 [2]: https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_1.3
 [3]: https://en.wikipedia.org/wiki/Network_address_translation
+[4]: https://gitlab.com/HathorNetwork/rfcs/merge_requests/13#note_204298878
