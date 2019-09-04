@@ -47,6 +47,12 @@ During the sync period there are two stages:
 1. The syncing phase, where the peer must download all past blocks and transactions from the peer it's connecting to, so they both have the same history and get in sync.
 2. After the peers are synced, they both receive new transactions in real time when they are propagated into the network.
 
+## Tips
+
+A transaction is defined to be a tip if it has not being confirmed by any other transaction yet. We can also say a transaction is a tip at timestamp `T` if no other transaction has confirmed it until `T`.
+
+For example, a tx A with timestamp `t` is first confirmed by a tx B `d` seconds later. So, we can say that A is a tip during the interval `[t, t+d)` but is not a tip anymore because it has being confirmed.
+
 ## Syncing
 
 During the syncing phase the peers can exchange 6 different commands: GET-TIPS, TIPS, GET-NEXT, GET-DATA, DATA.
@@ -186,7 +192,7 @@ There are two steps from the beggining of the syncing until both peers are synce
 
 ### Find synced timestamp
 
-To find the synced timestamp we start a loop from the latest timestamp and decreasing it until we have a match. We define that two peers are synced in a given timestamp when the merkle tree of their tips are the same.
+To find the synced timestamp we start a loop from the latest timestamp and decreasing it until we have a match. We define that two peers are synced in a given timestamp when the merkle tree of their tips are the same. This means two peers are synced at a timestamp when they both have the same tips at that timestamp. The proof for this theorem can be found in the [whitepaper][1].
 
 #### Merkle tree
 
@@ -263,7 +269,7 @@ When the coordinator receives a new request, it checkes wether this transaction 
 
 A downloaded transaction must be propagated to the network only after all its parents, however a request for a parent data might arrive later and we need to wait for it. To handle this situation, the downloader has two deques to control the order and a sliding window to control the download flow.
 
-The first deque holds the transactions that still need to be downloaded (`waiting_deque`) and the second one the transactions that are being downloaded (`downloading_deque`). The sliding window size is the maximum simultaneous downloads allowed. This proccess is similar to the one used for the [TCP Protocol][1]
+The first deque holds the transactions that still need to be downloaded (`waiting_deque`) and the second one the transactions that are being downloaded (`downloading_deque`). The sliding window size is the maximum simultaneous downloads allowed. This proccess is similar to the one used for the [TCP Protocol][2]
 
 ##### Example
 
@@ -380,4 +386,5 @@ Given peer P1 that already has block B1 and transactions Tx1, Tx2 and Tx3. Some 
 - NEXT command could return also the timestamp of each hash and, in the downloader, we can know what is the timestamp of each hash, so when we have a situation like `tx1` and `tx2` with the same timestamp `t` and the downloading deque is `[tx1, tx2]`. If the `tx2` download finishes first, we can safely add it to the DAG before `tx1`, since they have the same timestamp.
 - Nowadays, when two peers (P1 and P2) start a connection, the syncing phase is done by both of them. The stages find synced timestamp and sync from timestamp is done twice but if P1 is synced with P2 at timestamp T, P2 will be synced with P1 at timestamp T also. So we can do this phase only in one peer and then send a message to the other indicating the result.
 
-[1]: https://en.wikipedia.org/wiki/Sliding_window_protocol
+[1]: https://s3.amazonaws.com/hathor-public-files/hathor-white-paper.pdf
+[2]: https://en.wikipedia.org/wiki/Sliding_window_protocol
