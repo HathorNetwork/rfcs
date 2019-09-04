@@ -214,6 +214,15 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 
 - We could use WebSocket instead of LineReceiver for the messaging protocol but the advantage is not real clear, so we've decided to keep the LineReceiver.
 
+# Prior art
+[prior-art]: #prior-art
+
+- Both [Bitcoin][4] and [Ethereum][5] use a message oriented communication protocol with TCP as the transport protocol.
+- Ethereum also identify a peer using its public key, even though they use a different [cryptographic algorithm][6] to generate the node key pair.
+- Peer discovery used to be done in [Bitcoin][7] using IRC bootstrapping but is not supported anymore, so when you are connecting in the network for the first time it uses a DNS discovery to find the first node to connect. Ethereum uses a similar approach based in [Kademila][8] in which some nodes are always assumed to be online.
+- Both [Bitcoin][1] and [Ethereum][9] exchange a first HELLO (version in bitcoin case) message with basic information of the peer to validate the connection before start exchanging the other messages.
+- A list of capabilities of a node is also used by [IMAP][10] and [Ethereum][9].
+
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
@@ -222,10 +231,17 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 - Define a maximum number of connections per IP address, to prevent a possible attack from the same IP.
 - If the peers connections are not estabilished with TLS we should use an Authenticated DH Key Exchange algorithm, so we can sign the messages when exchanging them.
 - Persist the list of known and connected peers, so if we need to reconnect in the future we can use this list without the need of a DNS query.
-- We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection). Even though we won't connect to all peers, we still need to keep a full list of all peers in the network. Some aspects of a solution were discussed in a [RFC comment][4].
+- We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection). Even though we won't connect to all peers, we still need to keep a full list of all peers in the network. Some aspects of a solution were discussed in a [RFC comment][11].
 
 
 [1]: https://bitcoin.org/en/developer-reference#version
 [2]: https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_1.3
 [3]: https://en.wikipedia.org/wiki/Network_address_translation
-[4]: https://gitlab.com/HathorNetwork/rfcs/merge_requests/13#note_204298878
+[4]: https://bitcoin.org/en/developer-reference#p2p-network
+[5]: https://github.com/ethereum/devp2p/blob/master/rlpx.md
+[6]: https://github.com/ethereum/devp2p/blob/master/discv4.md#node-identities
+[7]: https://en.bitcoin.it/wiki/Satoshi_Client_Node_Discovery
+[8]: https://en.wikipedia.org/wiki/Kademlia
+[9]: https://github.com/ethereum/devp2p/blob/master/rlpx.md#hello-0x00
+[10]: https://tools.ietf.org/html/rfc3501#section-7.2.1
+[11]: https://gitlab.com/HathorNetwork/rfcs/merge_requests/13#note_204298878
