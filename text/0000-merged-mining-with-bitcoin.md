@@ -1,4 +1,4 @@
-- Feature Name: merged-mining-with-bitcoin
+- Feature Name: merged_mining_with_bitcoin
 - Start Date: 2018-12-11
 - RFC PR: (leave this empty)
 - Hathor Issue: (leave this empty)
