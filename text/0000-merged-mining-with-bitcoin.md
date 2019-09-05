@@ -79,14 +79,12 @@ The proposed sequence of bytes to serialize a block is:
 
 | Size     |  Description          | Comments |
 |----------|-----------------------|----------|
-| variable | `block_without_nonce` | unchanged |
-| 16       | `nonce`        | `0xff..ff` used to indicate presence of aux\_pow |
-| 211+     | `aux_pow`             | optional |
+| variable | `block_without_nonce` | marked with version value of `2` |
+| 148+     | `aux_pow`             | optional |
 
-Thus a `nonce` value of `0xff..ff` (2^128 -1) will no longer be accepted. Since
-this breaking change will be implemented on a new testnet and there is no
-mainnet yet, the only impact is changing the current Hathor mining clients to
-skip that value.
+The version value 2 is allocated to indicate a merge mined block. Because a
+mining server generates this block, a client has to indicate the intent to merge
+mine in order for the server to generate the appropriate block.
 
 The new `aux_pow` structure consists of:
 
@@ -123,7 +121,7 @@ transaction, that is:
 ```python
 calculated_merkle_root = sha256d_hash(coinbase_tx)
 for merkle_link in merkle_path:
-  calculated_merkle_root = sha256d_hash(merkle_root + merkle_link)
+  calculated_merkle_root = sha256d_hash(calculated_merkle_root + merkle_link)
 assert calculated_merkle_root == auxpow_merkle_root
 ```
 
@@ -153,10 +151,10 @@ data hash. Information from the Hathor network is retrieved through and
 submitted through our custom Stratum protocol, which should be modified
 accordingly to allow such operations.
 
-This is outline of how the coordinator works:
+This is the outline of how the coordinator works:
 
 - Call [GetBlockTemplate][2] RPC on the Bitcoin fullnode
-- Request work to the Hathor stratum server
+- Request merged mining work to the Hathor stratum server
 - Build a coinbase transaction suitable to both, inclusion on the Bitcoin
   network and usable as an AuxPOW:
   - Add `[magic_number][block_without_nonce]` after the [block height][3] on the
@@ -176,10 +174,9 @@ This is outline of how the coordinator works:
 # Drawbacks
 [drawbacks]: #drawbacks
 
-Block size increases by at lease 211 bytes in the case there is an AuxPOW, and
-we have one less valid value for `nonce`.  Although this could be reduced by 4
-bytes (is it even significant?) when using the version field to indicate the
-presence of AuxPOW.
+Block size increases by at least 148 bytes when there is an AuxPOW. Although
+this could be reduced by 4 bytes (is it even significant?) when using the
+version field to indicate the presence of AuxPOW.
 
 It is somewhat a double-edged sword to make it easier for the mining community
 to easily pour hash-power into the Hathor Network, because while we want to
@@ -191,17 +188,9 @@ could also mitigate this risk.
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
-Instead of invalidating a nonce value, we could use the `version` field of the
-block to shrink the size of the AuxPOW block. However discussion on the usage of
-the `version` field for different purposes is underway, and an RFC may be
-proposed soon. Which may prompt a change to this RFC, which should preferrably
-be done before accepting it.
-
-- We are using the same specifications of Namecoin and Elastos, what is good
-  because people are already used to it.
-- Merge mining is good in terms of increasing hash power of the network and also
-  good for marketing, since we can argue that you are not using any other energy
-  to mine our blocks.
+We could use the exact same specifications Namecoin and Elastos use. But the
+AuxPOW block would be larger, and we're already similar enough that
+understanding should not be difficult.
 
 # Prior art
 [prior-art]: #prior-art
@@ -231,7 +220,7 @@ used to balance the incentive of doing merged mining versus direct mining.
 [future-possibilities]: #future-possibilities
 
 Doing merged mining with Litecoin is a possibility that is not far in the
-future, it mostly depends on accepting more than one hash algorithm.
+future, it mostly depends on how to handle more than one hashing algorithm.
 
 We may want to support simultaneous merged mining with more than one blockchain.
 For example, simultaneously merged mining on Bitcoin Core and Bitcoin Cash.
