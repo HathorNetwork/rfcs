@@ -90,13 +90,16 @@ skip that value.
 
 The new `aux_pow` structure consists of:
 
-| Size | Description          | Comments |
-|------|----------------------|----------|
-| 80   | `bitcoin_header`     | validation is slightly different from Bitcoin's |
-| 1+   | `coinbase_tx` length | byte length of the next field |
-| 97+  | `coinbase_tx`        | includes the hash of `block_without_nonce` |
-| 1+   | `merkle_path` count  | the number of links on the `merkle_path` |
-| 32+  | `merkle_path`        | array of links, each one is 32 bytes long |
+| Size | Description             | Comments |
+|------|-------------------------|----------|
+| 36   | `bitcoin_header_head`   | first 36 bytes of the header |
+| 1+   | `coinbase_tx_head` size | byte length of the next field |
+| 47+  | `coinbase_tx_head`      | coinbase bytes before hash of `block_data` |
+| 1+   | `coinbase_tx_tail` size | byte length of the next field |
+| 18+  | `coinbase_tx_tail`      | coinbase bytes after hash of `block_data` |
+| 1+   | `merkle_path` count     | the number of links on the `merkle_path` |
+| 32+  | `merkle_path`           | array of links, each one is 32 bytes long |
+| 12   | `bitcoin_header_tail`   | last 12 bytes of the header |
 
 ## The hashing algorithm
 [the-hashing-algorithm]: #the-hashing-algorithm
