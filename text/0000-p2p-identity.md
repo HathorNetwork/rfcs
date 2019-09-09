@@ -80,6 +80,20 @@ The first idea was that each peer would create a self signed certificate and exc
 
 Because of that, we've decided to create a central authority certificate and all generated certificates for each peer are not self signed anymore, they are signed by this central authority and have the public key of the peer. This is important to guarantee that the certificate exchange happens when starting the connection.
 
+## Man-in-the-middle attack
+
+During the TLS connection, both peers exchange certificates and a Diffie-Hellman key, so we can ensure that all future messages exchanged by them are not exposed to a MITM attack.
+
+If we don't execute the certificate verification, we would be exposed to the following attack, e.g. a MITM (Chuck) can open connection with both sides (Alice and Bob) and manipulate any message.
+
+1. Chuck opens a connection to both Alice and Bob, independently.
+2. Chuck identifies as Alice to Bob.
+3. Chuck takes the encrypted message from Bob and send to Alice.
+4. Chuck takes Alice's reply and forward to Bob.
+5. Now, Bob thinks that Chuck is Alice.
+
+Ensuring both certificate and cryptigraphic key exchange is enough to be protected from this kind of attack.
+
 ## Hello State
 
 This state is responsible for the Network Configuration. In this state, only two commands are allowed: HELLO and ERROR.
