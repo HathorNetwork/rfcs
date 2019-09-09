@@ -177,7 +177,7 @@ The DATA message can be received in two different moments:
 - During the sync algorithm and the peer has requested this data and is expecting it;
 - During the real time propagation when a new transaction arrives into the network and the peer is not expecting it.
 
-Its payload is a string with the payload type and the transaction struct in hexadecimal in the following format: `payload_type:transaction_struct`, where the`payload_type` is either 'tx' or 'block' to indicate the type of the struct.
+Its payload is a string with the transaction struct encoded in base64.
 
 ### NOT-FOUND Command
 
@@ -205,7 +205,7 @@ for h in hashes:
 merkle_tree = merkle.digest()
 ```
 
-This is not exactly a merkle tree, since we are just calculating the `sha256` of each transaction's hash in sequence but it's good enough to validate the difference between two sets of transactions. We should change this in the future to use a proper merkle tree.
+This is definitely not a merkle tree, since we are just calculating the `sha256` of each transaction's hash in sequence but it's good enough to validate the difference between two sets of transactions. We should change this in the future to use a proper merkle tree.
 
 ---
 
@@ -221,27 +221,27 @@ Given two peers (P1 and P2) that are synced at timestamp 1564658493 and P1 lates
 
 Start exponential search
 
-| Searched timestamp | Hashes match? | Decrease | Last timestamp |
-| ------------------ | ------------- | -------- | -------------- |
-| 1564658498         | No            | 1        | None           |
+| Searched timestamp | Merkle trees match? | Decrease | Last timestamp |
+| ------------------ | ------------------- | -------- | -------------- |
+| 1564658498         | No                  | 1        | None           |
 
 ##### Step 2
 
-| Searched timestamp | Hashes match? | Decrease | Last timestamp |
-| ------------------ | ------------- | -------- | -------------- |
-| 1564658497         | No            | 2        | 1564658498     |
+| Searched timestamp | Merkle trees match? | Decrease | Last timestamp |
+| ------------------ | ------------------- | -------- | -------------- |
+| 1564658497         | No                  | 2        | 1564658498     |
 
 ##### Step 3
 
-| Searched timestamp | Hashes match? | Decrease | Last timestamp |
-| ------------------ | ------------- | -------- | -------------- |
-| 1564658495         | No            | 4        | 1564658497     |
+| Searched timestamp | Merkle trees match? | Decrease | Last timestamp |
+| ------------------ | ------------------- | -------- | -------------- |
+| 1564658495         | No                  | 4        | 1564658497     |
 
 ##### Step 4
 
-| Searched timestamp | Hashes match? | Decrease | Last timestamp |
-| ------------------ | ------------- | -------- | -------------- |
-| 1564658491         | Yes           | 8        | 1564658495     |
+| Searched timestamp | Merkle trees match? | Decrease | Last timestamp |
+| ------------------ | ------------------- | -------- | -------------- |
+| 1564658491         | Yes                 | 8        | 1564658495     |
 
 End of exponential search, they are synced at timestamp 1564658491 but are not synced at timestamp 1564658495. So we need to find in the interval `[1564658491, 1564658495)` what's the highest timestamp in which they are synced.
 
@@ -249,9 +249,9 @@ End of exponential search, they are synced at timestamp 1564658491 but are not s
 
 Start of binary search
 
-| Low timestamp | High timestamp | Searched timestamp | Hashes match? |
-| ------------- | -------------- | ------------------ | ------------- |
-| 1564658491    | 1564658494     | 1564658493         | Yes           |
+| Low timestamp | High timestamp | Searched timestamp | Merkle trees match? |
+| ------------- | -------------- | ------------------ | ------------------- |
+| 1564658491    | 1564658494     | 1564658493         | Yes                 |
 
 So 1564658493 is the highest timestamp in which both peers are synced and the algorithm is stopped here and both peers start syncing from this `synced_timestamp`.
 
@@ -263,11 +263,15 @@ This request is made to a download coordinator, who will send a GET-DATA command
 
 #### Download coordinator
 
-During the sync stage, when we are downloading unsynced transactions, we might request the same data for more than one connected peer, what ends up flooding the network with repeated and unecessary messages. To solve this problem we've created a download coordinator, which is responsible to receive the requests and avoid sending a duplicate message.
+During the sync stage, when we are downloading unsynced transactions, we might request the same data for more than one connected peer, what ends up flooding the network with repeated and unecessary messages. To solve this problem we've created a download coordinator, which is responsible to receive the requests and avoid sending duplicate messages.
 
-When the coordinator receives a new request, it checkes wether this transaction was already requested and, in case it was, it saves the connection that requested it to return the data after the download is concluded.
+When the coordinator receives a new request, it has three possible scenarios:
 
-A downloaded transaction must be propagated to the network only after all its parents, however a request for a parent data might arrive later and we need to wait for it. To handle this situation, the downloader has two deques to control the order and a sliding window to control the download flow.
+1. If the peer already has this transaction, it just returns it;
+2. If it's the first request to download this transaction, it saves the connection requesting it and start the download;
+3. If it was already requested from another connection but it's still waiting for the download to finish. Then it saves the connection doing the request and, when the transaction is successfully downloaded, it is returned to all pending connections that have requested it.
+
+A downloaded transaction must be propagated to the network only after all its parents have already been. However, the requests might be replied out-of-order because they may be sent to different peers. To handle this situation, the downloader has two deques to control the order and a sliding window to control the download flow. It also speeds up the download because multiple transactions may be requested simultaneously.
 
 The first deque holds the transactions that still need to be downloaded (`waiting_deque`) and the second one the transactions that are being downloaded (`downloading_deque`). The sliding window size is the maximum simultaneous downloads allowed. This proccess is similar to the one used for the [TCP Protocol][2]
 
@@ -346,7 +350,9 @@ The propagation is done sending a DATA message to the destination peer with the 
 
 ### Propagation Priority
 
-Each peer connection has two different queues, one with higher priority over the other. The one with priority is used to add blocks and their parents (in case they are not downloaded yet), while transactions are added to the lower priority one. When we are propagating a transaction we first check if there is any element in the priority queue and send all of them and, only after this queue is empty, we start sending the elements from the other.
+Each peer connection has two different queues, one with higher priority over the other. The one with priority is used to add blocks and their parents (in case they are not downloaded yet), while transactions are added to the lower priority one. The idea to prioritize blocks is to keep the miners synced, it reduces the number of orphan blocks.
+
+When we are propagating a transaction we first check if there is any element in the priority queue and send all of them and, only after this queue is empty, we start sending the elements from the other.
 
 #### Example
 
@@ -385,6 +391,7 @@ Given peer P1 that already has block B1 and transactions Tx1, Tx2 and Tx3. Some 
 - We should cache the interval tree, which is responsible for storing the tips in a given timestamp. The biggest problem of that is to invalidate this cache when an old transaction arrives.
 - NEXT command could return also the timestamp of each hash and, in the downloader, we can know what is the timestamp of each hash, so when we have a situation like `tx1` and `tx2` with the same timestamp `t` and the downloading deque is `[tx1, tx2]`. If the `tx2` download finishes first, we can safely add it to the DAG before `tx1`, since they have the same timestamp.
 - Nowadays, when two peers (P1 and P2) start a connection, the syncing phase is done by both of them. The stages find synced timestamp and sync from timestamp is done twice but if P1 is synced with P2 at timestamp T, P2 will be synced with P1 at timestamp T also. So we can do this phase only in one peer and then send a message to the other indicating the result.
+- GET_DATA command could support requesting more than one transaction in the same message. It would be useful to improve performance because it usually fits more than one transaction inside a single TCP packet.
 
 [1]: https://s3.amazonaws.com/hathor-public-files/hathor-white-paper.pdf
 [2]: https://en.wikipedia.org/wiki/Sliding_window_protocol
