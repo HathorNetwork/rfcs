@@ -97,7 +97,15 @@ The HELLO command is used to exchange the configuration of the peer. Its payload
     "remote_address": "192.168.0.1:51095",
     "genesis_short_hash": "0788746",
     "timestamp": 1564658478,
-    "settings_hash": "f9d86028c6e0d64e225186f96acb69338b2c59764df79162107f5c4bb34d1310",
+    "capabilities": [],
+    "settings_dict": {
+        "P2PKH_VERSION_BYTE": "28",
+        "MULTISIG_VERSION_BYTE": "64",
+        "MIN_BLOCK_WEIGHT": 21,
+        "MIN_TX_WEIGHT": 14,
+        "BLOCK_DIFFICULTY_MAX_DW": 0.25,
+        "BLOCK_DATA_MAX_SIZE": 100
+    }
 }
 ```
 
@@ -108,20 +116,17 @@ The description of each field is:
 - `remote_address`: Remote IP:PORT seen by this socket.
 - `genesis_short_hash`: First 7 chars of the hash of the genesis to prevent syncing incompatible DAGs.
 - `timestamp`: Current time according to node's clock. This field can help other nodes to determine that their clock is wrong and is important because nodes will reject blocks that are more than one hour in the future.
-- `settings_hash`: Hash of a dict containing some of the settings of the full node. The fields that are considered are: `P2PKH_VERSION_BYTE`, `MULTISIG_VERSION_BYTE`, `MIN_BLOCK_WEIGHT`, `MIN_TX_WEIGHT`, `BLOCK_DIFFICULTY_MAX_DW`, and `BLOCK_DATA_MAX_SIZE`. The hash is calculated in the following method (d is the array with the settings values):
-
-```
-    settings_hash = hashlib.sha256(json.dumps(d).encode('utf-8')).digest().hex()
-```
+- `capabilities`: An array with each capability that the full node supports. For now it's empty but will be used in the future.
+- `settings_dict`: A dict containing some of the settings of the full node. The fields that are sent are: `P2PKH_VERSION_BYTE`, `MULTISIG_VERSION_BYTE`, `MIN_BLOCK_WEIGHT`, `MIN_TX_WEIGHT`, `BLOCK_DIFFICULTY_MAX_DW`, and `BLOCK_DATA_MAX_SIZE`. This is an optional field to be sent in the HELLO command but, if presented, should match with the settings of the peer receiving it.
 
 Some validations are executed when the peer receives the HELLO command:
 
-1. All fields must be presented in the payload;
-2. `app`, `network`, `genesis_short_hash`, and `settings_hash` values must be the same;
+1. All fields must be presented in the payload, except the `settings_dict`;
+2. `app`, `network`, `genesis_short_hash`, and `settings_dict` (if presented) values must be the same;
 
 If any validation fails, an ERROR command will be sent and the connection will be closed.
 
-In the case when the `settings_hash` is different, the ERROR command will have a payload, which is the peer's settings.
+In the case when the `settings_dict` is different, the ERROR command will have a payload, which is the peer's settings.
 
 If all verifications are valid, the peer state moves to PEER-ID.
 
