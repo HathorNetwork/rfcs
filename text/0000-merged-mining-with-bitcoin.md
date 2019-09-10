@@ -99,8 +99,54 @@ The new `aux_pow` structure consists of:
 | 32+  | `merkle_path`           | array of links, each one is 32 bytes long |
 | 12   | `bitcoin_header_tail`   | last 12 bytes of the header |
 
-## The hashing algorithm
-[the-hashing-algorithm]: #the-hashing-algorithm
+## Validation of a block with AuxPOW
+[validation-of-a-block-with-auxpow]: #validation-of-a-block-with-auxpow
+
+We have to rebuild the Bitcoin block header.
+
+From the `block_without_nonce`, we need the 64 byte sequence used in the
+Hathor hashing algorithm:
+
+```python
+block_header_without_nonce = sha256_hash(block_funds) + sha256_hash(block_graph)
+aux_block_hash = sha256d_hash(block_header_without_nonce)
+```
+
+Rebuild the coinbase transaction:
+
+```
+coinbase_tx = coinbase_tx_head + aux_block_hash + coinbase_tx_tail
+```
+
+The coinbase transaction must contain the sequence
+`[magic_number][aux_block_hash]` in its binary sequence. No specific
+location is mandated, but in practice it will usually be on the scriptSig of the
+single input. The magic number is defined as the follwing sequence of 4 bytes:
+`48 61 74 68` (which is 'Hath' in ASCII). That means that the sequence
+`48617468` must be at the end of `coinbase_tx_head` and not appear before.
+
+Now, calculate the merkle root:
+
+```python
+merkle_root = sha256d_hash(coinbase_tx)
+for merkle_link in merkle_path:
+  merkle_root = sha256d_hash(merkle_root + merkle_link)
+```
+
+There is no need to specify the sides of the merkle links because the coinbase
+is always the first transaction.
+
+And rebuild the Bitcoin block header:
+
+```
+bitcoin_header = bitcoin_header_head + merkle_root + bitcoin_header_tail
+```
+
+The bitcoin header hash is used for the difficulty validation of the Hathor
+block. All of the validations for `block_without_nonce` remain.
+
+## The hash of a block
+[the-hash-of-a-block]: #the-hash-of-a-block
 
 In order to preserve the property the hash of a block has of representing the
 difficulty, we have to change what is hashed. Note that this is different from
@@ -108,35 +154,9 @@ what Namecoin does, which is changing how the difficutly is calculated instead
 of how the hash is calculated. Also note that the hash function is still the
 same, only the function input changes depending if the block has an AuxPOW.
 
-- If there is no AuxPOW there is no change: hash `[block_without_nonce][nonce]`.
+- If there is no AuxPOW there is no change: hash
+  `[block_header_without_nonce][nonce]`.
 - If there is AuxPOW, then hash `[bitcoin_header]`.
-
-## Validation of a block with AuxPOW
-[validation-of-a-block-with-auxpow]: #validation-of-a-block-with-auxpow
-
-The only part of `bitcoin_header` that matters is the `merkle_root`. It must
-match the merkle root obtained from applying the merkle path to the coinbase
-transaction, that is:
-
-```python
-calculated_merkle_root = sha256d_hash(coinbase_tx)
-for merkle_link in merkle_path:
-  calculated_merkle_root = sha256d_hash(calculated_merkle_root + merkle_link)
-assert calculated_merkle_root == auxpow_merkle_root
-```
-
-There is no need to specify the sides of the merkle links because the coinbase
-is always the first transaction.
-
-The coinbase transaction must contain the sequence
-`[magic_number][block_without_nonce]` in its binary sequence. No specific
-location is mandated, but in practice it will usually be on the scriptSig of the
-single input. The magic number is defined as the follwing sequence of 4 bytes:
-`48 61 74 68` (which is 'Hath' in ASCII).
-
-All of the validations for `block_without_nonce` remain. Notably the difficulty
-validation will use the new hash which may not have reached the target
-difficulty for the Bitcoin network but must do so for the Hathor network.
 
 ## Merged mining coordinator
 [merged-mining-coordinator]: #merged-mining-coordinator
@@ -157,7 +177,7 @@ This is the outline of how the coordinator works:
 - Request merged mining work to the Hathor stratum server
 - Build a coinbase transaction suitable to both, inclusion on the Bitcoin
   network and usable as an AuxPOW:
-  - Add `[magic_number][block_without_nonce]` after the [block height][3] on the
+  - Add `[magic_number][aux_block_hash]` after the [block height][3] on the
     transaction input signature script
 - When a stratum client connects, send `mining.set_difficulty` such that work
   can suit the easier network to mine in (most certainly Hathor).
