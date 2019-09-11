@@ -237,8 +237,8 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 [prior-art]: #prior-art
 
 - Both [Bitcoin][4] and [Ethereum][5] use a message oriented communication protocol with TCP as the transport protocol.
-- Ethereum also identify a peer using its public key, even though they use a different [cryptographic algorithm][6] to generate the node key pair.
-- Peer discovery used to be done in [Bitcoin][7] using IRC bootstrapping but is not supported anymore, so when you are connecting in the network for the first time it uses a DNS discovery to find the first node to connect. Ethereum uses a similar approach based in [Kademila][8] in which some nodes are always assumed to be online.
+- Ethereum also identifies a peer using its public key, even though they use a different [cryptographic algorithm][6] to generate the node key pair.
+- Peer discovery used to be done in [Bitcoin][7] using IRC bootstrapping but is not supported anymore, so when you are connecting to the network for the first time it uses a DNS discovery to find the first node to connect. Ethereum uses a similar approach based in [Kademila][8] in which some nodes are assumed to always being online.
 - Both [Bitcoin][1] and [Ethereum][9] exchange a first HELLO (version in bitcoin case) message with basic information of the peer to validate the connection before start exchanging the other messages.
 - A list of capabilities of a node is also used by [IMAP][10] and [Ethereum][9].
 
