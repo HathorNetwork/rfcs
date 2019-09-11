@@ -267,9 +267,11 @@ During the sync stage, when we are downloading unsynced transactions, we might r
 
 When the coordinator receives a new request, it has three possible scenarios:
 
-1. If the peer already has this transaction, it just returns it;
-2. If it's the first request to download this transaction, it saves the connection requesting it and start the download;
-3. If it was already requested from another connection but it's still waiting for the download to finish. Then it saves the connection doing the request and, when the transaction is successfully downloaded, it is returned to all pending connections that have requested it.
+1. If the peer already has this transaction, it just returns it.
+2. If it's the first request to download this transaction, it saves the connection requesting it and enqueue the transaction to be downloaded.
+3. If it was already requested but hasn't finished it yet, it just saves the connection requesting it.
+
+In cases 2 and 3 a promise is returned to the requested connection, so it can know when the transaction has been downloaded (or if the download has failed).
 
 A downloaded transaction must be propagated to the network only after all its parents have already been. However, the requests might be replied out-of-order because they may be sent to different peers. To handle this situation, the downloader has two deques to control the order and a sliding window to control the download flow. It also speeds up the download because multiple transactions may be requested simultaneously.
 
