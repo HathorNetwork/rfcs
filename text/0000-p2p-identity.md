@@ -35,6 +35,8 @@ The bootstraping can be done in many different ways. Hathor's full-node uses a D
 
 The list of hosts to be DNS queried is hard-coded in the full-node's source code and can be changed passing a different parameter when running the full-node.
 
+Another bootstraping possibility is to pass the URL of the peer you want to connect when starting the node. The connection process is the same of the other case.
+
 ## Step 1: Network configuration
 
 This step checks whether the peers are compatible to connect. For instance, a full-node running a testnet configuration cannot connect to a full-node running a mainnet configuration because the DAGs are incompatible, i.e., the genesis is different.
@@ -80,9 +82,11 @@ The first idea was that each peer would create a self signed certificate and exc
 
 Because of that, we've decided to create a central authority certificate and all generated certificates for each peer are not self signed anymore, they are signed by this central authority and have the public key of the peer. This is important to guarantee that the certificate exchange happens when starting the connection.
 
+The central authority certificate can be accessed [here][4] and its private key can be accessed [here][5].
+
 ## Man-in-the-middle attack
 
-During the TLS connection, both peers exchange certificates and a Diffie-Hellman key, so we can ensure that all future messages exchanged by them are not exposed to a MITM attack.
+During the TLS connection, both peers exchange certificates, which are used in an Authenticated Diffie-Hellman Key Exchange, so we can ensure that all future messages exchanged by them are not exposed to a MITM.
 
 If we don't execute the certificate verification, we would be exposed to the following attack, e.g. a MITM (Chuck) can open connection with both sides (Alice and Bob) and manipulate any message.
 
@@ -236,11 +240,11 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 # Prior art
 [prior-art]: #prior-art
 
-- Both [Bitcoin][4] and [Ethereum][5] use a message oriented communication protocol with TCP as the transport protocol.
-- Ethereum also identifies a peer using its public key, even though they use a different [cryptographic algorithm][6] to generate the node key pair.
-- Peer discovery used to be done in [Bitcoin][7] using IRC bootstrapping but is not supported anymore, so when you are connecting to the network for the first time it uses a DNS discovery to find the first node to connect. Ethereum uses a similar approach based in [Kademila][8] in which some nodes are assumed to always being online.
-- Both [Bitcoin][1] and [Ethereum][9] exchange a first HELLO (version in bitcoin case) message with basic information of the peer to validate the connection before start exchanging the other messages.
-- A list of capabilities of a node is also used by [IMAP][10] and [Ethereum][9].
+- Both [Bitcoin][6] and [Ethereum][7] use a message oriented communication protocol with TCP as the transport protocol.
+- Ethereum also identifies a peer using its public key, even though they use a different [cryptographic algorithm][8] to generate the node key pair.
+- Peer discovery used to be done in [Bitcoin][9] using IRC bootstrapping but is not supported anymore, so when you are connecting to the network for the first time it uses a DNS discovery to find the first node to connect. Ethereum uses a similar approach based in [Kademila][10] in which some nodes are assumed to always being online.
+- Both [Bitcoin][1] and [Ethereum][11] exchange a first HELLO (version in bitcoin case) message with basic information of the peer to validate the connection before start exchanging the other messages.
+- A list of capabilities of a node is also used by [IMAP][12] and [Ethereum][11].
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
@@ -250,17 +254,21 @@ Another drawback is that all connections use TLS 1.3, which creates a secure cha
 - Define a maximum number of connections per IP address, to prevent a possible attack from the same IP.
 - If the peers connections are not estabilished with TLS we should use an Authenticated DH Key Exchange algorithm, so we can sign the messages when exchanging them.
 - Persist the list of known and connected peers, so if we need to reconnect in the future we can use this list without the need of a DNS query.
-- We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection). Even though we won't connect to all peers, we still need to keep a full list of all peers in the network. Some aspects of a solution were discussed in a [RFC comment][11].
+- We should not connect to all available peers. We need an algorithm to select a subset of peers to connect preventing the creation if islands (a set of peers that are isolated from the network, only receiving the data from one connection). Even though we won't connect to all peers, we still need to keep a full list of all peers in the network. Some aspects of a solution were discussed in a [RFC comment][13].
+- The PEER-ID command payload should be replaced by a X509 certificate signed. That way the entrypoins, peer_id and pubkey would be put inside the certificate which would be self signed. With this change we would be preventing someone to send tampered peer information in this command. We would just need to check that the peer_id inside the certificate matches the hash of the pubkey used when creating the certificate. We had a brief discussion about it in a [RFC comment][14].
 
 
 [1]: https://bitcoin.org/en/developer-reference#version
 [2]: https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_1.3
 [3]: https://en.wikipedia.org/wiki/Network_address_translation
-[4]: https://bitcoin.org/en/developer-reference#p2p-network
-[5]: https://github.com/ethereum/devp2p/blob/master/rlpx.md
-[6]: https://github.com/ethereum/devp2p/blob/master/discv4.md#node-identities
-[7]: https://en.bitcoin.it/wiki/Satoshi_Client_Node_Discovery
-[8]: https://en.wikipedia.org/wiki/Kademlia
-[9]: https://github.com/ethereum/devp2p/blob/master/rlpx.md#hello-0x00
-[10]: https://tools.ietf.org/html/rfc3501#section-7.2.1
-[11]: https://gitlab.com/HathorNetwork/rfcs/merge_requests/13#note_204298878
+[4]: https://gitlab.com/HathorNetwork/hathor-python/blob/dev/hathor/p2p/ca.crt
+[5]: https://gitlab.com/HathorNetwork/hathor-python/blob/dev/hathor/p2p/ca.key
+[6]: https://bitcoin.org/en/developer-reference#p2p-network
+[7]: https://github.com/ethereum/devp2p/blob/master/rlpx.md
+[8]: https://github.com/ethereum/devp2p/blob/master/discv4.md#node-identities
+[9]: https://en.bitcoin.it/wiki/Satoshi_Client_Node_Discovery
+[10]: https://en.wikipedia.org/wiki/Kademlia
+[11]: https://github.com/ethereum/devp2p/blob/master/rlpx.md#hello-0x00
+[12]: https://tools.ietf.org/html/rfc3501#section-7.2.1
+[13]: https://gitlab.com/HathorNetwork/rfcs/merge_requests/13#note_204298878
+[14]: https://gitlab.com/HathorNetwork/rfcs/merge_requests/13#note_206668807
