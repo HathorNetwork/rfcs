@@ -60,10 +60,12 @@ An AuxPOW consists of:
 - the merkle path of that coinbase to rebuild the merkle root
 - the bitcoin block header that includes that merkle root
 
-It is necessary to have a daemon that requests mining information to both
-networks and builds a valid Bitcoin mining job that clients can work on. This
-daemon can be used by solo-miners or mining pool operators. Unfortunately, due
-to how mining pools work, it cannot be used by pool members.
+The intended mechanism is havinvg a daemon that requests mining information to
+both networks and builds a valid Bitcoin mining job that clients can work on.
+
+This daemon can be used by solo-miners or mining pool operators. Unfortunately,
+because of limitations of the stratum protocol (and how mining pools work in
+general) it cannot be used by pool members.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
