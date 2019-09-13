@@ -1,6 +1,6 @@
 - Feature Name: multi-sig
 - Start Date: 2018-11-28
-- RFC PR: [MR !13](https://gitlab.com/HathorNetwork/rfcs/merge_requests/5)
+- RFC PR: [MR !5](https://gitlab.com/HathorNetwork/rfcs/merge_requests/5)
 - Hathor Issue: (leave this empty)
 - Author: Pedro Ferreira <pedro@hathor.network>
 
