@@ -133,9 +133,9 @@ single input. The magic number is defined as the follwing sequence of 4 bytes:
 `48617468` must be at the end of `coinbase_tx_head` and not appear before.
 
 Note: the coinbase transaction will also usually contain an extra nonce used to
-add increase the hash search space by miners. This extra nonce also uses a
-section of the coinbase that does not affect the Bitcoin block (beside the size
-limit), the location of the extra nonce is independent from the sequence we need
+increase the hash search space by miners. This extra nonce also uses a section
+of the coinbase that does not affect the Bitcoin block (beside the size limit),
+the location of the extra nonce is independent from the sequence we need
 injected, they can be on any order or even on different parts of the coinbase
 (input scriptSig vs an empty output).
 
