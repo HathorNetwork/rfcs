@@ -54,7 +54,7 @@ space in the header to add the hash that would tie it to a Hathor block. But
 there is space in the coinbase transaction, which is also typically used as
 extra nonce on modern mining setups. The Bitcoin block header uses a [merkle
 tree][2] to hash the list of transactions included in a block. That means that
-we can add a hash the references a Hathor block in a Bitcoin transaction, and
+we can add a hash that references a Hathor block in a Bitcoin transaction, and
 the bundle of transaction with Hathor block hash, merkle path, bitcoin header is
 enough to be useful as proof of work for the Hathor block too. That bundle is
 the AuxPOW. And the required changes to Hathor is accepting that AuxPOW.
@@ -75,19 +75,20 @@ general) it cannot be used by pool members.
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-Currently the sequence of bytes used to serialize a block, consists of:
+Currently the sequence of bytes used to serialize a block consists of:
 
 | Size     |  Description          | Comments |
 |----------|-----------------------|----------|
 | variable | `block_without_nonce` | header, graph and script data |
 | 16       | `nonce`               | any unsigned 32-bit is a valid value |
 
-The proposed sequence of bytes to serialize a block is:
+For merged mining, we have a new block type with `version=3` and the following
+structure:
 
 | Size     |  Description          | Comments |
 |----------|-----------------------|----------|
 | variable | `block_without_nonce` | marked with version value of `3` |
-| 148+     | `aux_pow`             | optional |
+| 148+     | `aux_pow`             | used to reconstruct bitcoin header |
 
 The version value 3 is allocated to indicate a merge mined block. Because a
 mining server generates this block, a client has to indicate the intent to merge
