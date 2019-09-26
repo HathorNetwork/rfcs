@@ -180,9 +180,9 @@ We should provide a reference implementation for the coordinator (or proxy) that
 Bitcoin mining clients can use without modification.
 
 Our implementation requests information to a Bitcoin fullnode using the Bitcoin
-RPC protocol, because the Stratum protocol does not allow a client to
-arbitrarily modify the coinbase transaction, which is needed to insert our block
-data hash. Information from the Hathor network is retrieved through and
+RPC protocol, because the Stratum protocol does not allow<sup>1</sup> a client
+to arbitrarily modify the coinbase transaction, which is needed to insert our
+block data hash. Information from the Hathor network is retrieved through and
 submitted through our custom Stratum protocol, which should be modified
 accordingly to allow such operations.
 
@@ -200,6 +200,24 @@ This is the outline of how the coordinator works:
 - When work is submitted check which networks difficulties it is valid for and
   resubmit it to each of them (through [SubmitBlock][5] on Bitcoin and
   `mining.submit` on Hathor)
+
+<sup>1</sup>: The stratum protocol uses an extra nonce to increase the search
+space for a fitting hash, because modern hardware go over the nonce field space
+too fast.  This extra nonce is simply a sequence of bytes added to the coinbase
+transaction in a place that does not affect the outcome of any other
+transaction. It is split in two parts, `extra_nonce_1` and `extra_nonce_2`. When
+a client subscribes to a server, the server sends the `extra_nonce_1` and the
+size of the `extra_nonce_2`, when the client finishes a job, it will send to the
+server the `nonce`, `timestamp` (which is also used for extra search space) and
+`extra_nonce_2` for a job. Theoretically the `extra_nonce_2` could be used to
+insert the data we need to merge mine a block, however there are two major
+issues with this: first the size of `extra_nonce_2` is usually 16 bytes and we
+would need at the very least 32 bytes (36 as currently defined), also because
+more bytes on the coinbase are affected by the size of the extra nonce, it is
+not possible for a client to send an `extra_nonce_2` of different size, the
+server will always reject it, and second, the `extra_nonce_2` is meant to
+increase the search space, if we were to use it to store data, it would defeat
+its purpose and mining would become very limited again.
 
 ## Example
 [example]: #example
