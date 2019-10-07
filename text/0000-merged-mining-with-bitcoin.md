@@ -191,7 +191,8 @@ accordingly to allow such operations.
 This is the outline of how the coordinator works:
 
 - Call [GetBlockTemplate][3] RPC on the Bitcoin fullnode
-- Request merged mining work to the Hathor stratum server
+- Request merged mining work to the Hathor stratum server (minor change to our
+  current stratum is needed)
 - Build a coinbase transaction suitable to both, inclusion on the Bitcoin
   network and usable as an AuxPOW:
   - Add `[magic_number][aux_block_hash]` after the [block height][4] on the
