@@ -116,9 +116,11 @@ From the `block_without_nonce`, we need the 64 byte sequence used in the
 Hathor hashing algorithm:
 
 ```python
-block_header_without_nonce = sha256_hash(block_funds) + sha256_hash(block_graph)
-aux_block_hash = sha256d_hash(block_header_without_nonce)
+block_header_without_nonce = sha256(block_funds) + sha256(block_graph)
+aux_block_hash = sha256d(block_header_without_nonce)
 ```
+
+Note: `sha256` above is not a typo.
 
 Rebuild the coinbase transaction:
 
@@ -143,9 +145,9 @@ injected, they can be on any order or even on different parts of the coinbase
 Now, calculate the merkle root:
 
 ```python
-merkle_root = sha256d_hash(coinbase_tx)
+merkle_root = sha256d(coinbase_tx)
 for merkle_link in merkle_path:
-  merkle_root = sha256d_hash(merkle_root + merkle_link)
+  merkle_root = sha256d(merkle_root + merkle_link)
 ```
 
 There is no need to specify the sides of the merkle links because the coinbase
