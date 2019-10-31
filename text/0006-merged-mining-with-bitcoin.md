@@ -1,7 +1,7 @@
 - Feature Name: merged_mining_with_bitcoin
 - Start Date: 2018-12-11
-- RFC PR: (leave this empty)
-- Hathor Issue: (leave this empty)
+- RFC PR: [HathorNetwork/rfcs#6](https://github.com/HathorNetwork/rfcs/issues/6)
+- Hathor Issue: [HathorNetwork/hathor-core#3](https://github.com/HathorNetwork/hathor-core/issues/3)
 - Author: Pedro Ferreira <pedro@hathor.network>, Jan Segre <jan@hathor.network>
 
 # Summary
