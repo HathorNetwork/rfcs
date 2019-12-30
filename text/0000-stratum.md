@@ -333,7 +333,6 @@ As shown in the references sections there are several coins that have Stratum im
 [unresolved-questions]: #unresolved-questions
 
 - Should we change the mining algorithm (e.g. hash the transaction without nonce and then with nonce), to reduce network traffic, allow miners to update timestamp, etc.?
-- Who killed PC Farias?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
