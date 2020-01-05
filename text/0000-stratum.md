@@ -59,7 +59,7 @@ And also send a new `job` request to the miner:
 {
    "method":"job",
    "result":{  
-      "weigth":27.235,
+      "weight":27.235,
       "job_id":1949732007,
       "data":"e67be79550661604d9b9c646911c80d74f6c691613224c207fa7088c20698acd",
       "nonce_size":16
@@ -67,7 +67,7 @@ And also send a new `job` request to the miner:
 }
 ```
 
-Miner should look for a solution to the desined job. The client should look for a `nonce_size` byte `nonce` such that `sha256d` function of the concatenation of `data` and `nonce` meets the target difficulty. Target difficulty `diff` can be calculated from `weigth` using the formula `diff = 2^(256 - weight) - 1`.
+Miner should look for a solution to the desined job. The client should look for a `nonce_size` byte `nonce` such that `sha256d` function of the concatenation of `data` and `nonce` meets the target difficulty. Target difficulty `diff` can be calculated from `weight` using the formula `diff = 2^(256 - weight) - 1`.
 
 To notify the client of new jobs, the server sends new `job` messages:
 
@@ -76,7 +76,7 @@ To notify the client of new jobs, the server sends new `job` messages:
    "jsonrpc":"2.0",
    "method":"job",
    "params":{  
-      "weigth":21,
+      "weight":21,
       "job_id":784707720,
       "hash":"fba8f8b8821a83361c9c7567441b45c10bb4ce421997ff9cfc8d52fbceff0292",
       "nonce_size":4
@@ -268,7 +268,7 @@ Server notifies the miner of a new job available. `params` should contain:
 | nonce_size    | int        | Size of the available `nonce`                        |
 | hash          | string     | Hash to be used as base for the job                  |
 | job_id        | int        | Identifier of the job                                |
-| weigth        | double     | Weigth of the job, used to calculate the difficulty  |
+| weight        | double     | weight of the job, used to calculate the difficulty  |
 
 Since it is a notification the miner should not answer it.
 
@@ -279,7 +279,7 @@ Request:
    "jsonrpc":"2.0",
    "method":"job",
    "params":{  
-      "weigth":21,
+      "weight":21,
       "job_id":784707720,
       "hash":"fba8f8b8821a83361c9c7567441b45c10bb4ce421997ff9cfc8d52fbceff0292",
       "nonce_size":4
