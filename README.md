@@ -45,15 +45,15 @@ in.
 | 4   | [Creation of Tokens](https://gitlab.com/HathorNetwork/rfcs/blob/master/text/0004-tokens.md) | Accepted  | testnet-bravo |
 | 11   | [Token Deposit](https://gitlab.com/HathorNetwork/rfcs/blob/master/text/0011-token-deposit.md) | Accepted  | testnet-bravo |
 | MR-5   | [Multi-signature Transaction Outputs](https://gitlab.com/HathorNetwork/rfcs/blob/multi-sig/0000-multi-sig.md) | Accepted | testnet-bravo |
+| 15  | [The Anatomy of a Transaction](https://gitlab.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md) | Accepted | - |
 
 ### Provisional RFCs (provisionally accepted; interface may still change)
 
 | Number | Title               | Status    | Network         |
 |--------|---------------------|-----------|-----------------|
-| MR-15  | [The Anatomy of a Transaction](https://gitlab.com/HathorNetwork/rfcs/blob/tx-anatomy/text/0015-anatomy-of-tx.md) | Draft | |
 | MR-13  | [Peer-to-Peer Protocol: Handshaking & Control Messages](https://gitlab.com/HathorNetwork/rfcs/blob/p2p-identity/text/0000-p2p-identity.md) | Draft | |
 | MR-17  | [Peer-to-peer Protocol: Synchronization](https://gitlab.com/HathorNetwork/rfcs/blob/p2p-sync/text/0000-p2p-sync.md) | Draft | |
-| MR-6   | [Merged Mining with Bitcoin](https://gitlab.com/HathorNetwork/rfcs/blob/merged-mining/text/0000-merged-mining-with-bitcoin.md) | Draft | |
+| MR-6   | [Merged Mining with Bitcoin](https://gitlab.com/HathorNetwork/rfcs/blob/master/text/0006-merged-mining-with-bitcoin.md) | Draft | |
 | MR-7   | [Stratum Protocol](https://gitlab.com/HathorNetwork/rfcs/blob/stratum/text/0000-stratum.md) | Draft | testnet-bravo |
 | MR-8   | [Transaction Header](https://gitlab.com/HathorNetwork/rfcs/blob/transaction-header/text/0001-transaction-header.md) | Draft | testnet-bravo |
 | MR-10  | [Creation of Tokens](https://gitlab.com/HathorNetwork/rfcs/blob/token-creation/text/0004-tokens.md), major update | Draft  | testnet-charlie |
