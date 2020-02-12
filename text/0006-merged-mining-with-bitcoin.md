@@ -7,8 +7,8 @@
 # Summary
 [summary]: #summary
 
-Enable miners to mine on Hathor while also mining on Bitcoin with no aditional
-mining costs.
+Enable miners to mine both Hathor and Bitcoin at the same time, at the cost of
+dedicating a few bytes of the BTC block payload to carry HTR data.
 
 # Motivation
 [motivation]: #motivation
