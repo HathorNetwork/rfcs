@@ -67,6 +67,7 @@ in.
 | MR-9   | [Side-DAGs](https://github.com/HathorNetwork/rfcs/blob/side-dags/0000-side-dags.md) | Draft | |
 | MR-3   | [Nano Contracts: Oracles](https://github.com/HathorNetwork/rfcs/blob/1st-nano-contract/0000-nano-contracts.md) | Draft | |
 | MR-2   | [Summarize Blocks](https://github.com/HathorNetwork/rfcs/blob/summarizing-blocks/text/0000-summarizing-blocks.md) | Draft | |
+| 25  | [Peer-to-peer Protocol: Sync v2](https://github.com/HathorNetwork/rfcs/blob/master/text/0025-p2p-sync-v2.md) | Draft | - |
 
 
 
