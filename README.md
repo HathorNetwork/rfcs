@@ -36,37 +36,36 @@ in.
 
 | Number | Title               | Status    | Network         |
 |--------|---------------------|-----------|-----------------|
-| 1   | [RFC Process](https://gitlab.com/HathorNetwork/rfcs/blob/master/text/0001-rfc-process.md) | Done      | |
+| 1   | [RFC Process](https://github.com/HathorNetwork/rfcs/blob/master/text/0001-rfc-process.md) | Done      | |
 
 ### Accepted RFCs (accepted; may not be implemented yet)
 
 | Number | Title               | Status    | Network         |
 |--------|---------------------|-----------|-----------------|
-| 4   | [Creation of Tokens](https://gitlab.com/HathorNetwork/rfcs/blob/master/text/0004-tokens.md) | Accepted  | testnet-bravo |
-| 11   | [Token Deposit](https://gitlab.com/HathorNetwork/rfcs/blob/master/text/0011-token-deposit.md) | Accepted  | testnet-bravo |
-| MR-5   | [Multi-signature Transaction Outputs](https://gitlab.com/HathorNetwork/rfcs/blob/multi-sig/0000-multi-sig.md) | Accepted | testnet-bravo |
-| 15  | [The Anatomy of a Transaction](https://gitlab.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md) | Accepted | - |
+| 4   | [Creation of Tokens](https://github.com/HathorNetwork/rfcs/blob/master/text/0004-tokens.md) | Accepted  | testnet-bravo |
+| 11   | [Token Deposit](https://github.com/HathorNetwork/rfcs/blob/master/text/0011-token-deposit.md) | Accepted  | testnet-bravo |
+| MR-5   | [Multi-signature Transaction Outputs](https://github.com/HathorNetwork/rfcs/blob/multi-sig/text/0005-multi-sig.md) | Accepted | testnet-bravo |
+| 15  | [The Anatomy of a Transaction](https://github.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md) | Accepted | - |
 
 ### Provisional RFCs (provisionally accepted; interface may still change)
 
 | Number | Title               | Status    | Network         |
 |--------|---------------------|-----------|-----------------|
-| MR-13  | [Peer-to-Peer Protocol: Handshaking & Control Messages](https://gitlab.com/HathorNetwork/rfcs/blob/p2p-identity/text/0000-p2p-identity.md) | Draft | |
-| MR-17  | [Peer-to-peer Protocol: Synchronization](https://gitlab.com/HathorNetwork/rfcs/blob/p2p-sync/text/0000-p2p-sync.md) | Draft | |
-| MR-6   | [Merged Mining with Bitcoin](https://gitlab.com/HathorNetwork/rfcs/blob/master/text/0006-merged-mining-with-bitcoin.md) | Draft | |
-| MR-7   | [Stratum Protocol](https://gitlab.com/HathorNetwork/rfcs/blob/stratum/text/0000-stratum.md) | Draft | testnet-bravo |
-| MR-8   | [Transaction Header](https://gitlab.com/HathorNetwork/rfcs/blob/transaction-header/text/0001-transaction-header.md) | Draft | testnet-bravo |
-| MR-10  | [Creation of Tokens](https://gitlab.com/HathorNetwork/rfcs/blob/token-creation/text/0004-tokens.md), major update | Draft  | testnet-charlie |
+| MR-13  | [Peer-to-Peer Protocol: Handshaking & Control Messages](https://github.com/HathorNetwork/rfcs/blob/p2p-identity/text/0000-p2p-identity.md) | Draft | |
+| MR-17  | [Peer-to-peer Protocol: Synchronization](https://github.com/HathorNetwork/rfcs/blob/p2p-sync/text/0000-p2p-sync.md) | Draft | |
+| MR-6   | [Merged Mining with Bitcoin](https://github.com/HathorNetwork/rfcs/blob/master/text/0006-merged-mining-with-bitcoin.md) | Draft | |
+| MR-7   | [Stratum Protocol](https://github.com/HathorNetwork/rfcs/blob/stratum/text/0000-stratum.md) | Draft | testnet-bravo |
+| MR-8   | [Transaction Header](https://github.com/HathorNetwork/rfcs/blob/transaction-header/text/0001-transaction-header.md) | Draft | testnet-bravo |
 
 ### Open RFCs (under consideration)
 
 | Number | Title               | Status    | Network         |
 |--------|---------------------|-----------|-----------------|
-| MR-19  | [Consensus Protocol](https://gitlab.com/HathorNetwork/rfcs/blob/consensus/text/0000-consensus.md) | Draft | |
-| MR-14  | [Token Captain](https://gitlab.com/HathorNetwork/rfcs/blob/token-captain/text/0000-token-captain.md) | Draft | |
-| MR-9   | [Side-DAGs](https://gitlab.com/HathorNetwork/rfcs/blob/side-dags/0000-side-dags.md) | Draft | |
-| MR-3   | [Nano Contracts: Oracles](https://gitlab.com/HathorNetwork/rfcs/blob/1st-nano-contract/0000-nano-contracts.md) | Draft | |
-| MR-2   | [Summarize Blocks](https://gitlab.com/HathorNetwork/rfcs/blob/summarizing-blocks/text/0000-summarizing-blocks.md) | Draft | |
+| MR-19  | [Consensus Protocol](https://github.com/HathorNetwork/rfcs/blob/consensus/text/0000-consensus.md) | Draft | |
+| MR-14  | [Token Captain](https://github.com/HathorNetwork/rfcs/blob/token-captain/text/0000-token-captain.md) | Draft | |
+| MR-9   | [Side-DAGs](https://github.com/HathorNetwork/rfcs/blob/side-dags/0000-side-dags.md) | Draft | |
+| MR-3   | [Nano Contracts: Oracles](https://github.com/HathorNetwork/rfcs/blob/1st-nano-contract/0000-nano-contracts.md) | Draft | |
+| MR-2   | [Summarize Blocks](https://github.com/HathorNetwork/rfcs/blob/summarizing-blocks/text/0000-summarizing-blocks.md) | Draft | |
 
 
 
