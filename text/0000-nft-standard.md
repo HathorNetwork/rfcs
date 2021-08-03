@@ -7,27 +7,27 @@
 # Summary
 [summary]: #summary
 
-This document presents a standard to be followed when creating a NFT transaction and its metadata. The idea behind having a standard is to be able to identify NFT tokens and to be easy for any plataform that would like to integrate Hathor NFTs.
+This document presents a standard to be followed when creating an NFT transaction and its metadata. The idea behind having a standard is to be able to identify NFT tokens and to be easy for any plataform that would like to integrate Hathor NFTs.
 
 # Motivation
 [motivation]: #motivation
 
-Creating a NFT standard is important mainly for 3 reasons:
+Creating an NFT standard is important mainly for 3 reasons:
 
-1. There are some requirements that a NFT token must fulfill in order to have its digital asset shown in our explorer, so it's important that they are described here.
+1. There are some requirements that an NFT token must fulfill in order to have its digital asset shown in our explorer, so it's important that they are described here.
 1. Having a similar structure in most NFTs (also for its metadatas) facilitates the integration with any platform to list and show information about NFTs created on Hathor. 
-1. Identifying a NFT is important to show specific information in the explorer and wallets.
+1. Identifying an NFT is important to show specific information in the explorer and wallets.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
 Non-fungible tokens (NFTs) are unique, indivisible digital assets created on blockchains. HTR token, for instance, is a fungible token and 1 HTR of mine can be exchanged with 1 HTR of anyone without difference because all tokens are equal. Each NFT’s uniqueness can be proven by a unique identifier.
 
-In Hathor Network a NFT is a new custom token created and its unique identifier is the transaction hash.
+In Hathor Network an NFT is a new custom token created and its unique identifier is the transaction hash.
 
 ## Transaction standard
 
-A transaction can be identified as a NFT creation if it has the following structure:
+A transaction can be identified as an NFT creation if it has the following structure:
 
 1. Transaction version is 2 (TOKEN_CREATION_TRANSACTION).
 1. All inputs are HTR inputs.
@@ -37,11 +37,11 @@ A transaction can be identified as a NFT creation if it has the following struct
 1. We have N outputs with custom token created value (the value can be any number).
 1. We can have 1 or 0 HTR output with change value.
 
-Any transaction that has this structure will be identified as a NFT and the explorer/wallet screens will show specific NFT information for them.
+Any transaction that has this structure will be identified as an NFT and the explorer/wallet screens will show specific NFT information for them.
 
 ## Output script data
 
-The output script data is the most important piece of a NFT transaction because it represents the data that is being uniquely identified in the blockchain.
+The output script data is the most important piece of an NFT transaction because it represents the data that is being uniquely identified in the blockchain.
 
 The data can be any string, e.g. '#A123' as a serial number, or 'https://mywebsite.com/', or even 'ipfs://ipfs/<hash>/filename'.
 
@@ -93,11 +93,39 @@ The AttributeObject has the following JSON structure:
 
 The AttributeObject may have more attributes than the ones described above but those are the required ones.
 
+### Metadata example
+
+```
+{
+    "name": "Gandalf",
+    "description": "A wizard, one of the Istari order, and the leader and mentor of the Fellowship of the Ring",
+    "file": "ipfs://ipfs/QmbuthvFV2EjvfmWXxt2L83PwPPwbjjggBhVsrEB7AXW123/gandalf.png",
+    "attributes": [
+        {
+            "type": "rarity",
+            "value": "super rare"
+        },
+        {
+            "type": "hp",
+            "value": 32
+        },
+        {
+            "type": "intelligence",
+            "value": 99
+        },
+        {
+            "type": "ring",
+            "value": 0
+        }
+    ]
+}
+```
+
 ## Custom NFT
 
 There are some special cases where the NFT token won't follow the proposed standard, e.g. if it needs more than one data output. In that case, our wallets and explorer won't automatically identify this token as NFT.
 
-Given that this situation is expected to be rare, we will handle them manually. The NFT creator will need to get in touch with Hathor team on Discord, in order to have the token identified as a NFT. Besides that, if the digital asset URL follows the immutable requirements, it can be shown in the explorer just like any other standard NFT.
+Given that this situation is expected to be rare, we will handle them manually. The NFT creator will need to get in touch with Hathor team on Discord, in order to have the token identified as an NFT on the official Hathor explorer. Besides that, if the digital asset URL follows the immutable requirements, it can be shown in the explorer just like any other standard NFT.
 
 # Prior art
 [prior-art]: #prior-art
