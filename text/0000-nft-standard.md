@@ -32,12 +32,12 @@ A transaction can be identified as an NFT creation if it has the following struc
 1. Transaction version is 2 (TOKEN_CREATION_TRANSACTION).
 1. All inputs are HTR inputs.
 1. First output has HTR value and the script is a pushdata with the NFT data followed by a OP_CHECKSIG.
-1. We can have 1 or 0 melt authority output.
-1. We can have 1 or 0 mint authority output.
-1. We have N outputs with custom token created value (the value can be any number).
-1. We can have 1 or 0 HTR output with change value.
+1. It can optionally have a melt authority output (but never more than one).
+1. It can optionally have a mint authority output (but never more than one).
+1. It has one or more outputs with the created token (any value is valid).
+1. It can optionally have an output for the HTR change.
 
-Any transaction that has this structure will be identified as an NFT and the explorer/wallet screens will show specific NFT information for them.
+Any transaction that has this structure will be identified as an NFT and the explorer/wallet screens will show specific NFT information for them. The media associated with the NFT will not be shown unless the NFT goes through Hathor Labs' review process.
 
 ## Output script data
 
@@ -49,7 +49,7 @@ The most common use case is to represent a digital asset, then the NFT data usua
 
 ## Metadata
 
-Most NFTs also need extra data besides just the digital asset URL. The metadata standard is important to be followed in order to help future platform integrations with Hathor NFTs.
+Most NFTs also need extra data besides just the digital asset URL. The metadata standard is important to be followed in order to help future platform integrations with Hathor NFTs. This standard was inspired by [OpenSea metadata standard](https://docs.opensea.io/docs/metadata-standards).
 
 If the NFT requires a metadata, the output script data saved on blockchain **MUST** be the metadata URL in an immutable protocol (e.g. ipfs as explained in the last section), e.g. ipfs://ipfs/<hash>/metadata.json.
 
@@ -125,9 +125,4 @@ The AttributeObject may have more attributes than the ones described above but t
 
 There are some special cases where the NFT token won't follow the proposed standard, e.g. if it needs more than one data output. In that case, our wallets and explorer won't automatically identify this token as NFT.
 
-Given that this situation is expected to be rare, we will handle them manually. The NFT creator will need to get in touch with Hathor team on Discord, in order to have the token identified as an NFT on the official Hathor explorer. Besides that, if the digital asset URL follows the immutable requirements, it can be shown in the explorer just like any other standard NFT.
-
-# Prior art
-[prior-art]: #prior-art
-
-We were using the attributes on metadata JSON as an object but I changed to an array of objects after reading [OpenSea metadata standard](https://docs.opensea.io/docs/metadata-standards) to make it more flexible for future changes.
+Given that this situation is expected to be rare, we will handle them manually. The NFT creator will need to get in touch with Hathor team, in order to have the token identified as an NFT on the official Hathor explorer. Besides that, as long as the digital asset's URL is immutable, it should be approved in the review and should be shown in Hathor's Public Explorer like any other standard NFT.
