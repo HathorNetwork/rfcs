@@ -121,6 +121,29 @@ The AttributeObject may have more attributes than the ones described above but t
 }
 ```
 
+## Deposit & Fee
+
+### Deposit
+
+The deposit will be the same as in the normal token creation, i.e. 1% of the amount created deposited in HTR.
+
+For example, if you'd like to create 100 units of a NFT, you must deposit 0.01 HTR. 1% of 100 units is 1 unit and given that we never handle decimals, only integers, 1 unit of HTR is 0.01 HTR.
+
+- 500 NFT units: deposit of 0.05 HTR.
+- 100 NFT units: deposit of 0.01 HTR.
+- 10 NFT units: deposit of 0.01 HTR.
+- 1 NFT unit: deposit of 0.01 HTR.
+
+This deposit may be returned in case of a melt of the created NFTs. Important to notice that you have the deposit back only if you melt an amount bigger than or equal to 100 units, just like the normal custom token.
+
+### Fee
+
+The first output of a NFT transaction will contain the script with the data string. This output must have some value and we use 0.01 HTR for that. It's an output that can never be returned.
+
+#### Why use HTR for the fee and not the custom token created?
+
+It's possible to create a token unit especially to be used in the first output (the one with the data script), however the total supply of the NFT would be increased by 1 in the blockchain, which is not good given the idea behind non fungible tokens. That's why we've decided to create the standard with the fee as HTR. 
+
 ## Custom NFT
 
 There are some special cases where the NFT token won't follow the proposed standard, e.g. if it needs more than one data output. In that case, our wallets and explorer won't automatically identify this token as NFT.
