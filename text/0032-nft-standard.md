@@ -1,6 +1,6 @@
 - Feature Name: nft_standard
 - Start Date: 2021-08-02
-- RFC PR: (leave this empty)
+- RFC PR: https://github.com/HathorNetwork/rfcs/pull/32
 - Hathor Issue: (leave this empty)
 - Author: Pedro Ferreira <pedro@hathor.network>
 

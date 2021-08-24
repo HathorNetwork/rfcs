@@ -47,6 +47,7 @@ in.
 | MR-5   | [Multi-signature Transaction Outputs](https://github.com/HathorNetwork/rfcs/blob/multi-sig/text/0005-multi-sig.md) | Accepted | testnet-bravo |
 | 15  | [The Anatomy of a Transaction](https://github.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md) | Accepted | - |
 | 27  | [Exchange Integration Guide](https://github.com/HathorNetwork/rfcs/blob/master/text/0027-exchange-integration.md) | Draft | - |
+| 32  | [NFT Standard](https://github.com/HathorNetwork/rfcs/blob/master/text/0032-nft-standard.md) | Accepted | - |
 
 ### Provisional RFCs (provisionally accepted; interface may still change)
 
