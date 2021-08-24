@@ -140,12 +140,14 @@ This deposit may be returned in case of a melt of the created NFTs. Important to
 
 The first output of a NFT transaction will contain the script with the data string. This output must have some value and we use 0.01 HTR for that. It's an output that can never be returned.
 
-#### Why use HTR for the fee and not the custom token created?
-
-It's possible to create a token unit especially to be used in the first output (the one with the data script), however the total supply of the NFT would be increased by 1 in the blockchain, which is not good given the idea behind non fungible tokens. That's why we've decided to create the standard with the fee as HTR. 
-
 ## Custom NFT
 
 There are some special cases where the NFT token won't follow the proposed standard, e.g. if it needs more than one data output. In that case, our wallets and explorer won't automatically identify this token as NFT.
 
 Given that this situation is expected to be rare, we will handle them manually. The NFT creator will need to get in touch with Hathor team, in order to have the token identified as an NFT on the official Hathor explorer. Besides that, as long as the digital asset's URL is immutable, it should be approved in the review and should be shown in Hathor's Public Explorer like any other standard NFT.
+
+## FAQ
+
+### Why use HTR for the fee and not the custom token created?
+
+It's possible to create a token unit especially to be used in the first output (the one with the data script), however the total supply of the NFT would be increased by 1 in the blockchain, which is not good given the idea behind non fungible tokens. That's why we've decided to create the standard with the fee as HTR.
