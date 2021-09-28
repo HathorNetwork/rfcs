@@ -31,6 +31,8 @@ Use our hathor-wallet-headless to generate a new wallet seed. Keep this seed saf
 
 ```sh
 export SEED=$(docker run --entrypoint npm hathornetwork/hathor-wallet-headless run generate_words | tail -1)
+echo "Your seed is '$SEED'"
+echo "Keep this seed, we will use in the end of the guide."
 ```
 
 Then, start a hathor-wallet-headless server:
@@ -44,13 +46,14 @@ HEADLESS_SEED_DEFAULT=default
 EOF
 
 docker run -itd --name wallet-headless --network="host" --env-file=.env hathornetwork/hathor-wallet-headless 
+sleep 10
 ```
 
 Initialize the wallet using your generated seed and get an address for it. Note that we are replacing the previously exported variable `SEED` here.
 
 ```sh
 curl -X POST --data "wallet-id=wallet" --data "seed=$SEED" http://localhost:8000/start
-sleep 2
+sleep 5
 curl -H "X-Wallet-Id: wallet" http://localhost:8000/wallet/address
 ```
 
@@ -101,6 +104,7 @@ SETTINGS = HathorSettings(
     MIN_TX_WEIGHT_K=0,
     MIN_TX_WEIGHT_COEFFICIENT=0,
     MIN_TX_WEIGHT=8,
+    REWARD_SPEND_MIN_BLOCKS=20
 )
 EOF
 ```
@@ -219,7 +223,7 @@ Now that our fullnodes are in place, the next step is to have a miner to mine bl
 The easiest way to do this in a local testing environment is to run a CPU Miner.
 We have a CPU Miner as a Docker image in https://hub.docker.com/r/hathornetwork/cpuminer
 
-You should run it with the following command, replacing `<address>` by the same address we generated in the beginning of the guide (it could also be a different address):
+You should run it with the following command, replacing `<address>` by the same address we generated in the beginning of the guide:
 ```sh
 docker run -ti --network="host" hathornetwork/cpuminer -t 1 -a sha256d -o stratum+tcp://127.0.0.1:8093 --coinbase-addr <address>
 ```
@@ -239,18 +243,94 @@ To run it, you need to build the Docker image using the Dockerfile in the repo. 
 ```sh
 docker build -t tx-mining-service .
 
-docker run -it --network="host" tx-mining-service http://127.0.0.1:8081 --address <address>--api-port 8100 --stratum-port 8101
+docker run -it --network="host" tx-mining-service http://127.0.0.1:8083 --address <address>--api-port 8100 --stratum-port 8101
 ```
 
 When running the wallets, we will configure them to use this service for transaction mining.
 
-# Running our wallets
+<!-- # Running our wallets
 We will run 2 wallet-headles to demonstrate the wallet functionality. They are basically wallets that run as a HTTP api and have most of the same functions as the desktop or mobile wallets.
 
-Each wallet-headless will be connected to one of our fullnodes dedicated to wallets (`fullnode-wallet-1` and `fullnode-wallet-2`). But more than one wallet can use the same fullnode without problem.
+Each wallet-headless will be connected to one of our fullnodes dedicated to wallets (`fullnode-wallet-1` and `fullnode-wallet-2`). But more than one wallet can use the same fullnode without problem. -->
 
+We will run one wallet-headless to demonstrate the wallet functionality. It's basically a wallet that run as a HTTP api and have most of the same functions as the desktop or mobile wallets.
 
-> TODO: How to point the wallets to TxMiningService? We would need to change the wallet-lib inside node_modules
+The first step is to clone the repo https://github.com/HathorNetwork/hathor-wallet-headless
+
+## Configuring the Tx Mining Service
+
+We will need to configure our wallets to point to our tx-mining-service.
+
+Due to a still to be fixed issue in the hathor-wallet-headless, we have one extra step to be able to configure our tx-mining-service.
+
+First, install the dependencies:
+
+```sh
+npm install
+```
+
+Then, run the following command:
+```sh
+sed -i 's/https:\/\/txmining.mainnet.hathor.network/http:\/\/localhost:8100/g' node_modules/@hathor/wallet-lib/lib/constants.js
+sed -i 's/https:\/\/txmining.testnet.hathor.network/http:\/\/localhost:8100/g' node_modules/@hathor/wallet-lib/lib/constants.js
+```
+
+With this, we are ready to run our wallets.
+
+## Running the wallet
+
+We will run the wallet using the seed we generated at the beginning of the guide. This seed should have some balance, since we configured it as the destination for mining rewards.
+
+Create the config file, replacing `<seed>` with the seed from the beginning of the guide:
+```sh
+cat <<EOF > src/config.js
+module.exports = {
+  http_bind_address: 'localhost',
+  http_port: 8000,
+  network: 'testnet',
+  server: 'http://localhost:8081/v1a/',
+  seeds: {
+      default: '<seed>',
+  },
+  consoleLevel: null,
+  tokenUid: '',
+  gapLimit: null,
+  connectionTimeout: null,
+  allowPassphrase: false,
+  confirmFirstAddress: false,
+};
+EOF
+```
+
+Start the server:
+```sh
+npm start
+```
+
+Start the wallet:
+```sh
+curl -X POST --data "wallet-id=wallet1" --data "seedKey=default" http://localhost:8000/start
+```
+
+Check the wallet balance:
+```sh
+curl -H "X-Wallet-Id: wallet1" http://localhost:8000/wallet/balance
+```
+
+Get address to send transaction:
+```sh
+curl -H "X-Wallet-Id: wallet1" http://localhost:8000/wallet/address
+```
+
+Send a transaction, replacing the address from the last command output:
+
+> TODO: Getting a timeout in TxMiningService when trying to mine the transaction
+
+```sh
+curl -X POST -H "X-Wallet-Id: wallet1" --data "address=<address>" --data "value=101" http://localhost:8000/wallet/simple-send-tx
+```
+
+<!-- > TODO: How to point the wallets to TxMiningService? We would need to change the wallet-lib inside node_modules
 
 ## First wallet
 Run it with:
@@ -298,13 +378,10 @@ docker run --entrypoint npm hathornetwork/hathor-wallet-headless run generate_wo
 Start the wallet:
 ```
 curl -X POST --data "wallet-id=wallet1" --data "seed=<seed>" http://localhost:8001/start
-```
+``` -->
 
-## Sending transactions between the wallets
 
-> TODO
-
-# Running an Explorer
+<!-- # Running an Explorer
 Clone the repo: https://github.com/HathorNetwork/hathor-explorer
 
 Install dependencies:
@@ -320,7 +397,7 @@ export REACT_APP_WS_URL=wss://localhost:8080/v1a/ws/
 npm start
 ```
 
-> TODO: The Explorer is not capable of handling other networks yet. So it will have very limited capabilities (only the main page works)
+> TODO: The Explorer is not capable of handling other networks yet. So it will have very limited capabilities (only the main page works) -->
 
 # Customizing the network
 
@@ -336,5 +413,6 @@ Some of the most important are:
 - `DECIMAL_PLACES`: How many decimal places the network will allow in transaction values.
 - `BLOCKS_PER_HALVING`: How many blocks until a reward halving occurs.
 - `AVG_TIME_BETWEEN_BLOCKS` : The time between blocks
+- `REWARD_SPEND_MIN_BLOCKS`: The number of blocks before the mining reward can be spent. You shouldn't change this in fullnodes connected to Hathor mainnet/testnet, only on private testnets.
 
 A lot of other parameters can be checked in the mentioned file.
