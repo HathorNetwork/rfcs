@@ -9,25 +9,24 @@
 
 This guide will show you how to run a local private Hathor network, with its own full-nodes, miner, wallets and explorer.
 
-# Guide-level explanation
-
 By the end of the guide you will have a fully working private network with the following setup:
-- 4 hathor-core full-nodes connected among them, each dedicated to a different purpose
+- 4 hathor-core full-nodes connected with each other, each dedicated to a different purpose
 - A cpu-miner mining blocks in the network 
 - A tx-mining-service to be used by Wallets to mine transactions
 - 2 instances of hathor-wallet-headless configured with 2 different wallets 
 
 # Running the full-nodes
 
-The first step when creating a new network is to create its genesis output script, and two initial transactions.
+The first step when creating a new network is to create its genesis output script, and its three initial `txs`: 1 block that will include the genesis output script and 2 empty transactions. To learn more about blocks and transactions, check [this RFC](./0015-anatomy-of-tx.md).
 
-We will need a valid address for this that needs to be used when generationg the output script and the transactions.
+We will need a valid address to be used when generationg the output script.
 
 So this is what we will do first.
 
 ## Generating an address for the genesis
 
-Use our hathor-wallet-headless to generate a new wallet seed. Keep this seed safe if you are configuring a network for a real use case.
+We will use our hathor-wallet-headless to generate a new wallet seed. Keep this seed safe if you are configuring a network for a real use case.
+
 
 ```sh
 export SEED=$(docker run --entrypoint npm hathornetwork/hathor-wallet-headless run generate_words | tail -1)
@@ -65,6 +64,12 @@ Finally, stop the hathor-wallet-headless.
 docker stop wallet-headless
 docker rm wallet-headless
 ```
+
+### Important Note
+
+Note that we used a server from our public testnet in the config above. This was done because the hathor-wallet-headless needs it to be able to start a wallet and generate an address for it in the following commands. From now on, we won't need to do it anymore.
+
+However, to make things easier, we use the same address prefix as the public testnet in the next sections when configuring our private testnet, since we used it to generate an address. Otherwise, we would need to make an address translation from one prefix to another.
 
 ## Creating the genesis block and transactions
 Now that we have an address, we will use it to create our genesis block and our two initial transactions.
@@ -140,7 +145,7 @@ Include the following block in the file `~/hathor-private-tutorial/conf/privnet.
     GENESIS_TX2_HASH=bytes.fromhex(''),
 ```
 
-This concludes the configuration of our new network, next we will use this configuration to run our full-nodes.
+This concludes the configuration of our new network. Next we will use this configuration to run our full-nodes.
 
 If you want to know more about additional options to customize your network configuration, we will have an additional section about this in the end of the guide.
 
