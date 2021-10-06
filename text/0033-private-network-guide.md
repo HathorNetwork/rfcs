@@ -1,4 +1,4 @@
-- Feature Name: private_testnet_guide
+- Feature Name: private_network_guide
 - Status: Draft
 - Start Date: 2021-09-27
 - RFC PR: (leave this empty)
@@ -69,7 +69,7 @@ docker rm wallet-headless
 
 Note that we used a server from our public testnet in the config above. This was done because the hathor-wallet-headless needs it to be able to start a wallet and generate an address for it in the following commands. From now on, we won't need to do it anymore.
 
-However, to make things easier, we use the same address prefix as the public testnet in the next sections when configuring our private testnet, since we used it to generate an address. Otherwise, we would need to make an address translation from one prefix to another.
+However, to make things easier, we use the same address prefix as the public testnet in the next sections when configuring our private network, since we used it to generate an address. Otherwise, we would need to make an address translation from one prefix to another.
 
 ## Creating the genesis block and transactions
 Now that we have an address, we will use it to create our genesis block and our two initial transactions.
@@ -101,7 +101,7 @@ from hathor.conf.settings import HathorSettings
 SETTINGS = HathorSettings(
     P2PKH_VERSION_BYTE=b'\x49',
     MULTISIG_VERSION_BYTE=b'\x87',
-    NETWORK_NAME='privnet-testnet',
+    NETWORK_NAME='private-network',
     BOOTSTRAP_DNS=[],
     # Genesis stuff
     GENESIS_OUTPUT_SCRIPT=bytes.fromhex("$GENESIS_OUTPUT_SCRIPT"),
@@ -117,13 +117,13 @@ EOF
 Run the python shell again, with additional parameters to use our newly created settings file, and passing a script to mine the genesis block and 2 initial transactions. Keep note of the printed outputs, they will be used next.
 
 ```sh
-docker run -it --entrypoint python  -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core -c "
+docker run -it --entrypoint python  -v ~/hathor-private-tutorial/conf:/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core -c "
 from hathor.conf import HathorSettings
 from hathor.transaction import genesis
 
 settings = HathorSettings()
 
-# This should output 'privnet-testnet'
+# This should output 'private-network'
 print('NETWORK', settings.NETWORK_NAME)
 
 for tx_name in ['BLOCK_GENESIS', 'TX_GENESIS1', 'TX_GENESIS2']:
@@ -155,21 +155,19 @@ We will run 4 full-nodes. Each one will have a role our setup, and we will name 
 
 We will setup a simple network where we have a central fullnode to which all other fullnodes connect to form the P2P network. However, you could have whatever configuration you need in more complex scenarios.
 
-### Fullnode Explorer
-Our first full-node will be named `fullnode-explorer`, because it will be the one used by our Explorer to get data about the network.
-
-It will also be our central fullnode where other fullnodes connect to start syncing between them.
+### Fullnode Main
+Our first full-node will be named `fullnode-main`, because it will be our central fullnode where other fullnodes connect to start syncing between them.
 
 ```sh
-mkdir -p ~/hathor-private-tutorial/fullnnode-explorer
+mkdir -p ~/hathor-private-tutorial/fullnnode-main
 
-docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnnode-explorer:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8080 --listen tcp:40403 --data /data --x-fast-init-beta --wallet-index
+docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnnode-main:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8080 --listen tcp:40403 --data /data --x-fast-init-beta --wallet-index
 ```
 
 This command configures the fullnode to:
 - Listen for P2P connections on port 40403
 - Expose its HTTP api on port 8080
-- Use `~/hathor-private-tutorial/fullnode-explorer` as its data directory in the host.
+- Use `~/hathor-private-tutorial/fullnode-main` as its data directory in the host.
 - Use the configuration file we create for the network in `hathor.conf.privnet`
 - Enable `wallet index`, which is needed to perform some kinds of operations in the api, like getting transactions information.
 
@@ -184,7 +182,7 @@ docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnode-wallet-1:/
 
 This command configures the fullnode to:
 - Expose its HTTP api on port 8081
-- Connect to `tcp://127.0.0.1:40403` (fullnode-explorer) to sync with the P2P network
+- Connect to `tcp://127.0.0.1:40403` (fullnode-main) to sync with the P2P network
 - Use `~/hathor-private-tutorial/fullnode-wallet-1` as its data directory in the host.
 - Use the configuration file we create for the network in `hathor.conf.privnet`
 - Enable `wallet index`, which is needed to perform some kinds of operations in the api, like getting transactions information.
@@ -201,7 +199,7 @@ docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnode-wallet-2:/
 
 This command configures the fullnode to:
 - Expose its HTTP api on port 8082
-- Connect to `tcp://127.0.0.1:40403` (fullnode-explorer) to sync with the P2P network
+- Connect to `tcp://127.0.0.1:40403` (fullnode-main) to sync with the P2P network
 - Use `~/hathor-private-tutorial/fullnode-wallet-2` as its data directory in the host.
 - Use the configuration file we create for the network in `hathor.conf.privnet`
 - Enable `wallet index`, which is needed to perform some kinds of operations in the api, like getting transactions information.
@@ -218,7 +216,7 @@ docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnode-miner:/dat
 This command configures the fullnode to:
 - Expose its HTTP api on port 8083
 - Expose its miing api on port 8093
-- Connect to `tcp://127.0.0.1:40403` (fullnode-explorer) to sync with the P2P network
+- Connect to `tcp://127.0.0.1:40403` (fullnode-main) to sync with the P2P network
 - Use `~/hathor-private-tutorial/fullnode-miner` as its data directory in the host.
 - Use the configuration file we create for the network in `hathor.conf.privnet`
 
@@ -237,7 +235,7 @@ This command is telling the miner to connect to our `fullnode-miner` in the port
 
 When you start mining, you'll see that all fullnodes start logging the new blocks being received. The logs of the `fullnode-miner` will be different, because the miner will be connected directly to it sending mined blocks. The other fullnodes will only receive the new blocks through the sync algorithm.
 
-Also note that all fullnodes will receive the blocks, even though only the `fullnode-explorer` is directly connected to the `fullnode-miner`.
+Also note that all fullnodes will receive the blocks, even though only the `fullnode-main` is directly connected to the `fullnode-miner`.
 
 # Running a TxMiningService
 The role of this service is to act as a miner for transactions generated by wallets. In Hathor, transactions are also mined just like blocks, just with a lower difficulty.
@@ -335,9 +333,9 @@ Send a transaction, replacing the address from the last command output:
 curl -X POST -H "X-Wallet-Id: wallet1" --data "address=<address>" --data "value=101" http://localhost:8000/wallet/simple-send-tx
 ```
 
-Congratulations, you have successfully sent a transaction in the network, and now has a fully functional private testnet!
+Congratulations, you have successfully sent a transaction in the network, and now has a fully functional private network!
 
-<!-- > TODO: How to point the wallets to TxMiningService? We would need to change the wallet-lib inside node_modules
+<!--
 
 ## First wallet
 Run it with:
@@ -414,12 +412,14 @@ The most up-to-date source to learn which parameters are available is the source
 
 You can add any of those parameters in the file `~/hathor-private-tutorial/conf/privnet.py` that we created ealier, then restart the fullnodes for the changes to take effect.
 
+Beware you should be careful when changing any of those settings in fullnodes connected to Hathor mainnet/testnet, since changing many of them can result in forks in the network or other problems. For private networks it's safe to change them.
+
 Some of the most important are:
-- `BOOTSTRAP_DNS`: Used to make the fullnode discover other peers to connect to using DNS. The DNS query can return a list of other fullnodes ips.
+- `BOOTSTRAP_DNS`: Used to make the fullnode discover other peers to connect to using DNS. The DNS query can return a list of other fullnodes connection strings.
 - `ENABLE_PEER_WHITELIST`: You can use this if you need to make sure only connections from authorized fullnodes are accepted. The control is done through the `peer-id` of each fullnode.
 - `DECIMAL_PLACES`: How many decimal places the network will allow in transaction values.
 - `BLOCKS_PER_HALVING`: How many blocks until a reward halving occurs.
 - `AVG_TIME_BETWEEN_BLOCKS` : The time between blocks
-- `REWARD_SPEND_MIN_BLOCKS`: The number of blocks before the mining reward can be spent. You shouldn't change this in fullnodes connected to Hathor mainnet/testnet, only on private testnets.
+- `REWARD_SPEND_MIN_BLOCKS`: The number of blocks before the mining reward can be spent.
 
 A lot of other parameters can be checked in the mentioned file.
