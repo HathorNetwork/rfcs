@@ -11,9 +11,9 @@ This guide will show you how to run a local private Hathor network, with its own
 
 By the end of the guide you will have a fully working private network with the following setup:
 - 4 hathor-core full-nodes connected with each other, each dedicated to a different purpose
-- A cpu-miner mining blocks in the network 
+- A cpu-miner mining blocks in the network
 - A tx-mining-service to be used by Wallets to mine transactions
-- 2 instances of hathor-wallet-headless configured with 2 different wallets 
+- 2 instances of hathor-wallet-headless configured with 2 different wallets
 
 # Running the full-nodes
 
@@ -44,7 +44,7 @@ HEADLESS_SERVER=https://node1.testnet.hathor.network/v1a/
 HEADLESS_SEED_DEFAULT=default
 EOF
 
-docker run -itd --name wallet-headless --network="host" --env-file=.env hathornetwork/hathor-wallet-headless 
+docker run -itd --name wallet-headless --network="host" --env-file=.env hathornetwork/hathor-wallet-headless
 sleep 10
 ```
 
@@ -79,18 +79,24 @@ Run this code in a python shell inside our hathor-core Docker image, to create t
 You need to replace `<address>` with the address you got in previous steps.
 
 ```sh
-export GENESIS_OUTPUT_SCRIPT=$(docker run -it --entrypoint python  hathornetwork/hathor-core -c "
+docker run -it --entrypoint python  hathornetwork/hathor-core -c "
 from hathor.transaction.scripts import P2PKH
-import base58
+from hathor.crypto.util import decode_address, get_address_b58_from_bytes, get_checksum
 
-address = base58.b58decode('<address>')
+testnet_address = decode_address('<address>')
 
-output = P2PKH.create_output_script(address=address).hex()
-print(output, end='')
-")
+privatenet_address = b'\x70' + testnet_address[1:]
+privatenet_address = privatenet_address[:-4] + get_checksum(privatenet_address[:-4])
+
+output = P2PKH.create_output_script(address=privatenet_address).hex()
+print('GENESIS_OUTPUT_SCRIPT:', output)
+print('privatenet_address:', get_address_b58_from_bytes(privatenet_address))
+"
 ```
 
-Now to configure the parameter of our new network, we create a new file in `~/hathor-private-tutorial/conf/privnet.py`, with the following content. Note that we are using the `GENESIS_OUTPUT_SCRIPT` variable from the previous command.
+From now on, everytime you need to input some address, you have to use the `privanet_address` we generated here.
+
+Now to configure the parameter of our new network, we create a new file in `~/hathor-private-tutorial/conf/privnet.py`, with the following content. Note that we need to replace the `GENESIS_OUTPUT_SCRIPT` variable from the previous command.
 
 ```sh
 mkdir -p ~/hathor-private-tutorial/conf
@@ -99,12 +105,12 @@ cat << EOF > ~/hathor-private-tutorial/conf/privnet.py
 from hathor.conf.settings import HathorSettings
 
 SETTINGS = HathorSettings(
-    P2PKH_VERSION_BYTE=b'\x49',
-    MULTISIG_VERSION_BYTE=b'\x87',
-    NETWORK_NAME='private-network',
+    P2PKH_VERSION_BYTE=b'\x70',
+    MULTISIG_VERSION_BYTE=b'\x93',
+    NETWORK_NAME='privatenet-tutorial',
     BOOTSTRAP_DNS=[],
     # Genesis stuff
-    GENESIS_OUTPUT_SCRIPT=bytes.fromhex("$GENESIS_OUTPUT_SCRIPT"),
+    GENESIS_OUTPUT_SCRIPT=bytes.fromhex("<GENESIS_OUTPUT_SCRIPT>"),
     GENESIS_TIMESTAMP=1632426140,
     MIN_TX_WEIGHT_K=0,
     MIN_TX_WEIGHT_COEFFICIENT=0,
@@ -123,7 +129,7 @@ from hathor.transaction import genesis
 
 settings = HathorSettings()
 
-# This should output 'private-network'
+# This should output 'privatenet-tutorial'
 print('NETWORK', settings.NETWORK_NAME)
 
 for tx_name in ['BLOCK_GENESIS', 'TX_GENESIS1', 'TX_GENESIS2']:
@@ -150,7 +156,7 @@ This concludes the configuration of our new network. Next we will use this confi
 If you want to know more about additional options to customize your network configuration, we will have an additional section about this in the end of the guide.
 
 
-## Running our full-nodes 
+## Running our full-nodes
 We will run 4 full-nodes. Each one will have a role our setup, and we will name them accoding to that role.
 
 We will setup a simple network where we have a central fullnode to which all other fullnodes connect to form the P2P network. However, you could have whatever configuration you need in more complex scenarios.
@@ -159,9 +165,9 @@ We will setup a simple network where we have a central fullnode to which all oth
 Our first full-node will be named `fullnode-main`, because it will be our central fullnode where other fullnodes connect to start syncing between them.
 
 ```sh
-mkdir -p ~/hathor-private-tutorial/fullnnode-main
+mkdir -p ~/hathor-private-tutorial/fullnode-main
 
-docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnnode-main:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8080 --listen tcp:40403 --data /data --x-fast-init-beta --wallet-index
+docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnode-main:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8080 --listen tcp:40403 --data /data --x-fast-init-beta --wallet-index
 ```
 
 This command configures the fullnode to:
@@ -262,54 +268,24 @@ We will run one wallet-headless to demonstrate the wallet functionality. It's ba
 
 The first step is to clone the repo https://github.com/HathorNetwork/hathor-wallet-headless
 
-## Configuring the Tx Mining Service
-
-We will need to configure our wallets to point to our tx-mining-service.
-
-Due to a still to be fixed issue in the hathor-wallet-headless, we have one extra step to be able to configure our tx-mining-service.
-
-First, install the dependencies:
-
-```sh
-npm install
-```
-
-Then, run the following command:
-```sh
-sed -i 's/https:\/\/txmining.mainnet.hathor.network/http:\/\/localhost:8100/g' node_modules/@hathor/wallet-lib/lib/constants.js
-sed -i 's/https:\/\/txmining.testnet.hathor.network/http:\/\/localhost:8100/g' node_modules/@hathor/wallet-lib/lib/constants.js
-```
-
-With this, we are ready to run our wallets.
-
 ## Running the wallet
 
+
+## Running the wallet
 We will run the wallet using the seed we generated at the beginning of the guide. This seed should have some balance, since we configured it as the destination for mining rewards.
 
-Create the config file, replacing `<seed>` with the seed from the beginning of the guide:
-```sh
-cat <<EOF > src/config.js
-module.exports = {
-  http_bind_address: 'localhost',
-  http_port: 8000,
-  network: 'testnet',
-  server: 'http://localhost:8081/v1a/',
-  seeds: {
-      default: '<seed>',
-  },
-  consoleLevel: null,
-  tokenUid: '',
-  gapLimit: null,
-  connectionTimeout: null,
-  allowPassphrase: false,
-  confirmFirstAddress: false,
-};
-EOF
-```
+Run it with this, replacing `<seed>` with the seed from the beginning of the guide:
 
-Start the server:
-```sh
-npm start
+```
+cat << EOF > .env1
+HEADLESS_HTTP_PORT=8000
+HEADLESS_NETWORK=testnet
+HEADLESS_SERVER=http://127.0.0.1:8081/v1a/
+HEADLESS_SEED_DEFAULT=<see>
+HEADLESS_TX_MINING_URL=http://127.0.0.1:8100/
+EOF
+
+docker run -it --network="host" --env-file=.env1 hathornetwork/hathor-wallet-headless
 ```
 
 Start the wallet:
@@ -335,33 +311,8 @@ curl -X POST -H "X-Wallet-Id: wallet1" --data "address=<address>" --data "value=
 
 Congratulations, you have successfully sent a transaction in the network, and now has a fully functional private network!
 
-<!--
 
-## First wallet
-Run it with:
-
-```
-cat << EOF > .env1
-HEADLESS_HTTP_PORT=8000
-HEADLESS_NETWORK=testnet
-HEADLESS_SERVER=http://127.0.0.1:8081/v1a/
-HEADLESS_SEED_DEFAULT=default
-EOF
-
-docker run -it --network="host" --env-file=.env1 hathornetwork/hathor-wallet-headless 
-```
-
-Create the seed for the wallet. You will use it in the next command.
-```
-docker run --entrypoint npm hathornetwork/hathor-wallet-headless run generate_words
-```
-
-Start the wallet:
-```
-curl -X POST --data "wallet-id=wallet1" --data "seed=<seed>" http://localhost:8000/start
-```
-
-## Second wallet
+<!-- ## Second wallet
 Run it with:
 
 ```
@@ -369,10 +320,10 @@ cat << EOF > .env2
 HEADLESS_HTTP_PORT=8001
 HEADLESS_NETWORK=testnet
 HEADLESS_SERVER=http://127.0.0.1:8082/v1a/
-HEADLESS_SEED_DEFAULT=default
+HEADLESS_SEED_DEFAULT=<seed>
 EOF
 
-docker run -it --network="host" --env-file=.env2 hathornetwork/hathor-wallet-headless 
+docker run -it --network="host" --env-file=.env2 hathornetwork/hathor-wallet-headless
 ```
 
 Create the seed for the wallet. You will use it in the next command.
@@ -386,7 +337,7 @@ curl -X POST --data "wallet-id=wallet1" --data "seed=<seed>" http://localhost:80
 ``` -->
 
 
-<!-- # Running an Explorer
+# Running the Explorer
 Clone the repo: https://github.com/HathorNetwork/hathor-explorer
 
 Install dependencies:
@@ -397,12 +348,12 @@ npm install
 Run the frontend:
 ```
 export REACT_APP_BASE_URL=http://localhost:8080/v1a/
-export REACT_APP_WS_URL=wss://localhost:8080/v1a/ws/
+export REACT_APP_WS_URL=ws://localhost:8080/v1a/ws/
 
 npm start
 ```
 
-> TODO: The Explorer is not capable of handling other networks yet. So it will have very limited capabilities (only the main page works) -->
+Please note that the "Network" page of the Explorer will not work in this tutorial, because it needs additional backend services that we decided to not include here. The other features should work normally.
 
 # Customizing the network
 
