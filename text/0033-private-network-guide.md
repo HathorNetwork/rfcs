@@ -118,6 +118,7 @@ Finally, stop the hathor-wallet-headless.
 ```sh
 docker stop wallet-headless
 docker rm wallet-headless
+rm .env
 ```
 
 #### Important Note
@@ -152,7 +153,7 @@ Keep note of the returned values.
 
 From now on, everytime you need to input some address, you have to use the `privanet_address` we generated here.
 
-To configure the parameters of our new network, we create a new file in `~/hathor-private-tutorial/conf/privnet.py`, with the following content. Note that we are using the `GENESIS_OUTPUT_SCRIPT` variable from the previous command.
+To configure the parameters of our new network, we create a new file in `~/hathor-private-tutorial/conf/privnet.py`, with the following content. Note that you should replace the `GENESIS_OUTPUT_SCRIPT` variable from the previous command.
 
 ```sh
 mkdir -p ~/hathor-private-tutorial/conf
@@ -199,12 +200,12 @@ for tx_name in ['BLOCK_GENESIS', 'TX_GENESIS1', 'TX_GENESIS2']:
 Include the following block in the file `~/hathor-private-tutorial/conf/privnet.py`, replacing it with the output values from the previous command. Beware that the names in the output and the names of the variables are slightly different, but it should be clear which is which.
 
 ```py
-    GENESIS_BLOCK_NONCE=,
     GENESIS_BLOCK_HASH=bytes.fromhex(''),
-    GENESIS_TX1_NONCE=,
+    GENESIS_BLOCK_NONCE=,
     GENESIS_TX1_HASH=bytes.fromhex(''),
-    GENESIS_TX2_NONCE=,
+    GENESIS_TX1_NONCE=,
     GENESIS_TX2_HASH=bytes.fromhex(''),
+    GENESIS_TX2_NONCE=,
 ```
 
 This concludes the configuration of our new network. Next, we will use this configuration to run our full nodes.
@@ -337,7 +338,7 @@ cat << EOF > .env1
 HEADLESS_HTTP_PORT=8000
 HEADLESS_NETWORK=testnet
 HEADLESS_SERVER=http://127.0.0.1:8081/v1a/
-HEADLESS_SEED_DEFAULT=<see>
+HEADLESS_SEED_DEFAULT=<seed>
 HEADLESS_TX_MINING_URL=http://127.0.0.1:8100/
 EOF
 
