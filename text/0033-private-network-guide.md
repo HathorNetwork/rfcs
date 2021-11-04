@@ -102,14 +102,14 @@ docker rm wallet-headless
 
 #### Important Note
 
-Note that we used a server from our public testnet in the config above. This was done because the hathor-wallet-headless needs it to be able to start a wallet and generate an address for it in the following commands. From now on, we won't need to do it anymore.
+Note that we used a server from our public testnet in the config above. This was done because the hathor-wallet-headless needs it to be able to start a wallet and generate an address for it.
 
-However, to make things easier, we use the same address prefix as the public testnet in the next sections when configuring our private network, since we used it to generate an address. Otherwise, we would need to make an address translation from one prefix to another.
+In the next section we will translate this public testnet address to an address for our private network.
 
 ### Creating the genesis block and transactions
 Now that we have an address, we will use it to create our genesis block and our two initial transactions.
 
-Run this code in a python shell inside our hathor-core Docker image, to create the output script for the genesis. Keep note of the returned value to be used in the next steps as the GENESIS_OUTPUT_SCRIPT.
+The following command runs a python shell inside our hathor-core Docker image, to create the output script for the genesis.
 
 You need to replace `<address>` with the address you got in previous steps.
 
@@ -128,10 +128,11 @@ print('GENESIS_OUTPUT_SCRIPT:', output)
 print('privatenet_address:', get_address_b58_from_bytes(privatenet_address))
 "
 ```
+Keep note of the returned values.
 
 From now on, everytime you need to input some address, you have to use the `privanet_address` we generated here.
 
-Now to configure the parameter of our new network, we create a new file in `~/hathor-private-tutorial/conf/privnet.py`, with the following content. Note that we need to replace the `GENESIS_OUTPUT_SCRIPT` variable from the previous command.
+Now to configure the parameters of our new network, we create a new file in `~/hathor-private-tutorial/conf/privnet.py`, with the following content. Note that we need to replace the `GENESIS_OUTPUT_SCRIPT` variable from the previous command.
 
 ```sh
 mkdir -p ~/hathor-private-tutorial/conf
@@ -297,11 +298,6 @@ When running the wallets, we will configure them to use this service for transac
 
 ## Running our wallets
 
-<!--
-We will run 2 wallet-headles to demonstrate the wallet functionality. They are basically wallets that run as a HTTP api and have most of the same functions as the desktop or mobile wallets.
-
-Each wallet-headless will be connected to one of our fullnodes dedicated to wallets (`fullnode-wallet-1` and `fullnode-wallet-2`). But more than one wallet can use the same fullnode without problem. -->
-
 We will run one wallet-headless to demonstrate the wallet functionality. It's basically a wallet that runs as a HTTP api and have most of the same functions as the desktop or mobile wallets.
 
 The first step is to clone the repo https://github.com/HathorNetwork/hathor-wallet-headless
@@ -346,31 +342,6 @@ curl -X POST -H "X-Wallet-Id: wallet1" --data "address=<address>" --data "value=
 ```
 
 Congratulations, you have successfully sent a transaction in the network, and now has a fully functional private network!
-
-
-<!-- ## Second wallet
-Run it with:
-
-```
-cat << EOF > .env2
-HEADLESS_HTTP_PORT=8001
-HEADLESS_NETWORK=testnet
-HEADLESS_SERVER=http://127.0.0.1:8082/v1a/
-HEADLESS_SEED_DEFAULT=<seed>
-EOF
-
-docker run -it --network="host" --env-file=.env2 hathornetwork/hathor-wallet-headless
-```
-
-Create the seed for the wallet. You will use it in the next command.
-```
-docker run --entrypoint npm hathornetwork/hathor-wallet-headless run generate_words
-```
-
-Start the wallet:
-```
-curl -X POST --data "wallet-id=wallet1" --data "seed=<seed>" http://localhost:8001/start
-``` -->
 
 
 # Running the Explorer
