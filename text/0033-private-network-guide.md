@@ -125,7 +125,7 @@ rm .env
 
 Note that we used a server from our public testnet in the config above. This was done because the hathor-wallet-headless needs it to be able to start a wallet and generate an address for it.
 
-In the next section we will translate this public testnet address to an address for our private network.
+The same address will work with our private network because we will be using the same type of addess as the public testnet. Otherwise, we would need to translate it.
 
 ### Creating the genesis block and transactions
 Now that we have an address, we will use it to create our genesis block and our two initial transactions.
@@ -151,7 +151,7 @@ output = P2PKH.create_output_script(address=privatenet_address).hex()
 print('GENESIS_OUTPUT_SCRIPT:', output)
 print('privatenet_address:', get_address_b58_from_bytes(privatenet_address))
 "
-``` 
+```
 
 From now on, everytime you need to input some address, you have to use the `privanet_address` we generated here.
 -->
