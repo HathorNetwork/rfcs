@@ -134,6 +134,9 @@ The following command runs a python shell inside our hathor-core Docker image, t
 
 You need to replace `<address>` with the address you got in the previous steps.
 
+<!-- Uncomment this when we need to use different versionBytes
+in the private network
+
 ```sh
 docker run -it --entrypoint python  hathornetwork/hathor-core -c "
 from hathor.transaction.scripts import P2PKH
@@ -148,10 +151,24 @@ output = P2PKH.create_output_script(address=privatenet_address).hex()
 print('GENESIS_OUTPUT_SCRIPT:', output)
 print('privatenet_address:', get_address_b58_from_bytes(privatenet_address))
 "
-```
-Keep note of the returned values.
+``` 
 
 From now on, everytime you need to input some address, you have to use the `privanet_address` we generated here.
+-->
+
+```sh
+docker run -it --entrypoint python  hathornetwork/hathor-core -c "
+from hathor.transaction.scripts import P2PKH
+import base58
+
+address = base58.b58decode('<address>')
+
+output = P2PKH.create_output_script(address=address).hex()
+print('GENESIS_OUTPUT_SCRIPT:', output)
+"
+```
+
+Keep note of the returned values.
 
 To configure the parameters of our new network, we create a new file in `~/hathor-private-tutorial/conf/privnet.py`, with the following content. Note that you should replace the `GENESIS_OUTPUT_SCRIPT` variable from the previous command.
 
@@ -162,9 +179,9 @@ cat << EOF > ~/hathor-private-tutorial/conf/privnet.py
 from hathor.conf.settings import HathorSettings
 
 SETTINGS = HathorSettings(
-    P2PKH_VERSION_BYTE=b'\x70',
-    MULTISIG_VERSION_BYTE=b'\x93',
-    NETWORK_NAME='privatenet-tutorial',
+    P2PKH_VERSION_BYTE=b'\x49',
+    MULTISIG_VERSION_BYTE=b'\x87',
+    NETWORK_NAME='privatenet',
     BOOTSTRAP_DNS=[],
     # Genesis stuff
     GENESIS_OUTPUT_SCRIPT=bytes.fromhex("<GENESIS_OUTPUT_SCRIPT>"),
@@ -186,7 +203,7 @@ from hathor.transaction import genesis
 
 settings = HathorSettings()
 
-# This should output 'privatenet-tutorial'
+# This should output 'privatenet'
 print('NETWORK', settings.NETWORK_NAME)
 
 for tx_name in ['BLOCK_GENESIS', 'TX_GENESIS1', 'TX_GENESIS2']:
@@ -251,22 +268,6 @@ This command configures the full node to:
 - Use the configuration file we create for the network in `hathor.conf.privnet`
 - Enable `wallet index`, which is needed to perform some kinds of operations in the API, like getting transactions information.
 
-
-#### Full node Wallet 2
-This full node will be named `fullnode-wallet-2` because the second wallet will use it. You can safely use one full node for both wallets if you want.
-
-```sh
-mkdir -p ~/hathor-private-tutorial/fullnode-wallet-2
-
-docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnode-wallet-2:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8082 --data /data --x-fast-init-beta --wallet-index --bootstrap tcp://127.0.0.1:40403
-```
-
-This command configures the full node to:
-- Expose its HTTP API on port 8082
-- Connect to `tcp://127.0.0.1:40403` (fullnode-main) to sync with the P2P network
-- Use `~/hathor-private-tutorial/fullnode-wallet-2` as its data directory in the host.
-- Use the configuration file we create for the network in `hathor.conf.privnet`
-- Enable `wallet index`, which is needed to perform some kinds of operations in the API, like getting transactions information.
 
 #### Fullnode Miner
 This full node will be named `fullnode-miner` because our miner will use it to mine blocks.
@@ -336,7 +337,7 @@ Run it with this, replacing `<seed>` with the seed from the beginning of the gui
 ```
 cat << EOF > .env1
 HEADLESS_HTTP_PORT=8000
-HEADLESS_NETWORK=testnet
+HEADLESS_NETWORK=privatenet
 HEADLESS_SERVER=http://127.0.0.1:8081/v1a/
 HEADLESS_SEED_DEFAULT=<seed>
 HEADLESS_TX_MINING_URL=http://127.0.0.1:8100/
