@@ -181,7 +181,7 @@ from hathor.conf.settings import HathorSettings
 SETTINGS = HathorSettings(
     P2PKH_VERSION_BYTE=b'\x49',
     MULTISIG_VERSION_BYTE=b'\x87',
-    NETWORK_NAME='private-testnet',
+    NETWORK_NAME='privatenet',
     BOOTSTRAP_DNS=[],
     # Genesis stuff
     GENESIS_OUTPUT_SCRIPT=bytes.fromhex("<GENESIS_OUTPUT_SCRIPT>"),
@@ -203,7 +203,7 @@ from hathor.transaction import genesis
 
 settings = HathorSettings()
 
-# This should output 'private-testnet'
+# This should output 'privatenet'
 print('NETWORK', settings.NETWORK_NAME)
 
 for tx_name in ['BLOCK_GENESIS', 'TX_GENESIS1', 'TX_GENESIS2']:
