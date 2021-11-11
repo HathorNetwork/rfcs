@@ -170,7 +170,7 @@ print('GENESIS_OUTPUT_SCRIPT:', output)
 
 Keep note of the returned values.
 
-To configure the parameters of our new network, we create a new file in `~/hathor-private-tutorial/conf/privnet.py`, with the following content. Note that you should replace the `GENESIS_OUTPUT_SCRIPT` variable from the previous command.
+To configure the parameters of our new network, we create a new file in `~/hathor-private-tutorial/conf/privnet.py`, with the following content. Note that we are using the `GENESIS_OUTPUT_SCRIPT` variable from the previous command.
 
 ```sh
 mkdir -p ~/hathor-private-tutorial/conf
@@ -181,7 +181,7 @@ from hathor.conf.settings import HathorSettings
 SETTINGS = HathorSettings(
     P2PKH_VERSION_BYTE=b'\x49',
     MULTISIG_VERSION_BYTE=b'\x87',
-    NETWORK_NAME='privatenet',
+    NETWORK_NAME='private-testnet',
     BOOTSTRAP_DNS=[],
     # Genesis stuff
     GENESIS_OUTPUT_SCRIPT=bytes.fromhex("<GENESIS_OUTPUT_SCRIPT>"),
@@ -203,7 +203,7 @@ from hathor.transaction import genesis
 
 settings = HathorSettings()
 
-# This should output 'privatenet'
+# This should output 'private-testnet'
 print('NETWORK', settings.NETWORK_NAME)
 
 for tx_name in ['BLOCK_GENESIS', 'TX_GENESIS1', 'TX_GENESIS2']:
@@ -268,7 +268,6 @@ This command configures the full node to:
 - Use the configuration file we create for the network in `hathor.conf.privnet`
 - Enable `wallet index`, which is needed to perform some kinds of operations in the API, like getting transactions information.
 
-
 #### Fullnode Miner
 This full node will be named `fullnode-miner` because our miner will use it to mine blocks.
 
@@ -327,7 +326,6 @@ When running the wallets, we will configure them to use this service for transac
 We will run one wallet-headless to demonstrate the wallet functionality. It's similar to any other wallet, but it is fully controlled by an HTTP API.
 
 The first step is to clone the Git repository from https://github.com/HathorNetwork/hathor-wallet-headless
-
 
 ## Running the wallet
 We will run the wallet using the seed generated at the beginning of the guide. This seed should have some balance since we configured it as the destination for the mining rewards.
