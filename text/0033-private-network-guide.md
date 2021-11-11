@@ -7,14 +7,14 @@
 
 # Summary
 
-This guide will show you how to run a local private Hathor network with its own full nodes, miner, wallets, and explorer. Note that a private network will be completely separated from Hathor's mainnet and testnet.
+This guide will show you how to run a local private Hathor network with its own full nodes, miner, wallet and explorer. Note that a private network will be completely separated from Hathor's mainnet and testnet.
 
 By the end of the guide, you will have a fully working private network with the following setup:
 
-- Four hathor-core full nodes connected between each other
+- Three hathor-core full nodes connected between each other
 - One cpu-miner mining blocks in the network
 - One tx-mining-service to be used by Wallets to mine transactions
-- Two instances of hathor-wallet-headless configured with different wallets
+- One instance of hathor-wallet-headless
 
 The diagram below shows the overall architecture of this private network:
 
