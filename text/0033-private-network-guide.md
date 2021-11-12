@@ -50,9 +50,9 @@ Here is a table summarizing the minimum requirements for each type of instance:
 
 |Type | Instances | CPU | RAM | Storage | Docker Image |
 |---  | ---:  | ---: | ---: | ---:     | --- |
-|Full node         | 4 | 4 | 8 GB | 4 GB | hathornetwork/hathor-core
-|Wallet            | 2 | 2 | 2 GB | 100 MB | hathornetwork/hathor-wallet-headless
-|Miner             | 1 | 2 | 1 GB | 100 MB | hathornetwork/cpuminer
+|Full node         | 3 | 4 | 8 GB | 4 GB | hathornetwork/hathor-core
+|Wallet            | 1 | 2 | 2 GB | 100 MB | hathornetwork/hathor-wallet-headless
+|Miner             | 2 | 2 | 1 GB | 100 MB | hathornetwork/cpuminer
 |Tx Mining Service | 1 | 2 | 1 GB | 100 MB | hathornetwork/tx-mining-service
 
 
@@ -99,7 +99,7 @@ HEADLESS_SERVER=https://node1.testnet.hathor.network/v1a/
 HEADLESS_SEED_DEFAULT=default
 EOF
 
-docker run -itd --name wallet-headless --network="host" --env-file=.env hathornetwork/hathor-wallet-headless
+docker run -itd --name wallet-headless -p 8000:8000 --env-file=.env hathornetwork/hathor-wallet-headless
 sleep 10
 ```
 
@@ -232,9 +232,14 @@ For more about additional options to customize your network, check out the last 
 
 ### Running the full-nodes
 
-We will run four full nodes. Each one will have a role in our setup, and we will name them accordingly.
+We will run three full nodes. Each one will have a role in our setup, and we will name them accordingly.
 
 We will set up a simple network with a main full node to which all other full nodes will connect and form a P2P network. Note that you can have whatever topology you need for your specific case.
+
+First thing is to create a Docker network so all components can communicate between them:
+```sh
+docker network create private-network-docker
+```
 
 #### Full node Main
 Our first full-node will be named `fullnode-main`. It will be our central full node, and all other full nodes will connect to it.
@@ -242,7 +247,7 @@ Our first full-node will be named `fullnode-main`. It will be our central full n
 ```sh
 mkdir -p ~/hathor-private-tutorial/fullnode-main
 
-docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnode-main:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8080 --listen tcp:40403 --data /data --x-fast-init-beta --wallet-index
+docker run -ti --network="private-network-docker" --name fullnode-main -p 40403:40403 -p 8080:8080 -v ~/hathor-private-tutorial/fullnode-main:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8080 --listen tcp:40403 --data /data --x-fast-init-beta --wallet-index
 ```
 
 This command configures the full node to:
@@ -258,7 +263,7 @@ This full node will be named `fullnode-wallet-1` because the first wallet will u
 ```sh
 mkdir -p ~/hathor-private-tutorial/fullnode-wallet-1
 
-docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnode-wallet-1:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8081 --data /data --x-fast-init-beta --wallet-index --bootstrap tcp://127.0.0.1:40403
+docker run -ti --network="private-network-docker" --name fullnode-wallet1 -p 8081:8081 -v ~/hathor-private-tutorial/fullnode-wallet-1:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8081 --data /data --x-fast-init-beta --wallet-index --bootstrap tcp://fullnode-main:40403
 ```
 
 This command configures the full node to:
@@ -274,7 +279,7 @@ This full node will be named `fullnode-miner` because our miner will use it to m
 ```sh
 mkdir -p ~/hathor-private-tutorial/fullnode-miner
 
-docker run -ti --network="host" -v ~/hathor-private-tutorial/fullnode-miner:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8083 --stratum 8093 --data /data --x-fast-init-beta --bootstrap tcp://127.0.0.1:40403
+docker run -ti --network="private-network-docker" --name fullnode-miner -p 8083:8083 -p 8093:8093 -v ~/hathor-private-tutorial/fullnode-miner:/data:consistent -v ~/hathor-private-tutorial/conf:/privnet/conf --env PYTHON_PATH=/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core run_node --cache --status 8083 --stratum 8093 --data /data --x-fast-init-beta --bootstrap tcp://fullnode-main:40403
 ```
 
 This command configures the full node to:
@@ -294,7 +299,7 @@ A Docker image of our CPU mining tool is available at https://hub.docker.com/r/h
 
 You should run it with the following command, replacing `<address>` with the same address we generated at the beginning of the guide:
 ```sh
-docker run -ti --network="host" hathornetwork/cpuminer -t 1 -a sha256d -o stratum+tcp://127.0.0.1:8093 --coinbase-addr <address>
+docker run -ti --network="private-network-docker" hathornetwork/cpuminer -t 1 -a sha256d -o stratum+tcp://fullnode-miner:8093 --coinbase-addr <address>
 ```
 
 This command connects the miner to our `fullnode-miner` at port 8093.
@@ -311,12 +316,12 @@ This is commonly used as an anti-spam mechanism. You can safely customize this o
 
 Run it like the following. You should replace the `<address>` with the same you generated at the beginning for the genesis block:
 ```sh
-docker run -it --network="host" hathornetwork/tx-mining-service http://127.0.0.1:8083 --address <address> --api-port 8100 --stratum-port 8101 --testnet
+docker run -it --network="private-network-docker" --name tx-mining-service -p 8100:8100 -p 8101:8101 hathornetwork/tx-mining-service http://fullnode-miner:8083 --address <address> --api-port 8100 --stratum-port 8101 --testnet
 ```
 
 Run a CPU miner for the TxMiningService, using the same address:
 ```sh
-docker run -ti --network="host" hathornetwork/cpuminer -t 1 -a sha256d -o stratum+tcp://127.0.0.1:8101 --coinbase-addr <address>
+docker run -ti --network="private-network-docker" hathornetwork/cpuminer -t 1 -a sha256d -o stratum+tcp://tx-mining-service:8101 --coinbase-addr <address>
 ```
 
 When running the wallets, we will configure them to use this service for transaction mining.
@@ -324,8 +329,6 @@ When running the wallets, we will configure them to use this service for transac
 ## Running the wallets
 
 We will run one wallet-headless to demonstrate the wallet functionality. It's similar to any other wallet, but it is fully controlled by an HTTP API.
-
-The first step is to clone the Git repository from https://github.com/HathorNetwork/hathor-wallet-headless
 
 ## Running the wallet
 We will run the wallet using the seed generated at the beginning of the guide. This seed should have some balance since we configured it as the destination for the mining rewards.
@@ -336,12 +339,12 @@ Run it with this, replacing `<seed>` with the seed from the beginning of the gui
 cat << EOF > .env1
 HEADLESS_HTTP_PORT=8000
 HEADLESS_NETWORK=privatenet
-HEADLESS_SERVER=http://127.0.0.1:8081/v1a/
+HEADLESS_SERVER=http://fullnode-wallet1:8081/v1a/
 HEADLESS_SEED_DEFAULT=<seed>
-HEADLESS_TX_MINING_URL=http://127.0.0.1:8100/
+HEADLESS_TX_MINING_URL=http://tx-mining-service:8100/
 EOF
 
-docker run -it --network="host" --env-file=.env1 hathornetwork/hathor-wallet-headless
+docker run -it --network="private-network-docker" -p 8000:8000 --env-file=.env1 hathornetwork/hathor-wallet-headless
 ```
 
 Start the wallet:
