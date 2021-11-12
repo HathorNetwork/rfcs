@@ -189,7 +189,7 @@ SETTINGS = HathorSettings(
     MIN_TX_WEIGHT_K=0,
     MIN_TX_WEIGHT_COEFFICIENT=0,
     MIN_TX_WEIGHT=8,
-    REWARD_SPEND_MIN_BLOCKS=20
+    REWARD_SPEND_MIN_BLOCKS=10
 )
 EOF
 ```
@@ -382,6 +382,8 @@ export REACT_APP_WS_URL=ws://localhost:8080/v1a/ws/
 
 npm start
 ```
+
+It should take some time for it to build and run the first time.
 
 Please note that the "Network" page of the Explorer will not work in this tutorial, because it needs additional backend services that we decided to not include here. The other features should work normally.
 
