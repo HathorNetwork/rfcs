@@ -327,8 +327,6 @@ When running the wallets, we will configure them to use this service for transac
 
 We will run one wallet-headless to demonstrate the wallet functionality. It's similar to any other wallet, but it is fully controlled by an HTTP API.
 
-The first step is to clone the Git repository from https://github.com/HathorNetwork/hathor-wallet-headless
-
 ## Running the wallet
 We will run the wallet using the seed generated at the beginning of the guide. This seed should have some balance since we configured it as the destination for the mining rewards.
 
