@@ -50,9 +50,9 @@ Here is a table summarizing the minimum requirements for each type of instance:
 
 |Type | Instances | CPU | RAM | Storage | Docker Image |
 |---  | ---:  | ---: | ---: | ---:     | --- |
-|Full node         | 4 | 4 | 8 GB | 4 GB | hathornetwork/hathor-core
-|Wallet            | 2 | 2 | 2 GB | 100 MB | hathornetwork/hathor-wallet-headless
-|Miner             | 1 | 2 | 1 GB | 100 MB | hathornetwork/cpuminer
+|Full node         | 3 | 4 | 8 GB | 4 GB | hathornetwork/hathor-core
+|Wallet            | 1 | 2 | 2 GB | 100 MB | hathornetwork/hathor-wallet-headless
+|Miner             | 2 | 2 | 1 GB | 100 MB | hathornetwork/cpuminer
 |Tx Mining Service | 1 | 2 | 1 GB | 100 MB | hathornetwork/tx-mining-service
 
 
