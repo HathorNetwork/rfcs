@@ -49,7 +49,7 @@ The most common use case is to represent a digital asset, then the NFT data usua
 
 ## Metadata
 
-Most NFTs also need extra data besides just the digital asset URL. The metadata standard is important to be followed in order to help future platform integrations with Hathor NFTs. This standard was inspired by [OpenSea metadata standard](https://docs.opensea.io/docs/metadata-standards).
+Most NFTs also need extra data besides just the digital asset URL. The metadata standard is important to be followed in order to help future platform integrations with Hathor NFTs. This standard was inspired by [OpenSea metadata standard](https://docs.opensea.io/docs/metadata-standards) and [Metaplex Token Metadata Standard](https://docs.metaplex.com/nft-standard).
 
 If the NFT requires a metadata, the output script data saved on blockchain **MUST** be the metadata URL in an immutable protocol (e.g. ipfs as explained in the last section), e.g. ipfs://ipfs/<hash>/metadata.json.
 
@@ -69,14 +69,43 @@ The metadata should have the following JSON structure:
         "type": "string",
         "description": "A URL pointing to an immutable resource with a digital asset to which this token represents"
     },
+    "collection": {
+        "type": Object{CollectionObject},
+        "description": "Additional details are recommended for NFT collections with multiple unique assets under one single family and symbol."
+    }
     "attributes": {
         "type": "Array<AttributeObject>",
         "description": "These are the extra attributes for the digital asset. It's an array of AttributeObject to make it as flexible as possible."
     },
+    "royalty": {
+        "type": "Object<RoyaltyObject>",
+        "description": "Required fields that would be utilised to pay royalty to original creators in secondary sales conducted by the exchange that adheres Hathor Metadata standards, after minting (primary sale)."
+    },
+    "external_info": {
+        "type": "Object{InfoObject}",
+        "description": "Additional information for collection, to be used by exchange or custom NFT assets, e.g. Gaming Assets"
+    }
 }
 ```
 
-The AttributeObject has the following JSON structure:
+- The CollectionObject has the following JSON structure:
+
+```
+"name": {
+    "type": "string",
+    "description": "Name of the NFT asset, e.g. Hippos #1"
+},
+"family": {
+    "type": "string",
+    "description": "Represents the family of the NFT collection, e.g. HathorLand DAO"
+},
+"symbol": {
+    "type": "string",
+    "description": "Symbol of the NFT asset within 2-5 characters, e.g. HIPPO"
+}
+```
+
+- The AttributeObject has the following JSON structure:
 
 ```
 {
@@ -93,6 +122,54 @@ The AttributeObject has the following JSON structure:
 
 The AttributeObject may have more attributes than the ones described above but those are the required ones.
 
+- The RoyaltyObject has the following JSON structure:
+
+```
+"creator_royalty_basis_points": {
+    "type": "integer",
+    "description": "Royalties percentage awarded to creators (basis points), e.g. 500"
+},
+"creators": {
+    "type": "Array<CreatorObject>",
+    "description": "Array of all creators involved in the project & their royalty bps."
+}
+```
+500 Basis Points mean 5% royalty, One basis point is equal to 1/100th of 1%. More info on BPS at [Investopedia](https://www.investopedia.com/terms/b/basispoint.asp)
+
+- The RoyaltyObject<**CreatorObject**> has the following JSON structure:
+
+```
+{
+    "address": {
+        "type": "string",
+        "description": "Address of the wallet in which royalty fees will be sent for secondary sales."
+    },
+    "share": {
+        "type": "integer",
+        "description": "Amount of royalty for each creator in bps, totaling a sum of 100."
+    }
+}
+```
+
+The CreatorObject may have more addresses than the ones described above, and the royalties will be split as per the share stated.
+
+- The InfoObject has the following JSON structure:
+
+```
+"animation_url": {
+    "type": "url",
+    "description": "URL to a non-immutable file hosted on CDN, given priority if the immutable file type is 3D object or isn't curently supported by the exchange or wallet preview."
+},
+"external_url": {
+    "type": "url",
+    "description": "URL to external website of the related project, e.g. Game website of the NFT asset."
+},
+"custom_fields": {
+    "type": "string | decimal",
+    "description": "URLs to social handles or preferably used for linking additional assets to a custom NFT token, e.g. Game Character Identifier, Discord Url"
+}
+```
+
 ### Metadata example
 
 ```
@@ -100,6 +177,11 @@ The AttributeObject may have more attributes than the ones described above but t
     "name": "Gandalf",
     "description": "A wizard, one of the Istari order, and the leader and mentor of the Fellowship of the Ring",
     "file": "ipfs://ipfs/QmbuthvFV2EjvfmWXxt2L83PwPPwbjjggBhVsrEB7AXW123/gandalf.png",
+    "collection": {
+       "name": "Gandalf",
+       "family": "HathorLand DAO",
+       "symbol": "HIPPO"
+    },
     "attributes": [
         {
             "type": "rarity",
@@ -117,7 +199,30 @@ The AttributeObject may have more attributes than the ones described above but t
             "type": "ring",
             "value": 0
         }
-    ]
+    ],
+   "royalty": {
+        "creator_royalty_basis_points": 500,
+        "creators": [
+              {
+                "address": "H7t2eNhFNeH3hrUAJj4AAu9amtWmPT4fLB",
+                "share": 95
+              },
+              {
+                "address": "HNBuYEsJYznh5zZGx4eDn2NXYuiPpgKBgH",
+                "share": 5
+              },
+              {
+                "address": "RaNd0MsJYznh5zYOyoDn2NXYuiPAdDre5s",
+                "share": 0
+              }
+            ]
+        },
+    "external_info": {
+       "animation_url": "https://www.arweave.net/efgh1234?ext=mp4",
+       "external_url": "https://hathor.land/dao",
+       "dna": "6c191e41-5bfe-432f-9e4b-ddcc718dce92",
+       "discord": "https://discord.gg/87bYu52gDW"
+   }
 }
 ```
 
@@ -145,6 +250,14 @@ The first output of a NFT transaction will contain the script with the data stri
 There are some special cases where the NFT token won't follow the proposed standard, e.g. if it needs more than one data output. In that case, our wallets and explorer won't automatically identify this token as NFT.
 
 Given that this situation is expected to be rare, we will handle them manually. The NFT creator will need to get in touch with Hathor team, in order to have the token identified as an NFT on the official Hathor explorer. Besides that, as long as the digital asset's URL is immutable, it should be approved in the review and should be shown in Hathor's Public Explorer like any other standard NFT.
+
+## Drawbacks
+
+- The main drawback is increased storage usage. File to be stored on immutable storage will cost more than prior standard.
+- Repetition of "name" property twice in CollectionObject.
+- Instead of employing a standard percentage, using Basis Points for royalties may be like going the additional mile.
+- External info may be completely unnecessary for regular projects & don't seem to hold much value for both exchange and creator, hence it can be optional for creators to include in metadata.
+- Various projects have already minted without this enhanced NFT metadata standard.
 
 ## FAQ
 
