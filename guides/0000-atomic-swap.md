@@ -6,7 +6,7 @@ For instance, imagine you want to buy an NFT and pay with HTR. This can be done 
 
 ### Operations flow
 
-In the example described here we will assume that there is a central backend to coordinate the atomic swap. Let's assume we have two users (user1 and user2), each one with their own wallets (W1 and W2) in their devices and they want to swap token1 and token2, i.e. user1 will send token1 from W1 to W2 and user2 will send token2 from W2 to W2. See the image below.
+In the example described here we will assume that there is a central backend to coordinate the atomic swap. Let's assume we have two users (user1 and user2), each one with their own wallets (W1 and W2) in their devices and they want to swap token1 and token2, i.e. user1 will send token1 from W1 to W2 and user2 will send token2 from W2 to W1. See the image below.
 
 ![atomic swap wallets drawio](https://user-images.githubusercontent.com/3298774/145630746-ca4c0011-2e01-4574-8143-f3c64c214f4e.png)
 
