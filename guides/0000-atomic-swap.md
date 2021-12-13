@@ -14,29 +14,29 @@ The first thing to do is to define how many tokens will be exchanged, i.e. user1
 
 #### Step 1
 
-User1 (that will send token1 and receive token2) will get utxos available of token1 and decide the ones that will use to send the amount needed to user2. Besides that, user1 will also decide the outputs that he wants to receive of token2 with amount and address. In this step it's important to also add any change output for token1, if needed.
+User1 (that will send token1 and receive token2) will get utxos available of token1 and decide the ones that will use to send the amount needed to user2. Besides that, user1 will also decide the outputs that he wants to receive of token2 with amount and address. In this step it's important to also add any change output for token1, if needed. Wallet1 then sends this data to the backend service.
 
 #### Step 2
 
-Step 2 is similar to the first one and can happen concurrently. User2 will get the utxos available of token2 and decide the ones that will be used. He will also define the outputs with amount and address to receive token1 from user1. In this step it's important to also add any change output for token2, if needed.
+Step 2 is similar to the first one and can happen concurrently. User2 will get the utxos available of token2 and decide the ones that will be used. He will also define the outputs with amount and address to receive token1 from user1. In this step it's important to also add any change output for token2, if needed. Then this data will also be sent to the backend.
 
 #### Step 3
 
-The data on step 1 and step 2 will be used to create a transaction data with all inputs and outputs from both wallets. With this transaction data, we can start signing the inputs. The signature step will happen in two parts, one for user1 and one for user2.
+The data on step 1 and step 2 will be used to create a transaction data with all inputs and outputs from both wallets. With this transaction data, we can start signing the inputs. The signature step will happen in two parts, one for user1 and one for user2, and once again steps 4 and 5 can happen concurrently.
 
 #### Step 4
 
-User1 will receive the data with all inputs and outputs with none of the inputs signed. He will check that the outputs of token2 that he expects to receive are correct (amount, address and timelock) and will sign the inputs that belong to his wallet. After that he will send his partial data to user2.
+User1 will receive the data with all inputs and outputs with none of the inputs signed. He will check that the outputs of token2 that he expects to receive are correct (amount, address and timelock) and will sign the inputs that belong to his wallet. After that he will send the signed inputs back to the backend.
 
 #### Step 5
 
-User2 will receive the data with all inputs and outputs and only the inputs that belong to user1 will be signed. He will then check if the outputs of token1 that he expects to receive are correct (amount, address and timelock) and will sign the inputs that belong to his wallet. User1 don't need to worry about user2 changing the outputs before signing because, if that happens, his signature made on step 4 won't be valid anymore. After this step the transaction is ready for the final step.
+User2 will receive the data with all inputs and outputs with none of the inputs signed (if this step is being done concurrently with step 4). He will then check if the outputs of token1 that he expects to receive are correct (amount, address and timelock) and will sign the inputs that belong to his wallet. User1 don't need to worry about user2 changing the outputs before signing because, if that happens, his signature made on step 4 won't be valid anymore. After this step the transaction is ready for the final step.
 
 #### Step 6
 
-On step 6 the transaction will be completed with weight and timestamp, then will be sent to be mined and finally pushed to the network.
+On step 6 the backend already has the full data (all outputs and inputs with the signatures) to finish the operation. The transaction will be completed with weight and timestamp, then will be sent to be mined and finally pushed to the network.
 
-![atomic swap flow drawio (1)](https://user-images.githubusercontent.com/3298774/145630899-3d095687-061a-49f5-84f1-34e18a324660.png)
+![atomic swap flow drawio](https://user-images.githubusercontent.com/3298774/145856624-19ebd557-f160-43d5-9267-60f55e6c4f74.png)
 
 ### Example code
 
