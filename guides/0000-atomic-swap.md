@@ -68,54 +68,98 @@ This code below should work only with hathor wallet-lib v0.29.1 or above.
 
 In the example code below we start two independent wallets, each one of them with a separated storage and we create a transaction that has inputs from both wallets and they exchange different tokens. In a real application, each wallet will be in a different device and this operation must be done asyncronously.
 
+1. Call node in a folder that you have wallet-lib installed in `node_modules`
+```bash
+> node
 ```
-// You must call node in a folder that you have wallet-lib installed in node_modules
-node
 
-const hl = require('@hathor/wallet-lib')
-const conn1 = new hl.Connection({network: 'mainnet', servers: ['https://node1.mainnet.hathor.network/v1a/']});
-const conn2 = new hl.Connection({network: 'mainnet', servers: ['https://node1.mainnet.hathor.network/v1a/']});
+2. Import the hathor wallet-lib and start both wallets that will take part on the atomic swap
+
+```javascript
+const hathorLib = require('@hathor/wallet-lib')
+const conn1 = new hathorLib.Connection({network: 'mainnet', servers: ['https://node1.mainnet.hathor.network/v1a/']});
+const conn2 = new hathorLib.Connection({network: 'mainnet', servers: ['https://node1.mainnet.hathor.network/v1a/']});
 const pin = '123';
 const password = '123';
-const w1 = new hl.HathorWallet({connection: conn1, password, pinCode: pin, seed: seed1});
-const w2 = new hl.HathorWallet({connection: conn2, password, pinCode: pin, seed: seed2});
+const wallet1 = new hathorLib.HathorWallet({connection: conn1, password, pinCode: pin, seed: seed1});
+const wallet2 = new hathorLib.HathorWallet({connection: conn2, password, pinCode: pin, seed: seed2});
 
 // Start wallets
-w1.start()
-w2.start()
+wallet1.start()
+wallet2.start()
+```
 
-// Verify is wallets are ready
-w1.isReady()
-w2.isReady()
+3. Verify that wallets are ready
 
-// Get available utxos for each wallet and each token
-w1.getUtxos({ token: token1 })
-w2.getUtxos({ token: token2 })
+```javascript
+wallet1.isReady()
+wallet2.isReady()
+```
 
-// Create the tokens, inputs and outputs arrays with change outputs already
+4. Get available utxos for each wallet and each token
+
+```javascript
+wallet1.getUtxos({ token: token1 })
+wallet2.getUtxos({ token: token2 })
+```
+
+5. Create the tokens, inputs and outputs arrays with change outputs already
+```javascript
 const tokens = [token1, token2]
 
 // With the data from the get utxos method you will fill the inputs objects
 // in the example below we will swap token1 from wallet1 with token2 from wallet2. token1 will be sent from a single utxo and token2 will be sent from 2 utxos.
+const inputs = [{
+  tx_id: txId1,
+  index: index1,
+  token: token1,
+  address: address1,
+}, {
+  tx_id: txId2,
+  index: index2,
+  token: token2,
+  address: address2,
+}, {
+  tx_id: txId3,
+  index: index3,
+  token: token2,
+  address: address3,
+}];
 
-const inputs = [{tx_id: txId1, index: index1, token: token1, address: address1}, {tx_id: txId2, index: index2, token: token2, address: address2}, {tx_id: txId3, index: index3, token: token2, address: address3}]
+const outputs = [{
+  address: address4,
+  value: value1,
+  token: token1,
+  tokenData: 1,
+}, {
+  address: address5,
+  value: value2,
+  token: token2,
+  tokenData: 2
+}];
 
-const outputs = [{address: address4, value: value1, token: token1, tokenData: 1}, {address: address5, value: value2, token: token2, tokenData: 2}]
+const data = {
+  tokens,
+  inputs,
+  outputs,
+};
 
-const data = {tokens, inputs, outputs}
-hl.transaction.completeTx(data);
+hathorLib.transaction.completeTx(data);
+```
 
-// Sign inputs
-const dataToSign = hl.transaction.dataToSign(data);
-hl.storage.setStore(w1.store);
-hl.transaction.signTx(data, dataToSign, pin);
+6. Sign the inputs with each wallet by loading their storage on the hathorLib
 
-hl.storage.setStore(w2.store);
-hl.transaction.signTx(data, dataToSign, pin);
+```javascript
+const dataToSign = hathorLib.transaction.dataToSign(data);
+hathorLib.storage.setStore(wallet1.store);
+hathorLib.transaction.signTx(data, dataToSign, pin);
 
-const transaction = hl.helpersUtils.createTxFromData(data, new hl.Network('mainnet'));
+hathorLib.storage.setStore(wallet2.store);
+hathorLib.transaction.signTx(data, dataToSign, pin);
+
+const transaction = hathorLib.helpersUtils.createTxFromData(data, new hathorLib.Network('mainnet'));
 transaction.prepareToSend()
 
-const sendTxObj = new hl.SendTransaction({ transaction })
+const sendTxObj = new hathorLib.SendTransaction({ transaction })
 await sendTxObj.runFromMining();
 ```
