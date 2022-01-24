@@ -175,7 +175,7 @@ Input: we need an HTR input with at least 10 HTR. Let's say our input has 10 HTR
 | Output | Token uid | Token authority | Amount | Script         | Description |
 |--------|-----------|-----------------|--------|----------------| ------------|
 | 0      | TX0.hash  | 0               | 1000   | P2PKH (ADDR_1) | This is the first mint |
-| 1      | TX0.hash  | 0b0011          | -      | P2PKH (ADDR_1) | Output with mint and melt authorities |
+| 1      | TX0.hash  | 0b0011          | -      | P2PKH (ADDR_2) | Output with mint and melt authorities |
 
 2. Mint operation (TX1)
 
