@@ -81,7 +81,7 @@ You can only transfer authorities that you have. So an UTXO with just melt autho
 
 On the outputs, the new `token_data` field takes 1 byte and merges the authority bit and token uid index. If the left-most bit is 1, it indicates this is an authority output and the `value` field should be interpreted for authority flags, as described above. A few examples:
 
-0b10000001: an authority ouput for token with index 1;  
+0b10000001: an authority output for token with index 1;
 0b00000001: a regular output for token with index 1;  
 0b00000000: a regular output for token with index 0 (HTR);  
 0b10000000: authority output for HTR - _INVALID!_  
@@ -126,7 +126,7 @@ This is important because the new tokens outputs reference the token with index 
 
 ### Data
 
-This transaction has the `data` field, used for storing aditional information about the token. We have a version for this field to indicate what is the expected information in the data. The idea is to allow adding more fields in the future while maintaining backwards compatibility.
+This transaction has the `data` field, used for storing additional information about the token. We have a version for this field to indicate what is the expected information in the data. The idea is to allow adding more fields in the future while maintaining backwards compatibility.
 
 On version 1, we store the token name and symbol. Names have between 4 and 30 bytes, while symbols have 2 to 5 bytes. Both can only contain UTF-8 characters, meaning the node will reject any name or symbol which is not a valid UFT-8 string. The format of this field is `<version><name_length><name><symbol_length><symbol>`, where `version`, `name_length` and `symbol_length` are 1-byte unsigned integers.
 
@@ -134,7 +134,7 @@ On version 1, we store the token name and symbol. Names have between 4 and 30 by
 
 In the examples bellow, we will add the token uid alongside the UTXOs so it's easier to follow. In practice, the UTXO only has an index pointing to the token uid in the tx token list.
 
-We'll also consider that we control addresses of the form ADDR_N (ADDR_1, ADDR_2, etc).  
+We'll also consider that we control addresses of the form ADDR_N (ADDR_1, ADDR_2, etc).
 
 For the output scripts, we use P2PKH (ADDR_N) for the usual pay-to-public-key-hash script with address ADDR_N. This means that whoever wants to spend this UTXO needs to control ADDR_N.
 
@@ -174,8 +174,8 @@ Input: we need an HTR input with at least 10 HTR. Let's say our input has 10 HTR
 
 | Output | Token uid | Token authority | Amount | Script         | Description |
 |--------|-----------|-----------------|--------|----------------| ------------|
-| 0      | 1         | 0               | 1000   | P2PKH (ADDR_1) | This is the first mint |
-| 1      | 1         | 0b0011          | -      | P2PKH (ADDR_2) | Output with mint and melt authorities |
+| 0      | TX0.hash  | 0               | 1000   | P2PKH (ADDR_1) | This is the first mint |
+| 1      | TX0.hash  | 0b0011          | -      | P2PKH (ADDR_2) | Output with mint and melt authorities |
 
 2. Mint operation (TX1)
 
@@ -188,7 +188,7 @@ Input: TX0, 1 (we're spending the second output of the above transaction)
 
 This mints new tokens and sends it to ADDR_3. It breaks regular consensus rules but, as we're spending an UTXO which has mint capability, that's valid. In this case, all tokens were sent to ADDR_3, but we could have several outputs sending it to different addresses.
 
-We also created a new authority UTXO (with mint/melt authority) and assigned it to ADDR_4. This means that new tokens might be minted (or melted) by whoever controls ADDR_3.
+We also created a new authority UTXO (with mint/melt authority) and assigned it to ADDR_4. This means that new tokens might be minted (or melted) by whoever controls ADDR_4.
 
 After the tokens have been minted, they can be exchanged normally, as any HTR is.
 
