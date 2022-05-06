@@ -81,7 +81,7 @@ The metadata should have the following JSON structure:
     },
     "royalty": {
         "type": "Object<RoyaltyObject>",
-        "description": "Object with fields that would be utilised to pay royalty to original creators in secondary sales conducted by the exchange that adheres Hathor Metadata standards, after minting (primary sale)."
+        "description": "Object with fields that would be utilised to pay royalty to original creators in secondary sales conducted by marketplaces that adheres Hathor Metadata standards, after minting (primary sale)."
     },
     "external_url": {
         "type": "string",
