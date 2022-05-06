@@ -2,7 +2,9 @@
 - Start Date: 2021-08-02
 - RFC PR: https://github.com/HathorNetwork/rfcs/pull/32
 - Hathor Issue: (leave this empty)
-- Author: Pedro Ferreira <pedro@hathor.network>
+- Author: Pedro Ferreira <pedro@hathor.network>, Sharaddition
+- Revision: 2
+- Last updated date: 2022-05-06
 
 # Summary
 [summary]: #summary
@@ -49,7 +51,7 @@ The most common use case is to represent a digital asset, then the NFT data usua
 
 ## Metadata
 
-Most NFTs also need extra data besides just the digital asset URL. The metadata standard is important to be followed in order to help future platform integrations with Hathor NFTs. This standard was inspired by [OpenSea metadata standard](https://docs.opensea.io/docs/metadata-standards).
+Most NFTs also need extra data besides just the digital asset URL. The metadata standard is important to be followed in order to help future platform integrations with Hathor NFTs. This standard was inspired by [OpenSea metadata standard](https://docs.opensea.io/docs/metadata-standards) and [Metaplex Token Metadata Standard](https://docs.metaplex.com/token-metadata/Versions/v1.0.0/nft-standard).
 
 If the NFT requires a metadata, the output script data saved on blockchain **MUST** be the metadata URL in an immutable protocol (e.g. ipfs as explained in the last section), e.g. ipfs://ipfs/<hash>/metadata.json.
 
@@ -69,14 +71,49 @@ The metadata should have the following JSON structure:
         "type": "string",
         "description": "A URL pointing to an immutable resource with a digital asset to which this token represents"
     },
+    "collection": {
+        "type": "Object<CollectionObject>",
+        "description": "Additional details are recommended for NFT collections with multiple unique assets under one single family and symbol."
+    },
     "attributes": {
         "type": "Array<AttributeObject>",
         "description": "These are the extra attributes for the digital asset. It's an array of AttributeObject to make it as flexible as possible."
     },
+    "royalty": {
+        "type": "Object<RoyaltyObject>",
+        "description": "Object with fields that would be utilised to pay royalty to original creators in secondary sales conducted by the exchange that adheres Hathor Metadata standards, after minting (primary sale)."
+    },
+    "external_url": {
+        "type": "string",
+        "description": "This is the URL that will appear with the asset in the marketplaces and will direct the users to view the item on your site."
+    },
+    "animation_url": {
+        "type": "string",
+        "description": "URL to a file that will be used as a preview of the NFT in the marketplaces or wallet. This is optional, and if doesn't exist, the file field will be used."
+    }
 }
 ```
 
-The AttributeObject has the following JSON structure:
+- The CollectionObject has the following JSON structure:
+
+```
+{
+    "name": {
+        "type": "string",
+        "description": "Name of the collection, e.g. Hippos"
+    },
+    "family": {
+        "type": "string",
+        "description": "Represents the family of the NFT collection, e.g. HathorLand DAO"
+    },
+    "symbol": {
+        "type": "string",
+        "description": "Symbol of the NFT collection within 2-5 characters, e.g. HIPPO"
+    }
+}
+```
+
+- The AttributeObject has the following JSON structure:
 
 ```
 {
@@ -93,6 +130,38 @@ The AttributeObject has the following JSON structure:
 
 The AttributeObject may have more attributes than the ones described above but those are the required ones.
 
+- The RoyaltyObject has the following JSON structure:
+
+```
+{
+    "fee_basis_points": {
+        "type": "integer",
+        "description": "Royalties percentage awarded to creators (basis points), e.g. 500, which means 5%."
+    },
+    "creators": {
+        "type": "Array<CreatorObject>",
+        "description": "Array of all creators involved in the project & their royalty bps."
+    }
+}
+```
+
+500 Basis Points mean 5% royalty, One basis point is equal to 1/100th of 1%. More info on BPS at [Investopedia](https://www.investopedia.com/terms/b/basispoint.asp)
+
+- The CreatorObject has the following JSON structure:
+
+```
+{
+    "address": {
+        "type": "string",
+        "description": "Address of the wallet in which royalty fees will be sent for secondary sales."
+    },
+    "share": {
+        "type": "integer",
+        "description": "Amount of royalty for each creator in bps, totaling a sum of 10000."
+    }
+}
+```
+
 ### Metadata example
 
 ```
@@ -100,6 +169,11 @@ The AttributeObject may have more attributes than the ones described above but t
     "name": "Gandalf",
     "description": "A wizard, one of the Istari order, and the leader and mentor of the Fellowship of the Ring",
     "file": "ipfs://ipfs/QmbuthvFV2EjvfmWXxt2L83PwPPwbjjggBhVsrEB7AXW123/gandalf.png",
+    "collection": {
+       "name": "Wizards",
+       "family": "HathorLand DAO",
+       "symbol": "WZD"
+    },
     "attributes": [
         {
             "type": "rarity",
@@ -117,7 +191,26 @@ The AttributeObject may have more attributes than the ones described above but t
             "type": "ring",
             "value": 0
         }
-    ]
+    ],
+    "royalty": {
+        "fee_basis_points": 500,
+        "creators": [
+            {
+              "address": "H7t2eNhFNeH3hrUAJj4AAu9amtWmPT4fLB",
+              "share": 9500
+            },
+            {
+              "address": "HNBuYEsJYznh5zZGx4eDn2NXYuiPpgKBgH",
+              "share": 500
+            },
+            {
+              "address": "RaNd0MsJYznh5zYOyoDn2NXYuiPAdDre5s",
+              "share": 0
+            }
+        ]
+    },
+    "animation_url": "https://www.arweave.net/efgh1234?ext=mp4",
+    "external_url": "https://hathor.land/dao"
 }
 ```
 
