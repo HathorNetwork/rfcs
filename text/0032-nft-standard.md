@@ -102,13 +102,13 @@ The metadata should have the following JSON structure:
         "type": "string",
         "description": "Name of the collection, e.g. Hippos"
     },
-    "family": {
-        "type": "string",
-        "description": "Represents the family of the NFT collection, e.g. HathorLand DAO"
-    },
     "symbol": {
         "type": "string",
         "description": "Symbol of the NFT collection within 2-5 characters, e.g. HIPPO"
+    },
+    "family": {
+        "type": "string",
+        "description": "Represents the family of the NFT collection, e.g. HathorLand DAO"
     }
 }
 ```
@@ -145,7 +145,7 @@ The AttributeObject may have more attributes than the ones described above but t
 }
 ```
 
-500 Basis Points mean 5% royalty, One basis point is equal to 1/100th of 1%. More info on BPS at [Investopedia](https://www.investopedia.com/terms/b/basispoint.asp)
+500 Basis Points mean 5% royalty, One basis point is equal to 1/100th of 1%. More info on BPS at [Investopedia](https://www.investopedia.com/terms/b/basispoint.asp).
 
 - The CreatorObject has the following JSON structure:
 
@@ -171,8 +171,8 @@ The AttributeObject may have more attributes than the ones described above but t
     "file": "ipfs://ipfs/QmbuthvFV2EjvfmWXxt2L83PwPPwbjjggBhVsrEB7AXW123/gandalf.png",
     "collection": {
        "name": "Wizards",
-       "family": "HathorLand DAO",
-       "symbol": "WZD"
+       "symbol": "WZD",
+       "family": "HathorLand DAO"
     },
     "attributes": [
         {
