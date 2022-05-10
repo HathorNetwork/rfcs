@@ -81,15 +81,15 @@ The metadata should have the following JSON structure:
     },
     "royalty": {
         "type": "Object<RoyaltyObject>",
-        "description": "Object with fields that would be utilised to pay royalty to original creators in secondary sales conducted by marketplaces that adheres Hathor Metadata standards, after minting (primary sale)."
+        "description": "Object with fields that would be utilised to pay royalties to original creators in secondary sales conducted by marketplaces that adheres to Hathor Metadata standards, after minting (primary sale)."
     },
     "external_url": {
         "type": "string",
-        "description": "This is the URL that will appear with the asset in the marketplaces and will direct the users to view the item on your site."
+        "description": "This is the URL that will appear with the asset in the marketplaces and will direct users to view the NFT on the creator's (or some other) website."
     },
     "animation_url": {
         "type": "string",
-        "description": "URL to a file that will be used as a preview of the NFT in the marketplaces or wallet. This is optional, and if doesn't exist, the file field will be used."
+        "description": "URL to a file that will be used as a preview of the NFT in the marketplaces or wallet. If not set, the file field may be used."
     }
 }
 ```
@@ -157,10 +157,14 @@ The AttributeObject may have more attributes than the ones described above but t
     },
     "share": {
         "type": "integer",
-        "description": "Amount of royalty for each creator in bps, totaling a sum of 10000."
+        "description": "Amount of royalty for each creator, in bps."
     }
 }
 ```
+
+The sum of the shares should *always* total 10000 bps, which corresponds to 100%.
+
+For an NFT with royalties of 10% (`fee_basis_points` = 1000 bps) and two creators, one receiving 40% of the royalties and the other 60%, the shares are 4000 and 6000. If there were 3 creators, each receiving 30%, 20% and 50%, the shares would be 3000, 2000 and 5000.
 
 ### Metadata example
 
@@ -213,6 +217,8 @@ The AttributeObject may have more attributes than the ones described above but t
     "external_url": "https://hathor.land/dao"
 }
 ```
+
+In the example above we have one creator with 0 royalty shares. The idea is just to identify this address as a creator of the NFT but it won't receive any royalties.
 
 ## Deposit & Fee
 
