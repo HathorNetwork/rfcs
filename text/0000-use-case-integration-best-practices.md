@@ -8,43 +8,16 @@
 # Summary
 [summary]: #summary
 
-This document presents best practices for use cases that integrate with the Hathor Network, in order to improve the reliability of their operation.
+This document presents security best practices for use cases that integrate with the Hathor Network, in order to improve the reliability of their operation.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-There are multiple ways that a use case can integrate with Hathor, here is a basic architecture of a common integration.
+There are multiple ways that a use case can integrate with Hathor, here is a common architecture compliant to our recommendations
 
 - The use case has a software that runs operations offchain and is used by its customer.
-- This software connects with a headless wallet, that executes operations in the Hathor network.
-- The headless wallet is connected to a full node, that belongs to the Hathor peer-to-peer network.
-
-<pre>
-┌─────────────┐      ┌──────────┐                     ┌─────────────┐        ┌─────────────┐
-│             │      │          │◀────────────────────│             │        │             │
-│  Hathor     │      │ Headless │                     │  Use Case   │        │  Customer   │
-│  Full Node  │◀────▶│  Wallet  │                     │  Software   │◀──────▶│             │
-│             │      │          │────────────────────▶│             │        │             │
-└─────────────┘      └──────────┘                     └─────────────┘        └─────────────┘
-</pre>
-
-## Run more than one node
-
-Even though the architecture described above works fine for a simple use case, we strongly recommend any use case to run more than one node, in order to increase the reliability of the operation.
-
-During normal network activity, any transaction will be propagated through all peers and they will get to the same consensus. However, there are some situations where this might not be true, e.g. if an attack is happening to a single peer. To improve the reliability of the operation at any moment, it's important that all use cases run more than one full node and they **can't be connected among them**, only to the rest of the network.
-
-Let's assume an exchange wants to run nodes to identify deposits in the Hathor network, so a recommended approach for the integration would be to run at least two full nodes (node1 and node2), which are not connected between them (node1 must have node2 in the blacklist and vice versa). In that architecture, if any deposit is identified in node1, then the exchange must check that it's also a valid transaction in node2 and in one of the public nodes. With this approach, if one of the nodes is compromised and with a different consensus/state, an alert must be raised, so we must investigate what happened.
-
-### Validate new transactions on more than one full node before accepting them
-
-When running more than one node, any new transaction must be accepted only after validating that it's a valid transaction in all the nodes.
-
-### Validate all your full nodes have the same best block
-
-It's also important to regularly check if all nodes have the same best block. If they have different best blocks, this might be a clue that one of the nodes could be a target of an attack because is running a separate fork of the blockchain.
-
-### Recommended architecture
+- This software connects to a headless wallet which communicates with a full node. The full node is connected to the Hathor's p2p network.
+- The headless wallet will handle all events from the full node to keep its balance and transaction history updated. The headless software have APIs to manage a wallet, e.g. get addresses, create and push transactions to the network, create new tokens, and some other features described in the project [repository](https://github.com/HathorNetwork/hathor-wallet-headless).
 
 <pre>
                        ┌─────────────┐      ┌──────────┐                     ┌─────────────┐        ┌─────────────┐
@@ -69,23 +42,44 @@ It's also important to regularly check if all nodes have the same best block. If
 
 </pre>
 
+## Run more than one node
+
+We strongly recommend use cases to run two or more full nodes as a protection to direct attacks to their full nodes.
+
+Use case's full nodes **should not** be connected among them. This is important to mitigate some attack vectors. Remember that the transactions will be propagate by the p2p network and all use case's full nodes will receive the transactions eventually during normal network activity.
+
+### Validate new transactions on more than one full node before accepting them
+
+Let's assume an exchange wants to run nodes to identify deposits in the Hathor network, so a recommended approach for the integration would be to run at least two full nodes (node1 and node2), which are not connected between them (node1 must have node2 in the blacklist and vice versa). In that architecture, if any deposit is identified in node1, then the exchange must check that it's also a valid transaction in node2 and in one of the public nodes. With this approach, if one of the nodes is compromised and with a different consensus/state, an alert must be raised, so we must investigate what happened.
+
+### Validate all your full nodes have the same best block
+
+Use cases should regularly check whether the best block is the same on all their full nodes. If full node have different best blocks, the validation must be done again some seconds later because this might happen depending on the network block propagation time. If the differente continue, the nodes might be under attack and the use case should consider blocking deposits.
+
+
 ## Peer-id
 
-The peer-id is a unique identifier of your full node in Hathor's p2p network. Even though it does not contain any private key information, keeping it secret is a security measure that prevents attackers from targeting directly your full nodes.
-
-Because of that, it's important to never share it in public chats, only in private groups with the Hathor team. If you think your peer-id has been exposed, you should generate a new peer-id and replace the exposed ones.
+The peer-id is a unique identifier of your full node in Hathor's p2p network. You must keep your peer-id secret to prevent attackers from directly targeting your full nodes. Do not tell anyone your peer-ids, and do not publish them on public channels, only in private groups with the Hathor team. If you think your peer-id has been exposed, you should generate a new peer-id and replace the exposed ones.
 
 ## Be alert for weird behavior
 
-### Correctly validate transactions
+### How to validate a new transaction
 
 The transactions in the Hathor network have many fields that must be checked to guarantee that a transaction is valid for your use case. For more details about the fields of a transaction, check the [Transaction Anatomy RFC](https://github.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md).
+
+- [Version](#version)
+- [Voided state](#voided-state)
+- Output
+  - [Token](#token)
+  - [Value](#value)
+  - [Address](#address)
+  - [Timelock](#timelock)
 
 #### Version
 
 Transactions have `version=1`, blocks have versions `0` or `3`, and token creation transactions have `version=2`.
 
-#### Voided
+#### Voided state
 
 A voided transaction is **not** a valid transaction. You must only accept transactions that have `is_voided=false`.
 
@@ -111,19 +105,23 @@ The output must have a timelock, and if it's bigger than the current timestamp, 
 
 #### Number of confirmations
 
-Some use cases might handle transactions with huge amounts, so it's essential to wait for some blocks to confirm the transaction before accepting it as a valid one. The more blocks confirm a transaction, the more guarantee there is that this transaction won't become invalid in the future.
+Some use cases might handle transactions with huge amounts, so it's essential to wait for some blocks to confirm the transaction before accepting it as a valid one. The more blocks confirm a transaction, the more guarantee there is that this transaction won't become invalid in the future. As a reference, Bitcoin's use cases usually require a six confirmations before accepting a new deposit.
 
 ### Check if an unusual amount of deposits or withdrawals are being made
 
-Many use cases have withdrawals/deposits in their set of features through blockchain transactions. It's important to be alerted in case any unusual amount of deposits/withdrawals are being made because this could be caused by an attack.
+Many use cases have withdrawals/deposits in their set of features through blockchain transactions. It's important to check for unusual levels of deposits and withdrawals because this could be caused by an attack.
 
-For that situation, it's crucial to have an easy way to block specific accounts that have unusual behavior and might be part of an attack.
+For that situation, it's crucial to have an easy way to block specific accounts that have unusual behavior and might be part of an attack. You might also consider to limit the number of operations a user can do in a time window.
+
+This validation and user block must be done in the use-case software application.
 
 ### Check if one of your full nodes gets out-of-sync
 
-One other relevant aspect of full node to always check for weird behavior is the sync among them. We recommend use cases to regularly validate that all their full nodes are in sync among them and in sync with at least one public node as well.
+One other relevant aspect of full node is to always check for weird behavior is the sync among them. We recommend use cases to regularly validate that all their full nodes are in sync among them and in sync with at least one public node as well.
 
 This validation is important to guarantee the node is not isolated from the rest of the network with a fork of the blockchain.
+
+Besides that, it's also important to validate that the timestamp of the best block of the node is recent, which means that the node's blockchain is not halted in the past.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
