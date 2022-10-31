@@ -46,11 +46,11 @@ There are multiple ways that a use case can integrate with Hathor, here is a com
 
 We strongly recommend use cases to run two or more full nodes as a protection to direct attacks to their full nodes.
 
-Use case's full nodes **should not** be connected among them. This is important to mitigate some attack vectors. Remember that the transactions will be propagate by the p2p network and all use case's full nodes will receive the transactions eventually during normal network activity.
+Use case's full nodes **should not** be connected among them. This is important to mitigate some attack vectors. Remember that the transactions will be propagated by the p2p network and all use case's full nodes will receive the transactions eventually during normal network activity.
 
 ### Validate new transactions on more than one full node before accepting them
 
-Let's assume an exchange wants to run nodes to identify deposits in the Hathor network, so a recommended approach for the integration would be to run at least two full nodes (node1 and node2), which are not connected between them (node1 must have node2 in the blacklist and vice versa). In that architecture, if any deposit is identified in node1, then the exchange must check that it's also a valid transaction in node2 and in one of the public nodes. With this approach, if one of the nodes is compromised and with a different consensus/state, an alert must be raised, so we must investigate what happened.
+Let's assume an exchange wants to run nodes to identify deposits in the Hathor network, so a recommended approach for the integration would be to run at least two full nodes (node1 and node2), which are not connected between them (node1 must have node2 in the blacklist and vice versa). In that architecture, if any deposit is identified in node1, then the exchange must check that it's also a valid transaction in node2 and in one of the public nodes. In this approach, if an attacker successfully compromises one of your full nodes, your validation would fail and the deposit will not be accepted.
 
 ### Validate all your full nodes have the same best block
 
@@ -59,11 +59,9 @@ Use cases should regularly check whether the best block is the same on all their
 
 ## Peer-id
 
-The peer-id is a unique identifier of your full node in Hathor's p2p network. You must keep your peer-id secret to prevent attackers from directly targeting your full nodes. Do not tell anyone your peer-ids, and do not publish them on public channels, only in private groups with the Hathor team. If you think your peer-id has been exposed, you should generate a new peer-id and replace the exposed ones.
+The peer-id is a unique identifier of your full node in Hathor's p2p network. You must keep your peer-id secret to prevent attackers from directly targeting your full nodes. Do not tell anyone your peer-ids, and do not publish them on public channels. If you think your peer-id has been exposed, you should generate a new peer-id and replace the exposed ones.
 
-## Be alert for weird behavior
-
-### How to validate a new transaction
+## How to validate a new transaction
 
 The transactions in the Hathor network have many fields that must be checked to guarantee that a transaction is valid for your use case. For more details about the fields of a transaction, check the [Transaction Anatomy RFC](https://github.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md).
 
@@ -75,37 +73,35 @@ The transactions in the Hathor network have many fields that must be checked to 
   - [Address](#address)
   - [Timelock](#timelock)
 
-#### Version
+### Version
 
-Transactions have `version=1`, blocks have versions `0` or `3`, and token creation transactions have `version=2`.
+Version identifies the type of vertex. The possible choices are:
 
-#### Voided state
+- Block: 0
+- Regular Transaction: 1
+- Token Creation Transaction: 2
+- Merged Mined Block: 3
 
-A voided transaction is **not** a valid transaction. You must only accept transactions that have `is_voided=false`.
+Depending on your use case you must accept one or more types.
 
-#### Outputs
+### Voided state
 
-The outputs contain the fields used to identify that the funds belong to your wallet.
+A voided transaction is cancelled and should **never** be accepted. You must validate that the transaction is not voided asserting that `is_voided == false`.
 
-##### Token
+### Outputs
 
-The output has the token information, so you can check if it has the expected tokens. For example, exchanges expect the deposits to be of HTR, so `token = '00'` and `token_data=0`.
+Hathor supports multi-token transactions. You must confirm that your outputs are correctly placed as follows:
 
-##### Value
+- Token id is correct. If you accept only HTR token, token id must be `"00"`.
+- Token data is equal to `0`, if it's HTR token.
+- Value matches the expected value. Note that it is an integer and `12.34` is represented by `1234`.
+- Timelock must be `null`; otherwise your funds might be locked.
 
-The value of the output is an integer, so `1000` means `10.00`.
+### Number of confirmations
 
-##### Address
+Some use cases might handle transactions with huge amounts, so it's essential to wait for some blocks to confirm the transaction before accepting it as a valid one. The more blocks confirm a transaction, the more guarantee there is that this transaction won't become voided in the future. As a reference, Bitcoin's use cases usually require six confirmations before accepting a new deposit.
 
-The output address must be one of your wallet's addresses.
-
-##### Timelock
-
-The output must have a timelock, and if it's bigger than the current timestamp, you won't be able to spend this output until this moment is reached. Because of that, it's essential to validate that `timelock=null` before validating this transaction.
-
-#### Number of confirmations
-
-Some use cases might handle transactions with huge amounts, so it's essential to wait for some blocks to confirm the transaction before accepting it as a valid one. The more blocks confirm a transaction, the more guarantee there is that this transaction won't become invalid in the future. As a reference, Bitcoin's use cases usually require a six confirmations before accepting a new deposit.
+## Be alert for weird behavior
 
 ### Check if an unusual amount of deposits or withdrawals are being made
 
@@ -113,11 +109,11 @@ Many use cases have withdrawals/deposits in their set of features through blockc
 
 For that situation, it's crucial to have an easy way to block specific accounts that have unusual behavior and might be part of an attack. You might also consider to limit the number of operations a user can do in a time window.
 
-This validation and user block must be done in the use-case software application.
+This validation and user throttling must be done in the use-case software application.
 
 ### Check if one of your full nodes gets out-of-sync
 
-One other relevant aspect of full node is to always check for weird behavior is the sync among them. We recommend use cases to regularly validate that all their full nodes are in sync among them and in sync with at least one public node as well.
+Always check for weird behavior in the synchronization among full nodes. We recommend use cases to regularly validate that all their full nodes are in sync among them and in sync with at least one public node as well.
 
 This validation is important to guarantee the node is not isolated from the rest of the network with a fork of the blockchain.
 
