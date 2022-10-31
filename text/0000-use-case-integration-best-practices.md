@@ -67,11 +67,8 @@ The transactions in the Hathor network have many fields that must be checked to 
 
 - [Version](#version)
 - [Voided state](#voided-state)
-- Output
-  - [Token](#token)
-  - [Value](#value)
-  - [Address](#address)
-  - [Timelock](#timelock)
+- [Outputs](#outputs)
+- [Number of confirmations](#number-of-confirmations)
 
 ### Version
 
