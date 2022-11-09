@@ -48,6 +48,7 @@ in.
 | 15  | [The Anatomy of a Transaction](https://github.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md) | Accepted | - |
 | 27  | [Exchange Integration Guide](https://github.com/HathorNetwork/rfcs/blob/master/text/0027-exchange-integration.md) | Draft | - |
 | 32  | [NFT Standard](https://github.com/HathorNetwork/rfcs/blob/master/text/0032-nft-standard.md) | Accepted | - |
+| 44  | [Best Practices for Integrations](https://github.com/HathorNetwork/rfcs/blob/master/text/0044-use-case-integration-best-practices.md) | Accepted | - |
 
 ### Provisional RFCs (provisionally accepted; interface may still change)
 
