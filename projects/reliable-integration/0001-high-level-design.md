@@ -207,7 +207,6 @@ Events described here are a subset of all events in the `HathorEvents` enum. The
 - `LOAD_STARTED`
 - `LOAD_FINISHED`
 - `NEW_VERTEX_ACCEPTED`
-- `NEW_VERTEX_VOIDED`
 - `REORG_STARTED`
 - `REORG_FINISHED`
 - `VERTEX_METADATA_CHANGED`
@@ -223,10 +222,6 @@ It will be triggered when the full-node is ready to establish new connections, s
 ### NEW_VERTEX_ACCEPTED
 
 It will be triggered when the transaction is synced, and the consensus algorithm immediately identifies it as an accepted TX that can be placed in the mempool. `TxData` is going to be sent. We will reuse the `NETWORK_NEW_TX_ACCEPTED` Hathor Event that is already triggered.
-
-### NEW_VERTEX_VOIDED
-
-It will be triggered when the transaction is received and synced, but the consensus immediately identifies it as a voided TX (as long as a reorg is not in progress). `TxData` datatype is going to be sent.
 
 ### REORG_STARTED
 
