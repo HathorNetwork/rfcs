@@ -349,10 +349,7 @@ There are two parts of the UI when using wallet-connect: The `dApp` UI, which sh
 
 The other part would be the wallet, which can be either our already existing mobile-wallet or the desktop-wallet, or both.
 
-On the proof-of-concept, I added the WalletConnect to the wallet-mobile project, here is an example of scanning and answering a JSON-RPC request:
-
-<img width="544" alt="Pasted image 20230316114533" src="https://user-images.githubusercontent.com/3586068/225664910-28f3dfba-f508-477f-9950-67ef77dad570.png">
-And here is a video demonstrating the pairing mechanism
+On the proof-of-concept, I added the WalletConnect to the wallet-mobile project, here is an example of scanning, pairing and answering a JSON-RPC request:
 
 
 <video src="https://user-images.githubusercontent.com/3586068/225664948-fd45d6ff-6e1a-4585-99e0-6ea2b914ee54.mov"></video>
