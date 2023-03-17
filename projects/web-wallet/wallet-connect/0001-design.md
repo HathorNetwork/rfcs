@@ -299,6 +299,8 @@ export function generateRandomBytes32(): string {
 
 The implementation for the PRNG used by it can be seen [here](https://github.com/StableLib/stablelib/blob/a89a438fcbf855de6b2e9faa2630f03c3f3b3a54/packages/random/source/browser.ts) for when it's used on a browser, and [here](https://github.com/StableLib/stablelib/blob/a89a438fcbf855de6b2e9faa2630f03c3f3b3a54/packages/random/source/node.ts) when it's used on node.js
 
+Given that the shared key is not leaked, the message exchange should be secure from network man in the middle attacks as it is only displayed as a QRCode and scanned on the Wallet
+
 ### Resources
 
 **Github**: https://github.com/WalletConnect
@@ -328,11 +330,7 @@ It's basically a library that provides a single API for the [Sign API](https://d
 
 The javascript SDK requires a `projectId` which is supposed to be registered at their WalletConnect cloud, so it can use the WalletConnect infrastructure "for free". 
 
-Note: There is currently no stable open-source implementation of the relay server infrastructure, so it's really necessary.
-
-### Other interesting stuff
-
-* Someone wrote a [kadena implementation proposal](https://github.com/kadena-io/KIPs/blob/jam/wallet-connect/kip-0017.md) to use wallet-connect to communicate between dapps and wallets and also a [new chain request](https://github.com/WalletConnect/walletconnect-monorepo/issues/1905) to wallet-connect
+Note: There is currently no stable open-source implementation of the relay server infrastructure, so this step is really necessary.
 
 
 ## Guide-level explanation
@@ -356,16 +354,21 @@ And here is a video demonstrating the pairing mechanism
 <video src="https://user-images.githubusercontent.com/3586068/225664948-fd45d6ff-6e1a-4585-99e0-6ea2b914ee54.mov"></video>
 
 
-## API
+### API
 
 For the first implementation of the WebWallet, I suggest we expose the following JSON-RPC APIs
 
 
-### 1. Prove ownership of an address
+#### 1. Prove ownership of an address
 
 `dApps` might ask the wallets to sign an arbitrary message using an address, this method will receive a string and return a string with the signed message encoded in `base64`
 
-### 2. Sign a transaction
+This method should be similar to the Ethereum's `personal_sign` which is part of the Ethereum JSON-RPC interface.
+
+The idea is to allow `dApps` to request an arbitrary data to be signed with a specific address private key, to be able to prove the ownership of that address.
+
+
+#### 2. Sign a transaction
 
 The `dApp` should be able to send a transaction to have its inputs validated and signed from the wallets
 
@@ -376,16 +379,51 @@ The wallets should display the same UI from the already existing send transactio
 On the mobile wallet, we should also implement a token action confirmation screen, which doesn't yet exist (#todo)
 
 
-### 3. Get token balance
+#### 3. Get token balance
   
 The `htr_getAddressBalance` API provides a way to retrieve the current balance of a specified token
 
 
-### 4. Get utxos for a transaction
+#### 4. Get utxos for a transaction
 
 Unlike Ethereum, which uses an account-based model, Hathor employs a UTXO model for managing token balances. In order to create a transaction on a decentralized application (dApp), it is necessary to locate available UTXOs for a specified token. The `htr_getUtxosForToken` API allows developers to find and retrieve UTXOs related to a particular token, facilitating the creation of new transactions.
 
 #todo: other methods are TBD
+
+### Design Decisions
+
+#### Namespaces
+
+> A namespace is a standardized object defined by the [Chain Agnostic Improvement Proposal (CAIP)](https://github.com/ChainAgnostic/CAIPs) that ensures a common industry standard for chain agnostic purposes. You will encounter two namespaces: the **proposal namespace** and the **session namespace** when connects wallets and dapps.
+
+I wrote a CAIP-2 proposal [here](./0002-caip-2.md) which should be submitted as a PR on [this](https://github.com/ChainAgnostic/namespaces) repository.
+
+Here is an example of a session approval message, passing the namespace 
+
+```json
+{
+...
+	"namespaces": {
+		"hathor": {
+			"accounts": [ "hathor:mainnet:HRZZrkp..." ]
+			"chains": [ "hathor:mainnet" ],
+			"events": [],
+			"methods": [
+				"hathor_signMessage"
+			]
+		}
+	}
+...
+}
+```
+
+#### Accounts
+
+> CAIP-10 defines a way to identify an account in any blockchain specified by CAIP-2 blockchain id.
+
+For the account, since Hathor is a utxo-based blockchain and we are still studying the [Account Abstraction](https://ethereum.org/en/roadmap/account-abstraction/) project (which might change this), I decided to use the first address of the wallet (derived from the `m/44'/280'/0'/0/0` path), as the unique identifier for the account
+
+A CAIP-10 proposal document was created and can be read (and reviewed) [here](./0003-caip-10.md)
 
 
 ## Reference-level explanation
@@ -586,3 +624,114 @@ After the session is established, we will receive RPC requests through the `sess
 As we can see, in the params we can see the requested method and the params, in this case, the address to sign with and the message for the `signMessage` RPC API
 
 Handling this specific message will be described in the API section of the reference-level explanation
+
+### API format, parameters and response
+
+#### 1. Prove ownership of an address
+
+When requested, this method should display a modal asking user for confirmation before continuing. In this case, it should display the `message` and the `address` the `dApp` is requesting it to sign
+
+This method should validate if the requested address belongs to the current wallet (with the limitation of only validating if the address is reachable with the fullnode's current `MAX_GAP`), retrieve its `privateKey` and sign the message, returning a base64 signed result. 
+
+**Params**:
+* `address`: Base58 address to request ownership proof
+* `message`: Arbitrary message to sign
+
+**Response**:
+
+```javascript
+{
+	id: 'message_id',
+	jsonrpc: '2.0',
+	result: 'signed-data-in-base64'
+}
+```
+
+#### 2. Sign a transaction
+
+This method should receive a full transaction and after displaying a modal with the complete transaction information, including the transaction type (regular tx, token action, nano-contract execution, etc...) in a user-friendly format and receiving the approval from the user, it should sign all inputs and answer with the `txHex` in base64 format.
+
+**Params**:
+* `inputs`: List of transaction inputs
+* `outputs`: List of transaction outputs
+* `metadata?`: Transaction metadata, like `tokenName` and `symbol` for token creation transactions
+
+**Response**:
+
+```javascript
+{
+	id: 'message_id',
+	jsonrpc: '2.0',
+	result: 'signed-txHex'
+}
+```
+
+#### 3. Get token balance
+
+This method should receive a token identifier and after displaying a confirmation modal, fetch the balance for this token on the current account and return.
+
+**Params**:
+* `token_id`: Token identifier
+
+**Response**:
+
+```javascript
+{
+	id: 'message_id',
+	jsonrpc: '2.0',
+	result: 50
+}
+```
+
+#### 4. Get utxos
+
+This method should be used to request available utxos for a given `token_id`
+
+**Params**:
+* `token_id`: The token identifier
+* `authority?`: The type of authority to search for or null, valid options are `mint` and `melt`
+* `addresses?`: List of addresses to filter utxos
+* `totalAmount?`: Total sum amount, should be null if searching for authorities
+* `count`: Max number of authorities
+* `ignoreLocked`: If we should ignore locked utxos, can be `true` or `false`
+
+**Response**:
+
+```javascript
+{
+	id: 'message_id',
+	jsonrpc: '2.0',
+	result: [
+		{ txId: '...', index: 0, value: 50 },
+		{ txId: '...', index: 0, authority: 'melt' },
+	]
+}
+```
+
+## Conclusion
+
+The WalletConnect ecosystem supports natively any EVM-chain with little effort but it can also be used for non-EVM chains with some good standards, the documentation is not the greatest but the code is clear and organized with good open-source examples.
+
+There are many projects using WalletConnect in production, like Aave, Uniswap, PancakeSwap and many others, it's a solid project and is in production for some years now
+
+Also, many wallets support WalletConnect, including Ledger (through the Ledger Live app)
+
+The `dApps` have no access to private keys, they are kept on our wallets and everything is done inside them before the signed transactions and other responses are sent to the `dApp` through a channel that is encrypted using a key that is only shared through a QR Code.
+
+WalletConnect is agnostic to what wallet it's used on, so we can use it on our mobile wallet and desktop wallet, including Ledger
+
+In my opinion, WalletConnect is a very viable project for our goals and is currently the best option so far.
+
+**The only problem with it is that the production Relay server which is used for communication between the `dApp` and the wallets is not open-source. There is a minimal implementation [here](https://github.com/WalletConnect/relay), but it's only a sample implementation and should not be used in production.** If we decide that we don't want to use their public relay server, we need to implement our own from scratch.
+
+
+### Pros
+
+- [ ] We don't have to implement a new wallet, we can use our existing wallets
+- [ ] Supports hardware wallets as it is wallet-agnostic
+- [ ] Very well-known in the crypto space, used by many `dApps` in production
+- [ ] Has great libraries, including `react-native` and `react` javascript libraries which can be used on our wallets
+
+
+### Cons
+- [ ] **The production relay server is not open-source.**, we would have to develop our own if we don't want to depend on them
