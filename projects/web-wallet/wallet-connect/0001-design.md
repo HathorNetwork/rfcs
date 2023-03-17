@@ -3,26 +3,20 @@
 - [Summary](#summary)
 - [Motivation](#motivation)
 - [Acceptance Criteria](#acceptance_criteria)
-- [Overview of Snaps](#overview_of_snaps)
-	- [How it works](#overview_of_snaps__how_it_works)
-	- [JSON-RPC API](#overview_of_snaps__json_rpc_api)
+- [Overview of WalletConnect](#overview)
+	* [What is it?](#overview__what_is_it)
+	- [How does it works](#overview__how_does_it_work)
+	- [Is it secure?](#overview__is_it_secure)
+	- [Resources](#overview__resources)
 - [Guide-level explanation](#guide_level_explanation)
 	- [UI](#guide_level_explanation__ui)
-	- [Configuration](#guide_level_explanation__configuration)
-	- [RPC Methods](#guide_level_explanation__rpc_methods)
-		- [Request wallet's `xpubkey`](#guide_level_explanation__rpc_methods__request_wallet_xpubkey)
-		- [Prove ownership of an address](#guide_level_explanation__rpc_methods__prove_ownership_of_an_address)
-		- [Change and verify current network](#guide_level_explanation__rpc_methods__change_and_verify_current_network)
-		- [Sign a transaction](#guide_level_explanation__rpc_methods__sign_a_transaction)
+	- [API](#guide_level_explanation__api)
+	- [Design Decisions](#guide_level_explanation__design_decisions)
 - [Reference-level explanation](#reference_level_explanation)
-	- [The Snap Manifest](#reference_level_explanation__the_snap_manifest)
-	- [The JavaScript Bundle](#reference_level_explanation__the_javascript_bundle)
-		- [RPC Methods](#reference_level_explanation__the_javascript_bundle__rpc_methods)
-			- [Request Wallet BIP44 `xpubkey`](#reference_level_explanation__the_javascript_bundle__rpc_methods__request_wallet_bip44_xpubkey)
-			- [Request Wallet Addresses](#reference_level_explanation__the_javascript_bundle__rpc_methods__request_wallet_addresses)
-			- [Prove ownership of an address](#reference_level_explanation__the_javascript_bundle__rpc_methods__prove_ownership_of_an_address)
-			- [Change and verify current network](reference_level_explanation__the_javascript_bundle__rpc_methods__change_and_verify_current_network)
-			- [Sign a transaction](#reference_level_explanation__the_javascript_bundle__rpc_methods__sign_a_transaction)
+	- [Initialization](#reference_level_explanation__initialization)
+	- [Pairing](#reference_level_explanation__pairing)
+	- [Handling Session Proposals](#reference_level_explanation__handling_session_proposals)
+	- [Handling Session Requests](#reference_level_explanation__handling_session_requests)
 - [Conclusion](#conclusion)
 	- [Pros](#conclusion_pros)
 	- [Cons](#conclusion_cons)
@@ -57,9 +51,13 @@ There will be a single code for integration with Nano Contracts in the wallet li
 
 ## Overview of WalletConnect
 
+<a name="overview__what_is_it"/>
+
 ### What is it?
 
 WalletConnect is an open-source protocol that enables secure and seamless communication between decentralized applications (dApps) and wallets on various blockchains. By establishing a remote connection using end-to-end encryption, WalletConnect allows users to interact with dApps through their preferred wallet without exposing their private keys.
+
+<a name="overview__how_does_it_work"/>
 
 ### How does it work?
 
@@ -279,6 +277,7 @@ graph TB
 | TTL          | The maximum amount of time (in seconds) a message should be cached in the relay serverif undelivered.                    |
 | Prompt       | A boolean flag used to identify if a message is relevant to registered webhooks.                      |
 
+<a name="overview__is_it_secure"/>
 
 ### Is it secure?
 
@@ -300,6 +299,8 @@ export function generateRandomBytes32(): string {
 The implementation for the PRNG used by it can be seen [here](https://github.com/StableLib/stablelib/blob/a89a438fcbf855de6b2e9faa2630f03c3f3b3a54/packages/random/source/browser.ts) for when it's used on a browser, and [here](https://github.com/StableLib/stablelib/blob/a89a438fcbf855de6b2e9faa2630f03c3f3b3a54/packages/random/source/node.ts) when it's used on node.js
 
 Given that the shared key is not leaked, the message exchange should be secure from network man in the middle attacks as it is only displayed as a QRCode and scanned on the Wallet
+
+<a name="overview__resources"/>
 
 ### Resources
 
@@ -332,12 +333,15 @@ The javascript SDK requires a `projectId` which is supposed to be registered at 
 
 Note: There is currently no stable open-source implementation of the relay server infrastructure, so this step is really necessary.
 
+<a name="guide_level_explanation"/>
 
 ## Guide-level explanation
 
 To go along with this design document, a proof-of-concept has been developed which can be accessed [here](https://github.com/HathorNetwork/hathor-wallet-mobile/pull/245)
 
 The main design decision here is to keep all the business-logic inside the mobile app (or the wallet-desktop), only exposing a JSON-RPC API to the `dApps`, being strict on what methods we want to make available
+
+<a name="guide_level_explanation__ui"/>
 
 ### UI
 
@@ -353,6 +357,8 @@ And here is a video demonstrating the pairing mechanism
 
 <video src="https://user-images.githubusercontent.com/3586068/225664948-fd45d6ff-6e1a-4585-99e0-6ea2b914ee54.mov"></video>
 
+
+<a name="guide_level_explanation__api"/>
 
 ### API
 
@@ -390,6 +396,8 @@ Unlike Ethereum, which uses an account-based model, Hathor employs a UTXO model 
 
 #todo: other methods are TBD
 
+<a name="guide_level_explanation__design_decisions"/>
+
 ### Design Decisions
 
 #### Namespaces
@@ -425,10 +433,13 @@ For the account, since Hathor is a utxo-based blockchain and we are still studyi
 
 A CAIP-10 proposal document was created and can be read (and reviewed) [here](./0003-caip-10.md)
 
+<a name="reference_level_explanation"/>
 
 ## Reference-level explanation
 
 In the mobile-wallet, which I used for the proof-of-concept and can be seen [here](https://github.com/HathorNetwork/hathor-wallet-mobile/pull/245/), I used the `@walletconnect/web3wallet` library for all interaction with `wallet-connect`
+
+<a name="reference_level_explanation__initialization"/>
 
 ### Initialization
 
@@ -504,6 +515,8 @@ export function* setupListeners(web3wallet) {
 }
 ```
 
+<a name="reference_level_explanation__pairing"/>
+
 ### Pairing
 
 On both wallets, we need to enable the user to scan a QRCode containing the connection URI and also allow him to manage his connected sections
@@ -528,6 +541,8 @@ export function* onQrCodeRead(action) {
   }
 }
 ```
+
+<a name="reference_level_explanation__handling_session_proposals"/>
 
 ### Handling session proposals
 
@@ -599,6 +614,8 @@ export function* onSessionProposal(action) {
 In this example, we are displaying a modal describing the methods that the `dApp` is requesting and after approal, it sends an `session_approved` method through the `web3wallet` instance.
 
 The modal must display a list of the wallet's addresses and allow the user to select one or more of them to connect (see the design decisions section)
+
+<a name="reference_level_explanation__handling_session_requests"/>
 
 ### Handling session requests
 
@@ -708,6 +725,8 @@ This method should be used to request available utxos for a given `token_id`
 }
 ```
 
+<a name="conclusion"/>
+
 ## Conclusion
 
 The WalletConnect ecosystem supports natively any EVM-chain with little effort but it can also be used for non-EVM chains with some good standards, the documentation is not the greatest but the code is clear and organized with good open-source examples.
@@ -724,6 +743,7 @@ In my opinion, WalletConnect is a very viable project for our goals and is curre
 
 **The only problem with it is that the production Relay server which is used for communication between the `dApp` and the wallets is not open-source. There is a minimal implementation [here](https://github.com/WalletConnect/relay), but it's only a sample implementation and should not be used in production.** If we decide that we don't want to use their public relay server, we need to implement our own from scratch.
 
+<a name="conclusion_pros"/>
 
 ### Pros
 
@@ -732,6 +752,21 @@ In my opinion, WalletConnect is a very viable project for our goals and is curre
 - [ ] Very well-known in the crypto space, used by many `dApps` in production
 - [ ] Has great libraries, including `react-native` and `react` javascript libraries which can be used on our wallets
 
+<a name="conclusion_cons"/>
 
 ### Cons
 - [ ] **The production relay server is not open-source.**, we would have to develop our own if we don't want to depend on them
+
+<a name="task_breakdown"/>
+
+## Task break-down
+
+| Task | Dev/days |
+| --- | --- |
+| Implement the methods described in the API section| 2 |
+| Implement the walletConnect saga | 2 |
+| New screens for pairing and handling sessions and modals | 2 |
+| Implement feature toggles | 0.5 |
+| QA and internal testing | 2 |
+
+
