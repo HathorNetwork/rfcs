@@ -1,11 +1,3 @@
-# Table of Contents
-- [Summary](#summary)
-- [Acceptance criteria](#acceptance_criteria)
-- [Guide-level explanation](#guide-level-explanation)
-- [Reference-level explanation](#reference-level-explanation)
-- [Rationale and alternatives](#rationale-and-alternatives)
-- [Future possibilities](#future-possibilities)
-
 # Summary
 [summary]: #summary
 
