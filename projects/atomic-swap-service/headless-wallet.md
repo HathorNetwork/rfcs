@@ -4,6 +4,7 @@
 - [Guide-level explanation](#guide-level-explanation)
 - [Reference-level explanation](#reference-level-explanation)
 - [Rationale and alternatives](#rationale-and-alternatives)
+- [Future possibilities](#future-possibilities)
 
 # Summary
 [summary]: #summary
@@ -22,7 +23,7 @@ This will allow for easy swap operations between desktop and headless clients, m
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-The headless wallet, in a similar fashion as what is proposed on the Desktop Wallet, will have a `listnenedProposals` map in memory for each of the initialized wallets and will keep track of their identifiers, passwords and real-time updates.
+The headless wallet, in a similar fashion as [what is proposed on the Desktop Wallet](https://github.com/HathorNetwork/hathor-wallet/pull/361/files#diff-81b333677b8eb7fcc977d225072c1c10453c0aee095f9458885d7a553ef3579d), will have a `listnenedProposals` map in memory for each of the initialized wallets and will keep track of their identifiers, passwords and real-time updates.
 
 ### Example use case 1
 A user for the initialized wallet `swap-website-wallet` calls the `registerProposal` endpoint with an identifier `prop-1` and password `123` that it has received from another one of the proposal's participant. This request will add `prop-1` to the local `listenedProposals` object in memory.
@@ -46,7 +47,7 @@ There are some considerations about this object:
   - There should be no more than one websocket connection open for each proposal
 - Wallets that did not register/create a proposal should not receive updates about it
 
-To achieve this, a `listenedProposals` map will be created on the `services/wallets.service` module containing, in short:
+To achieve this, a `listenedProposals` map will be created on the `services/wallets.service` module containing, in short, the proposal identifier, password, and a list of wallet-ids that are listening to it:
 ```ts
 {
 	proposalId: string,
@@ -88,8 +89,13 @@ The [current workflow](https://hathor.gitbook.io/hathor/guides/headless-wallet/a
 
 Calling this route with a proposal identifier that has not been registered will raise a `400` error. Any errors raised while interacting with the service will also be treated and returned on the http response.
 
+### Unregister
+A new route `[DELETE] /wallet/atomic-swap/tx-proposal/delete/{proposalId}` will be created, allowing the user to stop listening to this proposal for the wallet specified on the request header.
+
+Should this wallet be the last one listening to the proposal, it should also be removed from the map and its websocket connection closed.
+
 ### External notifications
-For every listened proposal a web-socket connection will be opened with the Atomic Swap Service, informing the application about any changes that happen to it through the event `wallet:update-proposal`.
+For every listened proposal a websocket connection will be opened with the Atomic Swap Service, informing the application about any changes that happen to it through the event `wallet:update-proposal`.
 
 Whenever a message arrive through this channel, all wallets that listen to the updated proposal will receive a notification through the _External Notifications_ feature containing the updated proposal contents.
 
@@ -97,11 +103,11 @@ Whenever a message arrive through this channel, all wallets that listen to the u
 [rationale-and-alternatives]: #rationale-and-alternatives
 
 ### Lean proposal objects
-In contrast to the desktop wallet, that keeps all of the proposal data in memory, the headless keeps only the identifier, password and listeners.
+In contrast to the desktop wallet, that keeps all the proposal data in memory, the headless keeps only the identifier, password and listeners.
 
 The current atomic swap headless workflow already expects the application not to keep any of the proposal data cached, so this would not present a difference in its usability.
 
-The alternative of keeping all of the proposal's serialized `PartialTx` and `signatures` would not add any relevant ease of use while increasing the application's memory consumption.
+The alternative of keeping all the proposal's serialized `PartialTx` and `signatures` would not add any relevant ease of use while increasing the application's memory consumption.
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
