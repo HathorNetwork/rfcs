@@ -1,3 +1,8 @@
+* Feature name: Integrating WalletConnect on our wallets
+* Start date: 17/03/2023
+* Initial Document
+* Author: @andreabadesso
+
 ## Table of Contents
 
 - [Summary](#summary)
