@@ -34,23 +34,37 @@ These identifier and password can then be shared with the other interested parti
 This integration with the swap service backend needs a way for the headless to store in memory the proposals that are currently being monitored by each of its initialized wallets.
 
 There are some considerations about this object:
-- An event listener will be created for each proposal to receive web-socket updates from the service
+- An event listener will be created for each wallet to receive web-socket updates from the service
 - More than one initialized wallet can be listening to the same proposal
-  - There should be no more than one websocket connection open for each proposal
-- Wallets that did not register/create a proposal should not receive updates about it
+- Wallets that did not register a proposal should not receive updates about it
 
-To achieve this, a `listenedProposals` map will be created on the `services/wallets.service` module containing, in short, the proposal identifier, password, and a list of wallet-ids that are listening to it:
-```ts
-{
-	proposalId: string,
-	password: string,
-	wallets: string[],
-}
+To achieve this, a `walletListenedProposals` map will be created on the `services/wallets.service` module.
+```js
+/**
+ * @typedef TxProposalConfig
+ * @property {string} id Proposal identifier on the Atomic Swap Service
+ * @property {string} password Password to access it
+ */
+
+/**
+ * A map of all the proposals for a wallet.
+ * The keys are the proposal ids
+ * @typedef {Record<string,TxProposalConfig>} WalletListenedProposals
+ */
+
+/**
+ * A map of the initialized wallets and their listened proposals.
+ * The keys are the wallet-ids
+ * @type {Record<string,WalletListenedProposals>}
+ */
+const walletListenedProposals = {};
 ```
 
-Should any request for this proposal return an unrecoverable error, for example a `404` response that indicates the proposal has already expired, it should be automatically removed from memory.
+The `WalletListenedProposals` is being referenced as `listenedProposals` on this document for simplicity, indicating the listened proposals for a specific initialized wallet.
 
-### Create
+Should any request for a proposal return an unrecoverable error, for example a `404` response that indicates the proposal has already expired, it should be automatically removed from memory.
+
+### Create endpoint
 The `[POST] /wallet/atomic-swap/tx-proposal` route will receive the new optional parameter `service`:
 ```ts
 {
@@ -60,7 +74,7 @@ The `[POST] /wallet/atomic-swap/tx-proposal` route will receive the new optional
 ```
 Upon a successful creation, a new property `createdProposalId` will be available on the response object, and its data will be registered on the `listenedProposals` accordingly.
 
-### Register
+### Register endpoint
 A new route `[POST] /wallet/atomic-swap-tx-proposal/register/${proposalId}` will be created, receiving as body parameters:
 ```ts
 {
@@ -71,20 +85,23 @@ This will allow the wallet user to add any existing proposal to the wallet's `li
 
 To ensure the informed parameters are correct, a `get` request will also be made at this time to the service backend, and a validation executed on the received contents. Any failure found on the process will be thrown and the registration discarded.
 
-### Fetch
+### Listened Proposals endpoint
+A new route `[GET] /wallet/atomic-swap/tx-proposal/listenedProposals` will be created, allowing the user to retrieve the list of `proposalIds` currently being listened to. No password should be retrieved on this call.
+
+### Fetch endpoint
 A new route `[GET] /wallet/atomic-swap/tx-proposal/fetch/{proposalId}` will be created, allowing the user to pool the service backend for updates on a registered proposal.
 
 Calls to this route for a `proposalId` that has not been registered will raise a `404` error.
 
-### Update
+### Update endpoint
 The [current workflow](https://hathor.gitbook.io/hathor/guides/headless-wallet/atomic-swap#step-3-bob-updates-alices-partial-transaction) of updating proposals will be kept unaltered, requiring calls to the `[POST] /wallet/atomic-swap/tx-proposal` route. However, in order to persist the changes on the Atomic Swap Service, the additional body parameter `service.proposal_id` must also be informed on the request.
 
 Calling this route with a proposal identifier that has not been registered will raise a `400` error. Any errors raised while interacting with the service will also be treated and returned on the http response.
 
-### Unregister
+### Unregister endpoint
 A new route `[DELETE] /wallet/atomic-swap/tx-proposal/delete/{proposalId}` will be created, allowing the user to stop listening to this proposal for the wallet specified on the request header.
 
-Should this wallet be the last one listening to the proposal, it should also be removed from the map and its websocket connection closed.
+Also, should a wallet be stopped, all proposals it's currently listening to should also be removed, and its websocket connection closed.
 
 ### External notifications
 For every listened proposal a websocket connection will be opened with the Atomic Swap Service, informing the application about any changes that happen to it through the event `wallet:update-proposal`.
