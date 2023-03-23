@@ -64,7 +64,7 @@ Snaps is a system that allows anyone to safely extend the capabilities of MetaMa
 
 For example, a snap can add new APIs to MetaMask, add support for different blockchain protocols, or modify existing functionality using internal APIs. Snaps is a new way to create web3 end user experiences, by modifying MetaMask in ways that were impossible before.
 
-Currently, Snaps are released as pre-release software and only runs in what is called the [Flask version](https://metamask.io/flask/) of the Metamask wallet, which is described as a "experimental playground for developers, where new or proposed features can be rolled out and tested before they are deployed (...)".
+Currently, Snaps are released as pre-release software and only runs in what is called the [Flask version](https://metamask.io/flask/) of the Metamask wallet, which is described as a "experimental playground for developers, where new or proposed features can be rolled out and tested before they are deployed (...)". [On their community forum](https://community.metamask.io/t/snaps-production-release/24565), someone asked what's the ETA for the production release and the answer was somewhere around Q3 2023.
 
 <a name="overview_of_snaps__how_it_works"/>
 
