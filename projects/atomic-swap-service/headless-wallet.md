@@ -60,7 +60,7 @@ To achieve this, a `walletListenedProposals` map will be created on the `service
 const walletListenedProposals = {};
 ```
 
-The `WalletListenedProposals` is being referenced as `listenedProposals` on this document for simplicity, indicating the listened proposals for a specific initialized wallet.
+For simplicity, references to `listenedProposals` on this document refer to the listened proposals for a specific initialized wallet
 
 Should any request for a proposal return an unrecoverable error, for example a `404` response that indicates the proposal has already expired, it should be automatically removed from memory.
 
@@ -104,9 +104,9 @@ A new route `[DELETE] /wallet/atomic-swap/tx-proposal/delete/{proposalId}` will 
 Also, should a wallet be stopped, all proposals it's currently listening to should also be removed, and its websocket connection closed.
 
 ### External notifications
-For every listened proposal a websocket connection will be opened with the Atomic Swap Service, informing the application about any changes that happen to it through the event `wallet:update-proposal`.
+For every wallet with a registered proposal, a websocket connection will be opened with the Atomic Swap Service, informing the application about any changes that happen to its proposals through the event `wallet:update-proposal`.
 
-Whenever a message arrive through this channel, all wallets that listen to the updated proposal will receive a notification through the _External Notifications_ feature containing the updated proposal contents.
+Whenever a message arrive through this channel, the corresponding wallet will receive a notification through the _External Notifications_ feature containing the updated proposal full contents.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
