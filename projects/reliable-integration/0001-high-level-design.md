@@ -180,7 +180,7 @@ All events will have the following structure:
 ```
 {
     reorg_size: int,
-    previous_best_block: str, // hash of the block
+    previous_best_block: str, // hash of the block. At the time of this event, this block won't be part of the best blockchain anymore
     new_best_block: str // hash of the block
     common_block: str // hash of the block
 }
@@ -221,7 +221,7 @@ It will be triggered when the full-node is ready to establish new connections, s
 
 ### NEW_VERTEX_ACCEPTED
 
-It will be triggered when the transaction is synced, and the consensus algorithm immediately identifies it as an accepted TX that can be placed in the mempool. `TxData` is going to be sent. We will reuse the `NETWORK_NEW_TX_ACCEPTED` Hathor Event that is already triggered.
+It will be triggered when the transaction is synced, and the consensus algorithm immediately identifies it as an accepted TX that can be placed in the mempool. `TxData` is going to be sent. We will reuse the `NETWORK_NEW_TX_ACCEPTED` Hathor Event that is already triggered. This event will NOT be emitted for partially validated transactions.
 
 ### REORG_STARTED
 
@@ -235,7 +235,7 @@ It will be triggered if a `REORG_STARTED` had been triggered previously, indicat
 
 Initially, we will trigger this event for two use cases:
 
-- When a best block is found. All transactions will change its ```first_block``` metadata, which will be propagated through this event.
+- When a best block is found. All transactions that were on the mempool and were confirmed by the new block will change its ```first_block``` metadata, which will be propagated through this event.
 - When a reorg happens. This can trigger multiple transactions and blocks being changed to voided/executed. This will be detected on `mark_as_voided` functions inside `consensus.py` file (As long as consensus context finds that a reorg is happening).
 
 Data type `TxData` is going to be sent. Only the new transaction information is going to be sent, and it's the client responsibility to react accordingly.
