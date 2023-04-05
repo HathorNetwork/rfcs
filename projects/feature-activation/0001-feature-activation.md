@@ -1,7 +1,7 @@
 - Feature Name: Feature Activation
 - Start Date: 2023-04-05
 - Initial Documents: [New feature after a given block height](https://docs.google.com/document/d/1iBy1AzXYzIq-jlZavCRal0cr1DvLRT50WDpW2wk4xZw/edit), [Flag to signal feature support by miners](https://docs.google.com/document/d/1Ws0BMbLd8B-9AUVdeHphZXVNpbUWvEBnXTFOLWb9HJY/edit)
-- Author: Gabriel Levcovitz <gabriel@hathor.network>
+- Author: Gabriel Levcovitz <<gabriel@hathor.network>>
 
 # Table of Contents
 
@@ -38,13 +38,13 @@ This document describes a way to implement feature activation on Hathor network.
 # Motivation
 [motivation]: #motivation
 
-Changing or implementing new features in a decentralized environment such as a blockchain poses challenges, as no central entity is capable of guaranteeing that every peer connected to the network is able to correctly interpret some new feature. When peers (that is, their client software) disagrees on how to handle features, for example consensus updates, a hard fork is created on the blockchain, splitting the network in two or more separate networks.
+Changing or implementing new features in a decentralized environment such as a blockchain poses challenges, as no central entity is capable of guaranteeing that every peer connected to the network is able to correctly interpret some new feature. When peers (that is, their client software) disagree on how to handle features, for example, consensus updates, a hard fork is created on the blockchain, splitting the network into two or more separate networks.
 
-Nonetheless, as a natural part of software engineering, updating the network is desired and necessary. Be it security updates changing consensus rules, or new innovative features such as Nano Contracts. For that, there should be a way to reliably release new features in a controlled manner, allowing time for peers to update themselves and support new features agreed by the community.
+Nonetheless, updating the network is a natural part of software engineering and is both desired and necessary. This includes security updates that change consensus rules or new innovative features such as Nano Contracts. For that, there should be a way to reliably release new features in a controlled manner, allowing time for peers to update themselves and support new features agreed by the community.
 
-We must have a way to add new features or changes in the protocol that don't become live as soon as the code is upgraded by users running full nodes. These features should begin in an "on hold" period, where they'll stay until some necessary, pre-defined criteria is met. By the end of this period, the feature may or may not be activated.
+We must have a way to add new features or changes in the protocol that don't become live as soon as the code is upgraded by users running full nodes. These features should begin in an "on hold" period, where they'll stay until some necessary, pre-defined criteria are met. By the end of this period, the feature may or may not be activated.
 
-This is especially important for miners that are responsible for the network security, therefore we must create a way for them to signal that they are ready for a specific protocol upgrade.
+This is especially important for miners that are responsible for network security, therefore we must create a way for them to signal that they are ready for a specific protocol upgrade.
 
 # Guide-level explanation
 [Guide-level explanation]: #guide-level-explanation
@@ -52,9 +52,9 @@ This is especially important for miners that are responsible for the network sec
 ## Overview
 [Overview]: #overview
 
-The feature activation implementation on Hathor is heavily inspired by BIP 9 [2] and BIP 8 [1]. BIP 9 was actually used to activate Taproot [3], Bitcoin's latest update, and BIP 8 is an improvement on top of it. There are some differences though, adapting the concepts to our network. Some simplifications are made, and also some generalizations, learning from what worked for Bitcoin and what could be tailored for our use case.
+The feature activation implementation on Hathor is heavily inspired by BIP 9 [2] and BIP 8 [1]. BIP 9 was actually used to activate Taproot [3], Bitcoin's latest update, and BIP 8 is an improvement on top of it. There are some differences though, adapting the concepts to our network. I've made some simplifications and generalizations, learning from what worked for Bitcoin and tailoring it to our use case.
 
-One notable difference is that on Bitcoin, BIP 8/9 is only used for activating soft forks, that is, backwards compatible changes (at least until the release of this document), while on Hathor feature activation is planned to support hard forks too, that are necessary to implement some updates such as Nano Contracts.
+One notable difference is that on Bitcoin, BIP 8/9 is only used for activating soft forks, that is, backwards-compatible changes (at least until the release of this document). In contrast, Hathor's feature activation is planned to support hard forks as well, which are necessary to implement updates such as Nano Contracts.
 
 ### Terms and Concepts
 [Terms and Concepts]: #terms-and-concepts
@@ -79,7 +79,7 @@ A time interval in which a feature is evaluated, that is, its criteria are evalu
 
 Block height is used as a "time" marker to determine when a feature should be activated. We could use time itself, but this could create some problems as time is platform dependent and may be manipulated. This is one of the motivations of BIP 8 in favor of BIP 9, so we'll learn from that and use block height.
 
-Block height can easily be converted to time, through the known average time between blocks of 30 seconds in the Hathor network. By diving some desired time period by 30 seconds, we get the approximate number of blocks in that period. Using that, we can set activation dates based on block height.
+Block height can easily be converted to time, through the known average time between blocks of 30 seconds in the Hathor network. By dividing a desired time period by 30 seconds, we obtain the approximate number of blocks in that period. Using that, we can set activation dates based on block height.
 
 This is of course an approximation, since the time between blocks comes from a stochastic process, but it's good enough for the purpose of this implementation and worth the tradeoff.
 
@@ -98,9 +98,9 @@ Timeout height is a block height that represents the end of an activation proces
 #### Bit signaling
 [Bit signaling]: #bit-signaling
 
-Bit signaling is an activation criteria that may or may not be used in conjunction with block height. This allows for miners to send a bit flag in a block, representing that they're ready to support a certain feature. Each bit represents a specific feature. After a certain threshold (percentage) of blocks are found to enable the bit flag for a certain feature during some evaluation interval, that feature is considered active.
+Bit signaling is an activation criteria that may or may not be used in conjunction with block height. This allows miners to send a bit flag in a block, representing that they're ready to support a certain feature. Each bit represents a specific feature. After a certain threshold (percentage) of blocks are found to enable the bit flag for a certain feature during some evaluation interval, that feature is considered active.
 
-This should not be confused with voting. When a feature is defined in the feature activation process, it is assumed that it has been agreed by the community and ideally it should be activated by the end of the process. What bit signaling does, is preventing that some feature is activated before a super majority of miners are ready to support it. It is not voting whether to accept or reject some feature. This was a problem in Bitcoin's SegWit update, where some miners used their influence (though hashrate) to delay the update, for either economical, political, or other obscure reasons. [4][5]
+This should not be confused with voting. When a feature is defined in the feature activation process, it is assumed that it has been agreed by the community and ideally it should be activated by the end of the process. What bit signaling does, is preventing that some feature is activated before a super majority of miners are ready to support it. It is not voting whether to accept or reject some feature. This was a problem in Bitcoin's SegWit update, where some miners used their influence (though hash rate) to delay the update, for either economical, political, or other obscure reasons. [4][5]
 
 With that being said, it is possible that a feature may or may not be activated at the end of an activation process. To preserve flexibility, that behavior will be configurable on a per-feature basis through the `activate_on_timeout` attribute, explained below. That attribute is analogous to the infamous Bitcoin LOT attribute (lock in on timeout) [6], proposed in BIP 8.
 
@@ -114,7 +114,7 @@ It is allowed to change code that is conditional on feature activation, but **NO
 ## Feature and Criteria definition
 [Feature and Criteria definition]: #feature-and-criteria-definition
 
-The definition of new features available to feature activation should be as simples as defining the feature name and the criteria required to evaluate its activation state. Once defined, ideally it should not be changed. The `Feature` enum will contain all features, past and future, activated or not:
+The definition of new features available for feature activation should be as simple as defining the feature name and the criteria required to evaluate its activation state. Once defined, ideally, it should not be changed. The `Feature` enum will contain all features, past and future, activated or not:
 
 ```python
 class Feature(Enum):
@@ -125,25 +125,25 @@ class Feature(Enum):
 
 The `Criteria` data class is used to define attributes such as the feature name and activation requirements. Each name should be unique across all features, past and future. Its definition is provided in the [Criteria configuration] section.
 
-Different features with different criteria should be configurable separately for each network, mainnet and testnet. Feature definiitions should **NEVER** be removed, even after activation, as explained in the [Burying feature activations] section.
+Different features with different criteria should be configurable separately for each network, mainnet and testnet. Feature definitions should **NEVER** be removed, even after activation, as explained in the [Burying feature activations] section.
 
 ## Feature States
 
-For each block, there's a state associated for each feature. Possible states are similar to BIP 8, but `LOCKED_IN` and `MUST_SIGNAL` are kept for future improvements. These are the possible states:
+For each block, there's a state associated with each feature. Possible states are similar to BIP 8, but `LOCKED_IN` and `MUST_SIGNAL` are kept for future improvements. These are the possible states:
 
 - `DEFINED`: Represents that a feature is defined. It's the first state for each feature. The genesis block is by definition in this state for all features.
 - `STARTED`: Represents that the activation process for some feature is started. Blocks at or above the start height are in this state.
-- `ACTIVE`: Represents that a certain feature is activated. Blocks are in this state if the evaluation criteria was met in the previous evaluation interval.
+- `ACTIVE`: Represents that a certain feature is activated. Blocks are in this state if the evaluation criteria were met in the previous evaluation interval.
 - `FAILED`: Represents that a certain feature is not and will never be activated. Blocks are in this state if they're above the timeout height and `activate_on_timeout` is `false` (more on that below).
 
-Note: features in the `FAILED` state will indeed never be activated, but that doesn't mean a new activation process for the same featue couldn't be retried with a different definition.
+Note: features in the `FAILED` state will indeed never be activated, but that doesn't mean a new activation process for the same feature couldn't be retried with a different definition.
 
 ### State retrieval
-[State retrival]: #state-retrieval
+[State retrieval]: #state-retrieval
 
 Feature activation will be implemented as a method in `BaseTransaction` that users (that is, developers implementing features in `hathor-core`) can use to conditionally execute different code based on the activation criteria for a certain feature.
 
-Developers that define feature activation criteria may or may not be the same developers using conditional branching on that feature. For that, all criteria and its evaluation should be transparent for users.
+Developers that define feature activation criteria may or may not be the same developers using conditional branching on that feature. For that, all criteria and their evaluation should be transparent for users.
 
 The API entrypoint for using the feature activation process is simply checking if a certain feature is active for some specific vertex (block or transaction). Anytime during the processing of a vertex, an `is_feature_active()` method can be called to evaluate the state for a certain feature, and the code is branched from there. For example:
 
@@ -155,7 +155,7 @@ def some_vertex_processing_method(self, vertex: BaseTransaction):
         # execute existing code with no changes
 ```
 
-This will therefore be implemented as a method in `BaseTransaction`:
+Therefore, this will be implemented as a method in `BaseTransaction`:
 
 ```python
 def is_feature_active(self, feature: Feature) -> bool:
@@ -164,9 +164,9 @@ def is_feature_active(self, feature: Feature) -> bool:
 
 The `feature_service` property will be an instance of the `FeatureService` class. This class will be implemented to encapsulate code related to feature activation and prevent bloating of `BaseTransaction` code. More on that in the [Feature Service] section below.
 
-Notice that for users of the API, only the feature name (enum option) is necessary. The user shouldn't care how or why this feature is activated, only if it is or not.
+Notice that for users of the API, only the feature name (enum option) is necessary. The user shouldn't care how or why this feature is activated, only whether it is or not.
 
-They way the `is_feature_active()` method is used is very important. If the feature is **NOT** active, the user **should only execute current, existing code**. That is, the network should behave exactly as it currently behaves if the feature is not active. When the feature finally meets the criteria (transparently to the user of this code), the method will return `True` and new code implementing the new feature should be executed.
+The way the `is_feature_active()` method is used is very important. If the feature is **NOT** active, the user **should execute only current, existing code**. That is, the network should behave exactly as it currently behaves if the feature is not active. When the feature finally meets the criteria (transparently to the user of this code), the method will return `True` and new code implementing the new feature should be executed.
 
 ## Explorer User Interface
 [Explorer User Interface]: #explorer-user-interface
@@ -182,7 +182,7 @@ There should be a new screen in the explorer showing all features that used the 
 | `MY_NEW_FEATURE_5` | `STARTED` | 50%        | 90%       | 3,000,000    | 0                         | 3,500,000      | `false`             | v0.52.2       |
 | `MY_NEW_FEATURE_6` | `DEFINED` | -          | 90%       | 3,500,000    | 3,700,000                 | 3,900,000      | `false`             | v0.52.2       |
 
-Meaning of each of those attributes is explained in the [Criteria configuration] section, except State and Acceptance, that are calculated.
+The meaning of each of those attributes is explained in the [Criteria configuration] section, except State and Acceptance, which are calculated.
 
 ## REST API
 [REST API]: #rest-api
@@ -214,11 +214,11 @@ In this section, technical details are expanded for what was described above.
 
 ## Bit signaling implementation
 
-Given Hathor's Anatomy of a Transaction RFC [7], it is straightforward to suggest that the bits used for feature flags are in the first (left-most) byte of the `version` field. From the document:
+Given Hathor's Anatomy of a Transaction RFC [7], it is straightforward to suggest that the bits used for feature flags are in the first (leftmost) byte of the `version` field. From the document:
 
-> The version field takes up 2 bytes. The left-most byte is reserved for future use and ignored for now. This means that a version with value [0xAA, 0x01] should be interpreted just as `version=1`.
+> The version field takes up 2 bytes. The leftmost byte is reserved for future use and ignored for now. This means that a version with value [0xAA, 0x01] should be interpreted just as `version=1`.
 
-I propose that only the 4 right-most bits of the left-most byte are used for feature flag bit signaling. That would still keep 4 bits reserved for future use and ignored, while allowing for up to 4 simultaneous features in different activation processes. If necessary, in the future those 4 left-most bits could be used to change the interpretation of the 4 right-most bits. Some examples:
+I propose that only the 4 rightmost bits of the leftmost byte are used for feature flag bit signaling. That would still keep 4 bits reserved for future use and ignored, while allowing for up to 4 simultaneous features in different activation processes. If necessary, in the future those 4 leftmost bits could be used to change the interpretation of the 4 rightmost bits. Some examples:
 
 - `[0xA, 0x0, 0x01]`: represents [ignored, no feature support, `version=1`]
 - `[0xC, 0x1, 0x02]`: represents [ignored, feature support for `bit=0`, `version=2`]
@@ -290,7 +290,7 @@ Must be less than or equal to `timeout_height`. Must be an exact multiple of `EV
 
 #### `activate_on_timeout`
 
-Specifies if the feature should be activated even if the activation criteria is not met when the `timeout_height` is reached, effectively forcing activation. Should be used with caution, only when we are confident on community consensus, and specially confident that miners will comply.
+Specifies if the feature should be activated even if the activation criteria are not met when the `timeout_height` is reached, effectively forcing activation. Should be used with caution, only when we are confident about community consensus, and especially confident that miners will comply.
 
 #### `version`
 
@@ -298,14 +298,14 @@ The client version of `hathor-core` at which this feature was defined.
 
 ### Examples
 
-Some criteria configuration examples can be found on the table in the [Explorer User Interface] section. There,
+Some criteria configuration examples can be found in the table in the [Explorer User Interface] section. There,
 
 - `MY_NEW_FEATURE_1` failed because it didn't reach the threshold before the timeout and `activate_on_timeout` was `False`.
 - `MY_NEW_FEATURE_2` was activated on height 3,200,00 (the `minimum_activation_height`), because it reached the threshold.
 - `MY_NEW_FEATURE_3`, similarly to `MY_NEW_FEATURE_1`, didn't reach the threshold before the timeout, but in this case it was activated on height 3,300,000 (the `timeout_height`) because `activate_on_timeout` was `True`.
-- `MY_NEW_FEATURE_4` was configured with `threshold = 0`, meaning that it was only dependent on block height, and not on miner support. It was activated on height 3,200,000 (the `minimum_activation_height`).
-- `MY_NEW_FEATURE_5` activation process is on going. Its minimum activation height is `0`, meaning that it can be activated as soon as the threshold is reached, if it is before timeout.
-- `MY_NEW_FEATURE_6` activation process is defined but has not started yet. It will start on height 3,500,000.
+- `MY_NEW_FEATURE_4` was configured with `threshold = 0`, meaning that it was only dependent on block height, and not on miner support. It was activated at height 3,200,000 (the `minimum_activation_height`).
+- `MY_NEW_FEATURE_5` activation process is ongoing. Its minimum activation height is `0`, meaning that it can be activated as soon as the threshold is reached, if it is before timeout.
+- `MY_NEW_FEATURE_6` activation process is defined but has not started yet. It will start at height 3,500,000.
 
 Note: in those examples, just for illustration purposes, height values are not multiples of `EVALUATION_INTERVAL`. They must be, as defined in the attributes above.
 
@@ -330,7 +330,7 @@ stateDiagram-v2
 ## Feature Service
 [Feature Service]: #feature-service
 
-As explained in the [State retrival] section, a `BaseTransaction` will contain a `feature_service` property of the `FeatureService` class. That class is responsible for handling all logic related to feature activation. There are only two methods exposed by the feature activation service:
+As explained in the [State retrieval] section, a `BaseTransaction` will contain a `feature_service` property of the `FeatureService` class. That class is responsible for handling all logic related to feature activation. There are only two methods exposed by the feature activation service:
 
 ```python
 class FeatureService:
@@ -428,7 +428,7 @@ Therefore, it should be enough to store this cache in memory. It would need to b
 
 ### Dealing with reorgs
 
-When a reorg happens, recomputation of states may be necessary. The cache must be updated for every cached block that participated in the reorg.
+When a reorg happens, re-computation of states may be necessary. The cache must be updated for every cached block that participated in the reorg.
 
 ### Mempool
 
@@ -440,7 +440,7 @@ Considering the algorithm and concepts described above, let's examine an example
 
 Then, we know there's been two complete evaluation intervals: `0-99` and `100-199`. There's also an ongoing interval: `200-250`.
 
-Suppose a new block arrives, with `height = 251`. We call the `_get_state()` function for this block and a certain feature, and this is the step by step:
+Suppose a new block arrives, with `height = 251`. We call the `_get_state()` function for this block and a certain feature, and this is the step-by-step:
 
 1.  The block is not the genesis block. It's also not an evaluation interval boundary block (where the height is a multiple of `100`). Therefore, we return its parent's state.
 2. This will be in recursion until we hit the block with `height = 200`. At that point, we can calculate the state for that block (we'll call it `block_200`, and use that notation from now on).
@@ -455,7 +455,7 @@ Note: the first time this function is called, it's going back all the way to the
 
 To implement the `GET` endpoint described in the [REST API] section, one needs only the feature and criteria definitions, the `EVALUATION_INTERVAL` constant, and the `FeatureService`.
 
-Both `threshold` and `acceptance` percentages are calculating by dividing the respective count values by `EVALUATION_INTERVAL`. The `threshold` value comes from the `Criteria`, and the `acceptance` value comes from the `get_bit_count()` method of `FeatureService`.
+Both `threshold` and `acceptance` percentages are calculated by dividing the respective count values by `EVALUATION_INTERVAL`. The `threshold` value comes from the `Criteria`, and the `acceptance` value comes from the `get_bit_count()` method of `FeatureService`.
 
 All other attributes are obtained directly from the `Criteria`.
 
@@ -468,7 +468,7 @@ Here are some other alternatives:
 
 - Ethereum's The Merge: the mechanism used to upgrade the Ethereum network from PoW to PoS was severely more complicated and involved multiple phases of research and development, testing, launching of a parallel chain, and finally merging chains [8]. It's a specific approach for a specific problem, and not a general solution for performing small/medium upgrades on the protocol. Nonetheless, an oversimplification can describe The Merge as feature activation after a certain block height, which is covered by this design.
 - Flag days and BIP 9: BIP 8 proposed improvements over BIP 9, as explained in the BIP itself and in the [Time vs block height] and [Bit signaling] sections, and for that BIP 9 was not considered (although BIP 8 is very similar to it). [9]
-- Sporks: Probabilistic Bitcoin soft forks. Bitcoin Core contributor Jeremy Rubin proposed that concept, that in theory prevents issues related to miner control over the network by using hash power to delay or prevent protocol upgrades [4][5]. This idea has not been established and battle tested yet, and is also more complex, so it was discarded.
+- Sporks: Probabilistic Bitcoin soft forks. Bitcoin Core contributor Jeremy Rubin proposed that concept, that in theory prevents issues related to miner control over the network by using hash power to delay or prevent protocol upgrades [4][5]. This idea has not been established and battle-tested yet, and is also more complex, so it was discarded.
 - Self-amendment: the Tezos blockchain has a mechanism called self-amendment that allows for forkless upgrades. This mechanism is part of the core design of the network [10], and therefore implementing a similar solution in Hathor would require a major redesign of the protocol.
 
 # Prior art
@@ -483,7 +483,7 @@ Here are some future possibilities that exist in BIP 8 but were intentionally le
 
 ### Locked in period
 
-A period represented by a state (`LOCKED_IN`) between `STARTED` and `ACTIVE` states. Should last at least one evaluation interval after the fist interval with `STARTED`. Represents that the feature is guaranteed to be activated (the activation criteria has been met), but creates a time period that allows peers to update their full nodes before actual activation.
+A period represented by a state (`LOCKED_IN`) between `STARTED` and `ACTIVE` states. Should last at least one evaluation interval after the first interval with `STARTED`. Represents that the feature is guaranteed to be activated (the activation criteria have been met), but creates a time period that allows peers to update their full nodes before actual activation.
 
 Was left out because configuring a long enough `minimum_activation_height` serves the same purpose.
 
@@ -534,13 +534,13 @@ All tasks include writing unit tests for the respective feature.
 # References
 [references]: #references
 
-[1] https://github.com/bitcoin/bips/blob/master/bip-0008.mediawiki
-[2] https://github.com/bitcoin/bips/blob/master/bip-0009.mediawiki
-[3] https://github.com/bitcoin/bitcoin/pull/21377
-[4] https://bitcoinmagazine.com/technical/bip-8-bip-9-or-modern-soft-fork-activation-how-bitcoin-could-upgrade-next
-[5] https://www.youtube.com/watch?v=J1CP7qbnpqA
-[6] https://bitcoinmagazine.com/technical/lottrue-or-lotfalse-this-is-the-last-hurdle-before-taproot-activation
-[7] https://github.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md
-[8] https://ethereum.org/en/roadmap/merge/
-[9] https://bitcoinmagazine.com/technical/how-to-upgrade-bitcoin
-[10] https://medium.com/tezos/amending-tezos-b77949d97e1e
+- [1] https://github.com/bitcoin/bips/blob/master/bip-0008.mediawiki
+- [2] https://github.com/bitcoin/bips/blob/master/bip-0009.mediawiki
+- [3] https://github.com/bitcoin/bitcoin/pull/21377
+- [4] https://bitcoinmagazine.com/technical/bip-8-bip-9-or-modern-soft-fork-activation-how-bitcoin-could-upgrade-next
+- [5] https://www.youtube.com/watch?v=J1CP7qbnpqA
+- [6] https://bitcoinmagazine.com/technical/lottrue-or-lotfalse-this-is-the-last-hurdle-before-taproot-activation
+- [7] https://github.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md
+- [8] https://ethereum.org/en/roadmap/merge/
+- [9] https://bitcoinmagazine.com/technical/how-to-upgrade-bitcoin
+- [10] https://medium.com/tezos/amending-tezos-b77949d97e1e
