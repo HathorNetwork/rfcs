@@ -330,23 +330,32 @@ stateDiagram-v2
 ## Feature Service
 [Feature Service]: #feature-service
 
-As explained in the [State retrieval] section, a `BaseTransaction` will contain a `feature_service` property of the `FeatureService` class. That class is responsible for handling all logic related to feature activation. There are only two methods exposed by the feature activation service:
+As explained in the [State retrieval] section, a `BaseTransaction` will contain a `feature_service` property of the `FeatureService` class. That class is responsible for handling all logic related to feature activation. There are three methods exposed by the feature activation service:
 
 ```python
 class FeatureService:
     def is_feature_active(self, vertex: BaseTransaction, feature: Feature) -> bool:
-        state = _get_state(vertex, feature)
+        # return whether a feature is active at a certain vertex.
+        raise NotImplementedError()
 
-        return state == FeatureState.ACTIVE
+    def get_state(self, vertex: BaseTransaction, feature: Feature) -> FeatureState:
+        # return the state of a feature at a certain vertex.
+        raise NotImplementedError()
 
     def get_bit_count(self, block: Block, feature: Feature) -> int:
-        return _get_bit_count(block, feature)
+        # return the amount of this feature's bit-enabled blocks in the previous evaluation period.
+        raise NotImplementedError()
 ```
 
-A reference implementation for the internal `_get_state()` function, complying with the rules described in this document:
+A reference implementation is provided for `is_feature_active()` and `get_state()`, complying with the rules described in this document:
 
 ```python
-def _get_state(vertex: BaseTransaction, feature: Feature) -> FeatureState:
+def is_feature_active(vertex: BaseTransaction, feature: Feature) -> bool:
+    state = _get_state(vertex, feature)
+
+    return state == FeatureState.ACTIVE
+
+def get_state(vertex: BaseTransaction, feature: Feature) -> FeatureState:
     block = _get_block(vertex)
     height = block.calculate_height()
 
@@ -359,10 +368,10 @@ def _get_state(vertex: BaseTransaction, feature: Feature) -> FeatureState:
     if height % EVALUATION_INTERVAL != 0:
         parent = block.get_block_parent()
 
-        return _get_state(parent, feature)
+        return get_state(parent, feature)
 
     ancestor = _get_ancestor_at_height(block, height - EVALUATION_INTERVAL)
-    previous_state = _get_state(ancestor, feature)
+    previous_state = get_state(ancestor, feature)
     criteria = feature.value
 
     # this match statement is a direct implementation of the diagram above
@@ -377,12 +386,12 @@ def _get_state(vertex: BaseTransaction, feature: Feature) -> FeatureState:
             if height >= criteria.timeout_height and not criteria.activate_on_timeout:
                 return FeatureState.FAILED
 
-            if height >= timeout_height and criteria.activate_on_timeout and height >= minimum_activation_height:
+            if height >= criteria.timeout_height and criteria.activate_on_timeout and height >= criteria.minimum_activation_height:
                 return FeatureState.ACTIVE
 
-            count = _get_bit_count(block, feature)
+            count = get_bit_count(block, feature)
 
-            if height < criteria.timeout_height and count >= threshold and height >= minimum_activation_height:
+            if height < criteria.timeout_height and count >= criteria.threshold and height >= criteria.minimum_activation_height:
                 return FeatureState.ACTIVE
 
             return FeatureState.STARTED
@@ -394,18 +403,19 @@ def _get_state(vertex: BaseTransaction, feature: Feature) -> FeatureState:
             return FeatureState.FAILED
 ```
 
-Other necessary internal functions that were used above are defined below, but left unimplemented:
+The `get_bit_count()` function is left unimplemented, together with other necessary internal functions that were used above and are defined below:
 
 ```python
-def _get_block(vertex: BaseTransaction) -> Block:
-    # return this vertex if it's a block, or its closest block parent if it is a transaction.
-    raise NotImplementedError()
-
-def _get_bit_count(block: Block, feature: Feature) -> int:
-    # return the count of enabled bits in the previous evaluation interval.
+def get_bit_count(block: Block, feature: Feature) -> int:
+    # return the count of enabled bits in the previous evaluation interval for this feature.
     # walk up the blockchain using block.get_block_parent() until reaching the interval boundary,
     # and then check if the feature bit is enabled for each block.
-    # The count must not include the bit of the block itself, only of its ancestors.
+    # The count must not include the bit of the block itself, only of its ancestors
+    # in the previous evaluation interval.
+    raise NotImplementedError()
+
+def _get_block(vertex: BaseTransaction) -> Block:
+    # return this vertex if it's a block, or its closest block parent if it is a transaction.
     raise NotImplementedError()
 
 def _get_ancestor_at_height(block: Block, height: int) -> Block:
@@ -418,7 +428,7 @@ def _get_ancestor_at_height(block: Block, height: int) -> Block:
 
 ### Caching mechanism
 
-Following the implementation above would make the `_get_state()` function call itself recursively until reaching genesis. To prevent this and make the code run efficiently, a state caching mechanism is required.
+Following the implementation above would make the `get_state()` function call itself recursively until reaching genesis. To prevent this and make the code run efficiently, a state caching mechanism is required.
 
 The state of a block/feature combination is completely determined by the state of the first block in an evaluation period, that is, the previous block with a height that is a multiple of `EVALUATION_INTERVAL`. By caching every one of those interval boundary blocks for each feature, the problem is resolved.
 
@@ -440,7 +450,7 @@ Considering the algorithm and concepts described above, let's examine an example
 
 Then, we know there's been two complete evaluation intervals: `0-99` and `100-199`. There's also an ongoing interval: `200-250`.
 
-Suppose a new block arrives, with `height = 251`. We call the `_get_state()` function for this block and a certain feature, and this is the step-by-step:
+Suppose a new block arrives, with `height = 251`. We call the `get_state()` function for this block and a certain feature, and this is the step-by-step:
 
 1.  The block is not the genesis block. It's also not an evaluation interval boundary block (where the height is a multiple of `100`). Therefore, we return its parent's state.
 2. This will be in recursion until we hit the block with `height = 200`. At that point, we can calculate the state for that block (we'll call it `block_200`, and use that notation from now on).
@@ -457,7 +467,7 @@ To implement the `GET` endpoint described in the [REST API] section, one needs o
 
 Both `threshold` and `acceptance` percentages are calculated by dividing the respective count values by `EVALUATION_INTERVAL`. The `threshold` value comes from the `Criteria`, and the `acceptance` value comes from the `get_bit_count()` method of `FeatureService`.
 
-All other attributes are obtained directly from the `Criteria`.
+The `state` comes from the `get_state()` function. The best block may be used for the `FeatureService` calls. All other attributes are obtained directly from the `Criteria`.
 
 # Rationale and alternatives
 [Rationale and alternatives]: #rationale-and-alternatives
