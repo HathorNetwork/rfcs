@@ -67,7 +67,7 @@ A feature during the activation process, or simply a feature, is some update in 
 
 #### State
 
-The state a feature is in, representing if it is activated or not. A more detailed description is provided below.
+The state a feature is in, representing if it is activated or not. A more detailed description is provided in the [Feature States] section.
 
 #### Evaluation interval
 [Evaluation interval]: #evaluation-interval
@@ -93,14 +93,14 @@ Activation criteria, evaluation criteria, or simply criteria, are the conditions
 
 #### Timeout and timeout height
 
-Timeout height is a block height that represents the end of an activation process for a feature. Timeout is when that height is reached.
+Timeout height is a block height that represents the end of an activation process for a feature. Timeout is when that height is reached. When timeout is reached, the feature may or may not be activated.
 
 #### Bit signaling
 [Bit signaling]: #bit-signaling
 
 Bit signaling is an activation criteria that may or may not be used in conjunction with block height. This allows miners to send a bit flag in a block, representing that they're ready to support a certain feature. Each bit represents a specific feature. After a certain threshold (percentage) of blocks are found to enable the bit flag for a certain feature during some evaluation interval, that feature is considered active.
 
-This should not be confused with voting. When a feature is defined in the feature activation process, it is assumed that it has been agreed by the community and ideally it should be activated by the end of the process. What bit signaling does, is preventing that some feature is activated before a super majority of miners are ready to support it. It is not voting whether to accept or reject some feature. This was a problem in Bitcoin's SegWit update, where some miners used their influence (though hash rate) to delay the update, for either economical, political, or other obscure reasons. [4][5]
+This should not be confused with voting. When a feature is defined in the feature activation process, it is assumed that it has been agreed by the community and ideally it should be activated by the end of the process. What bit signaling does, is preventing that some feature is activated before a super majority of miners are ready to support it. It is not voting whether to accept or reject some feature. This was a problem in Bitcoin's SegWit update, where some miners used their influence (through hash rate) to delay the update, for either economical, political, or other obscure reasons. [4][5]
 
 With that being said, it is possible that a feature may or may not be activated at the end of an activation process. To preserve flexibility, that behavior will be configurable on a per-feature basis through the `activate_on_timeout` attribute, explained below. That attribute is analogous to the infamous Bitcoin LOT attribute (lock in on timeout) [6], proposed in BIP 8.
 
@@ -125,11 +125,12 @@ class Feature(Enum):
 
 The `Criteria` data class is used to define attributes such as the feature name and activation requirements. Each name should be unique across all features, past and future. Its definition is provided in the [Criteria configuration] section.
 
-Different features with different criteria should be configurable separately for each network, mainnet and testnet. Feature definitions should **NEVER** be removed, even after activation, as explained in the [Burying feature activations] section.
+Different features with different criteria should be configurable separately for each network, mainnet and testnet. Feature definitions should **NEVER** be removed, even after activation, as explained in the [Burying feature activations] section. This is meant to preserve history.
 
 ## Feature States
+[Feature States]: #feature-states
 
-For each block, there's a state associated with each feature. Possible states are similar to BIP 8, but `LOCKED_IN` and `MUST_SIGNAL` are kept for future improvements. These are the possible states:
+For each block, there's a state associated with each feature. Possible states are similar to BIP 8, but `LOCKED_IN` and `MUST_SIGNAL` are left out and kept as future possibilities. These are the possible states:
 
 - `DEFINED`: Represents that a feature is defined. It's the first state for each feature. The genesis block is by definition in this state for all features.
 - `STARTED`: Represents that the activation process for some feature is started. Blocks at or above the start height are in this state.
@@ -213,6 +214,7 @@ A `GET` endpoint should be provided, mainly to serve the UI described above. It 
 In this section, technical details are expanded for what was described above.
 
 ## Bit signaling implementation
+[Bit signaling implementation]: #bit-signaling-implementation
 
 Given Hathor's Anatomy of a Transaction RFC [7], it is straightforward to suggest that the bits used for feature flags are in the first (leftmost) byte of the `version` field. From the document:
 
@@ -228,7 +230,7 @@ Note: if a miner sends a bit signal for a bit that is not defined as a feature b
 
 ## Evaluation interval
 
-The evaluation interval, as explained in the [Evaluation interval] section, is defined here to be two weeks (14 days). Considering the 30 seconds average time between blocks of the Hathor network, that interval is equivalent to 40320 blocks. A constant must be defined:
+The evaluation interval, as explained in the [Evaluation interval] section, is defined here to be two weeks (14 days). Considering the 30 seconds average time between blocks of the Hathor network, that interval is equivalent to 40320 blocks. A constant must be defined in `HathorSettings`:
 
 ```python
 EVALUATION_INTERVAL = 40320
@@ -260,7 +262,7 @@ A string representing the name of the feature. Must be unique across all feature
 #### `bit`
 [bit]: #bit
 
-Represents which bit in the `version` field of the block is going to be used to signal the feature support by miners. Must be chosen from the set {0,1,2,3}.
+Represents which bit in the `version` field of the block is going to be used to signal the feature support by miners. Must be chosen from the set {0,1,2,3}, as defined in the [Bit signaling implementation] section.
 
 Must be selected such that no two concurrent features use the same bit. Also, a bit should only be reused if the `start_height` of a new feature is greater than the `timeout_height` of the previous feature that used this bit.
 
@@ -280,7 +282,7 @@ Should be some height greater than `start_height`. Should be an exact multiple o
 
 Specifies the minimum number of blocks per evaluation interval required to activate the feature. Usually calculated from a percentage of `EVALUATION_INTERVAL`.
 
-Here it is defined as 36288 blocks (90% of `EVALUATION_INTERVAL`) for the mainnet and 30240 blocks (75% of `EVALUATION_INTERVAL`) for the testnet.
+Here it is defined as 36288 blocks (90% of `EVALUATION_INTERVAL`) for the mainnet and 30240 blocks (75% of `EVALUATION_INTERVAL`) for the testnet, as default values. It may be different for each feature, though.
 
 #### `minimum_activation_height`
 
@@ -301,7 +303,7 @@ The client version of `hathor-core` at which this feature was defined.
 Some criteria configuration examples can be found in the table in the [Explorer User Interface] section. There,
 
 - `MY_NEW_FEATURE_1` failed because it didn't reach the threshold before the timeout and `activate_on_timeout` was `False`.
-- `MY_NEW_FEATURE_2` was activated on height 3,200,00 (the `minimum_activation_height`), because it reached the threshold.
+- `MY_NEW_FEATURE_2` was activated on height 3,200,00 (the `minimum_activation_height`), because it reached the threshold before timeout.
 - `MY_NEW_FEATURE_3`, similarly to `MY_NEW_FEATURE_1`, didn't reach the threshold before the timeout, but in this case it was activated on height 3,300,000 (the `timeout_height`) because `activate_on_timeout` was `True`.
 - `MY_NEW_FEATURE_4` was configured with `threshold = 0`, meaning that it was only dependent on block height, and not on miner support. It was activated at height 3,200,000 (the `minimum_activation_height`).
 - `MY_NEW_FEATURE_5` activation process is ongoing. Its minimum activation height is `0`, meaning that it can be activated as soon as the threshold is reached, if it is before timeout.
@@ -351,7 +353,7 @@ A reference implementation is provided for `is_feature_active()` and `get_state(
 
 ```python
 def is_feature_active(vertex: BaseTransaction, feature: Feature) -> bool:
-    state = _get_state(vertex, feature)
+    state = get_state(vertex, feature)
 
     return state == FeatureState.ACTIVE
 
@@ -432,13 +434,13 @@ Following the implementation above would make the `get_state()` function call it
 
 The state of a block/feature combination is completely determined by the state of the first block in an evaluation period, that is, the previous block with a height that is a multiple of `EVALUATION_INTERVAL`. By caching every one of those interval boundary blocks for each feature, the problem is resolved.
 
-Given the defined `EVALUATION_INTERVAL` value of `40320`, and the current blockchain height of approximately 3,400,000 blocks, the cache will store less than 100 boundary block states, and that number will be small for years.
+Given the defined `EVALUATION_INTERVAL` value of `40320`, and the current blockchain height of approximately 3,400,000 blocks, the cache will store less than 100 boundary block states for each feature, and that number will be small for years.
 
 Therefore, it should be enough to store this cache in memory. It would need to be reconstructed every time the full node is restarted. If during implementation tests this reconstruction is deemed to be too slow, RocksDB may be used to permanently store it.
 
 ### Dealing with reorgs
 
-When a reorg happens, re-computation of states may be necessary. The cache must be updated for every cached block that participated in the reorg.
+When a reorg happens, re-computation of states may be necessary. The cache must be voided for every cached block that participated in the reorg.
 
 ### Mempool
 
