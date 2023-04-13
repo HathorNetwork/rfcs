@@ -39,18 +39,6 @@ These features will not be part of the first phase of this project:
   - Give users the choice to receive only a subset of events, according to some criteria.
 - The `--flush-events` flag. By default, all events are retained. In the future, the user could provide a `--flush-events` flag to enable the flushing of events after each event is sent to the client.
 
-## Event generation during the full-node cycle
-
-Considering this full-node cycle:
-
-![Full-Node-Cycle drawio](./0001-images/full_node_cycle.png)
-
-Where:
-- `Load` is the period right after the full-node is started, where the local database is read.
-- `Sync` is the period where `Load` is finished and the full-node continuously receive/send txs to other peers until full node is stopped.
-
-By default, the events generated during load will not be emitted. If the user wants to enable them, one must provide the `--emit-load-events` flag.
-
 ## Flow
 
 ![Event Flow drawio](./0001-images/event_flow.png)
@@ -217,7 +205,7 @@ It will be triggered when the full-node is initializing and is reading locally f
 
 ### LOAD_FINISHED
 
-It will be triggered when the full-node is ready to establish new connections, sync, and exchange transactions, at the same that when the manager state changes to `READY` [here](https://github.com/HathorNetwork/hathor-core/blob/85206cb631b609a5680e276e4db8cffbb418eb88/hathor/manager.py#L652). Other events will be triggered ONLY after this one, if the `--emit-load-events` flag is not enabled. `EmptyData` is sent.
+It will be triggered when the full-node is ready to establish new connections, sync, and exchange transactions, at the same that when the manager state changes to `READY` [here](https://github.com/HathorNetwork/hathor-core/blob/85206cb631b609a5680e276e4db8cffbb418eb88/hathor/manager.py#L652). `EmptyData` is sent.
 
 ### NEW_VERTEX_ACCEPTED
 

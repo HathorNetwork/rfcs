@@ -6,13 +6,49 @@ This low-level design intends to go deeper on the technical aspects of the proje
 
 ## Full-node execution
 
+Considering this full-node cycle:
+
 ![Full-Node-Cycle drawio](./0002-images/full_node_cycle.png)
 
-### TODO: This section will be updated in a separate PR
+At first, when the full node is initialized, it moves to the `LOAD` state, where data is loaded from the database, without consulting the network. Once all local data is read, the full-node continuously syncs with peers, changing to the `SYNC` state.
 
-~~At first, when the full node is initiated, it moves to the `LOAD` state, where data is load from the database, without consulting the network. Once all local data is read, the full-node continuously sync with peers, changing to `SYNC` state.~~
+In order to know which events will be generated, we will store the states (`LOAD` and `SYNC`) as metadata. So, when the full node starts, we will check the metadata. If it is empty or `LOAD`, we do not know where it stopped and will regenerate all events during load. If it is `SYNC`, we will not generate any events until `LOAD_FINISHED` is emitted.
 
-~~In order to know which events will be triggered, we will store the states (`LOAD` and `SYNC`) as metadata. So, when the full node starts, we will check the metadata. If it is empty or `LOAD`, we do not know where it stopped and will emit all events. If it is `SYNC`, we will skip all event triggered during full node initialization until `LOAD_FINISHED`~~
+In the table below we describe all possible starting scenarios for the full node, and the respective desired outcome:
+
+| Starting scenario                 | Vertices in the database | Events in the database | State metadata | Desired outcome                                                                                                                           |
+|-----------------------------------|--------------------------|------------------------|----------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `Fresh start`                     | None                     | None                   | Empty          | Generate all events, from `event_id = 0`. All events come during the `SYNC` phase.                                                        |
+| `Snapshot start`                  | Some                     | None                   | Empty          | Generate all events, from `event_id = 0`. Events come during both the `LOAD` and `SYNC` phases.                                           |
+| `Restart from aborted LOAD phase` | Some                     | Some                   | `LOAD`         | All events in the database are discarded. Generate all events, from `event_id = 0`. Events come during both the `LOAD` and `SYNC` phases. |
+| `Restart from aborted SYNC phase` | Some                     | Some                   | `SYNC`         | Generate events from `event_id = last_event_id + 1`. All events come during the `SYNC` phase.                                             |
+
+There's no case in which there are some events in the database, but no vertices.
+
+For the `Fresh start` scenario, if we consider there's a `LOAD` phase with 0 events, then the desired outcome becomes the same for the first three scenarios. This makes it possible to simplify the table into only two scenarios, only depending on `State metadata`, as described in the beginning of this section:
+
+| Starting scenario                                                      | State metadata  | Desired outcome                                                                                                                           |
+|------------------------------------------------------------------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `Fresh start` or `Snapshot start` or `Restart from aborted LOAD phase` | Empty or `LOAD` | All events in the database are discarded. Generate all events, from `event_id = 0`. Events come during both the `LOAD` and `SYNC` phases. |
+| `Restart from aborted SYNC phase`                                      | `SYNC`          | Generate events from `event_id = last_event_id + 1`. All events come during the `SYNC` phase.                                             |
+
+Note: when generating snapshots, events should not be included, as they will be discarded and regenerated anyway.
+
+Now, we can describe a step-by-step representing these rules:
+
+1. The full node begins the initialization process
+2. The `EventManager` starts
+   1. It retrieves the previous node state from the database and stores it
+   2. If its stored previous state is empty or `LOAD`, it discards all events currently in the database
+3. The full node emits the `MANAGER_ON_START` PubSub event
+   1. The `EventManager` sets `LOAD` as the current node state in the database
+4. The full node loads all vertices from the database
+5. If the `EventManager`'s stored previous state is empty or `LOAD`, a new vertex event is generated for all vertices in the database, in topological order
+6. The full node finishes loading and emits the `LOAD_FINISHED` PubSub event
+   1. The `EventManager` sets `SYNC` as the current node state in the database
+7. The full node starts syncing new vertices from the network
+
+
 
 ## Flags
 
@@ -21,7 +57,6 @@ The following flags will be provided:
 | Flag                 | Description                                     |
 |----------------------|-------------------------------------------------|
 | `--enable-event-queue` | Enable the message broker mechanism             |
-| `--emit-load-events`   | Enable emission of events during the load phase |
 
 ## Event
 
