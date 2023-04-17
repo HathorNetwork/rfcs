@@ -178,7 +178,7 @@ Here is an example subscribe message:
 }
 ```
 
-After scanning the Wallet parses the URI, extracting the `symKey` which will be used to encrypt messages from now on, the `topic` and the `relay`
+After scanning, the Wallet parses the URI, extracting the `symKey` which will be used to encrypt messages from now on, the `topic` and the `relay`
 
 It then connects to the relay server (websocket) and subscribes to the topic shared through the `URI`
 
