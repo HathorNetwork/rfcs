@@ -714,7 +714,7 @@ This method should be used to request available utxos for a given `token_id`
 * `authority?`: The type of authority to search for or null, valid options are `mint` and `melt`
 * `addresses?`: List of addresses to filter utxos
 * `totalAmount?`: Total sum amount, should be null if searching for authorities
-* `count`: Max number of authorities
+* `count`: Count of utxos to fetch
 * `ignoreLocked`: If we should ignore locked utxos, can be `true` or `false`
 
 **Response**:
