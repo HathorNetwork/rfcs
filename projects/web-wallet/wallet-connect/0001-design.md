@@ -404,7 +404,8 @@ The `htr_getAddressBalance` API provides a way to retrieve the current balance o
 
 Unlike Ethereum, which uses an account-based model, Hathor employs a UTXO model for managing token balances. In order to create a transaction on a decentralized application (dApp), it is necessary to locate available UTXOs for a specified token. The `htr_getUtxosForToken` API allows developers to find and retrieve UTXOs related to a particular token, facilitating the creation of new transactions.
 
-#todo: other methods are TBD
+Before answering, the wallet must display a confirmation modal asking the user for permission to search for utxos for a given token and a given value, or authorities for a given token. The modal must also display the utxos that it will respond and ask for confirmation.
+
 
 <a name="guide_level_explanation__design_decisions"/>
 
