@@ -388,6 +388,12 @@ The wallets should display the same UI from the already existing send transactio
 
 On the mobile wallet, we should also implement a token action confirmation screen for displaying complete information about different token actions, like utxos used, outputs created, token name, token symbol, etc...
 
+The mechanism for signing a transaction is the following:
+
+1. The wallet responds an RPC call requesting inputs and answers with inputs taken from a trusted fullnode or wallet-service backend
+1. The wallet receives raw transaction bytes and parses it locally
+1. The wallet gathers information on this transaction's from the connected (and trusted) fullnode or wallet-service backend
+
 
 #### 3. Get token balance
   
