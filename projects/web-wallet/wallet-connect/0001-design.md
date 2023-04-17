@@ -454,6 +454,7 @@ This `PROJECT_ID` will be described in-depth in the External Tasks section of th
 Using the `core` instance, we can init the `@walletconnect/web3wallet` instance passing it and some metadata with information about the wallet:
 
 ```javascript
+  // This metadata object can be used by dApps to display information on connected clients
   const metadata = {
     name: 'Hathor WalletConnect PoC',
     description: 'Proof-of-concept using WalletConnect to connect to a Hathor dApp',
