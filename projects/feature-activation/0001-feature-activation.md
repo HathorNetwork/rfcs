@@ -308,6 +308,12 @@ Specifies if the feature should be activated even if the activation criteria are
 
 The client version of `hathor-core` at which this feature was defined.
 
+### Validation
+
+Validation of attribute values in the `Criteria` class are done in the class itself by using [pydantic's custom validation features](https://docs.pydantic.dev/usage/validators/) available through `BaseModel`. This type of validation covers "intra-criteria" rules, such as making sure that `minimum_activation_height <= timeout_height` and that some attributes must be multiples of `EVALUATION_INTERVAL`.
+
+Rules that should be enforced between different `Criteria` instances should be defined in a `validate()` or similar method in the `Feature` class, where all criteria for different features are defined, and can be compared. This includes for example checking that no two features use the same name, and that no two features use the same bit concurrently.
+
 ### Examples
 
 Some criteria configuration examples can be found in the table in the [Explorer User Interface] section. There,
