@@ -386,7 +386,7 @@ The wallets should display the same UI from the already existing send transactio
 
 <img width="544" alt="Pasted image 20230316114533" src="https://user-images.githubusercontent.com/3586068/225664910-28f3dfba-f508-477f-9950-67ef77dad570.png">
 
-On the mobile wallet, we should also implement a token action confirmation screen, which doesn't yet exist (#todo)
+On the mobile wallet, we should also implement a token action confirmation screen for displaying complete information about different token actions, like utxos used, outputs created, token name, token symbol, etc...
 
 
 #### 3. Get token balance
