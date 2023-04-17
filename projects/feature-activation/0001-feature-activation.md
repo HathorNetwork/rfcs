@@ -228,7 +228,6 @@ I propose that only the 4 rightmost bits of the leftmost byte are used for featu
 - `[0xC, 0x1, 0x02]`: represents [ignored, feature support for `bit=0`, `version=2`]
 - `[0x0, 0x5, 0x03]`: represents [ignored, feature support for `bit=0` and `bit=2`, `version=3`]
 
-
 That is, `bit=0` means the least significant bit, or the rightmost bit, and `bit=3` means the most significant bit, or leftmost bit.
 
 Therefore, the formula to obtain the flag value (`0` or `1`) from the block's `version` field and the feature's `bit` field, is:
@@ -236,7 +235,6 @@ Therefore, the formula to obtain the flag value (`0` or `1`) from the block's `v
 ```python
 bit_flag_value = (version >> bit + 8) & 1
 ```
-
 
 Note: if a miner sends a bit signal for a bit that is not defined as a feature bit, it is going to be ignored, meaning that the block will be considered valid and that bit's value will not be read.
 
@@ -429,7 +427,7 @@ def get_bit_count(block: Block, feature: Feature) -> int:
     raise NotImplementedError()
 
 def _get_block(vertex: BaseTransaction) -> Block:
-    # return this vertex if it's a block, or its closest block parent if it is a transaction.
+    # return this vertex if it's a block, or its closest parent block if it is a transaction.
     raise NotImplementedError()
 
 def _get_ancestor_at_height(block: Block, height: int) -> Block:
@@ -452,7 +450,13 @@ Therefore, it should be enough to store this cache in memory. It would need to b
 
 ### Dealing with reorgs
 
-When a reorg happens, re-computation of states may be necessary. The cache must be voided for every cached block that participated in the reorg.
+When a reorg happens, re-computation of states may be necessary. The cache must be voided for every cached block that participates in a reorg.
+
+Different blockchains, including the best chain, may have different states for each feature. Therefore, each blockchain may operate on a different set of rules that define how blocks are handled (customized by each feature, whether it is activated or not on that blockchain).
+
+Since a feature state may change from one block to the next, states can't be cached for blocks during a reorg, and cached blocks that are affected must have their cache voided. By doing this, when the feature state is queried on a reorged block, the first state cache it will hit is at closest the cache of the common block between the blockchains.
+
+In other words, the feature state from the common block downwards is always calculated dynamically, and never cached. The feature state from the common block upwards may be cached.
 
 ### Mempool
 
@@ -530,10 +534,10 @@ Here's a table of main tasks:
 | Implement `BaseTransaction` changes                          | 0.5      |
 | Implement `FeatureService`                                   | 3        |
 | Implement caching mechanism                                  | 1        |
-| Implement dealing with reorgs                                | 2        |
+| Implement dealing with reorgs                                | 3        |
 | Implement GET endpoint                                       | 0.5      |
 | Implement Explorer User Interface                            | 1        |
-| **Total**                                                    | **11**   |
+| **Total**                                                    | **12**   |
 
 And here's a more detailed list of sub-tasks:
 
