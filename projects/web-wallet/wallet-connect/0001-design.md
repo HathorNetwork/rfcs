@@ -375,6 +375,8 @@ This method should be similar to the Ethereum's `personal_sign` which is part of
 
 The idea is to allow `dApps` to request an arbitrary data to be signed with a specific address private key, to be able to prove the ownership of that address.
 
+This method will calculate an Hathor specific signature with `sign(keccak256("\x19Hathor Signed Message:\n" + len(message) + message)))`. By adding this prefix, we can ensure that the message will be specific to Hathor and prevent misuse where a malicious dApp could sign a transaction for instance
+
 
 #### 2. Sign a transaction
 
