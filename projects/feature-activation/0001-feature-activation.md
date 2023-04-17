@@ -139,6 +139,8 @@ For each block, there's a state associated with each feature. Possible states ar
 
 Note: features in the `FAILED` state will indeed never be activated, but that doesn't mean a new activation process for the same feature couldn't be retried with a different definition.
 
+After `ACTIVE` or `FAILED` state, the bit used for defining this each feature becomes available again for new features, as explained in the [bit] section.
+
 ### State retrieval
 [State retrieval]: #state-retrieval
 
@@ -226,7 +228,17 @@ I propose that only the 4 rightmost bits of the leftmost byte are used for featu
 - `[0xC, 0x1, 0x02]`: represents [ignored, feature support for `bit=0`, `version=2`]
 - `[0x0, 0x5, 0x03]`: represents [ignored, feature support for `bit=0` and `bit=2`, `version=3`]
 
-Note: if a miner sends a bit signal for a bit that is not defined as a feature bit, it is going to be ignored.
+
+That is, `bit=0` means the least significant bit, or the rightmost bit, and `bit=3` means the most significant bit, or leftmost bit.
+
+Therefore, the formula to obtain the flag value (`0` or `1`) from the block's `version` field and the feature's `bit` field, is:
+
+```python
+bit_flag_value = (version >> bit + 8) & 1
+```
+
+
+Note: if a miner sends a bit signal for a bit that is not defined as a feature bit, it is going to be ignored, meaning that the block will be considered valid and that bit's value will not be read.
 
 ## Evaluation interval
 
