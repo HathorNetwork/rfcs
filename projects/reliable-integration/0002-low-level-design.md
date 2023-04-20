@@ -14,6 +14,8 @@ At first, when the full node is initialized, it moves to the `LOAD` state, where
 
 In order to know which events will be generated, we will store the states (`LOAD` and `SYNC`) as metadata. So, when the full node starts, we will check the metadata. If it is empty or `LOAD`, we do not know where it stopped and will regenerate all events during load. If it is `SYNC`, we will not generate any events until `LOAD_FINISHED` is emitted.
 
+The state metadata will be stored in a specific RocksDB column family, used only for event-related metadata.
+
 In the table below we describe all possible starting scenarios for the full node, and the respective desired outcome:
 
 | Starting scenario                 | Vertices in the database | Events in the database | State metadata | Desired outcome                                                                                                                           |
@@ -32,8 +34,6 @@ For the `Fresh start` scenario, if we consider there's a `LOAD` phase with 0 eve
 | `Fresh start` or `Snapshot start` or `Restart from aborted LOAD phase` | Empty or `LOAD` | All events in the database are discarded. Generate all events, from `event_id = 0`. Events come during both the `LOAD` and `SYNC` phases. |
 | `Restart from aborted SYNC phase`                                      | `SYNC`          | Generate events from `event_id = last_event_id + 1`. All events come during the `SYNC` phase.                                             |
 
-Note: when generating snapshots, events should not be included, as they will be discarded and regenerated anyway.
-
 Now, we can describe a step-by-step representing these rules:
 
 1. The full node begins the initialization process
@@ -48,7 +48,13 @@ Now, we can describe a step-by-step representing these rules:
    1. The `EventManager` sets `SYNC` as the current node state in the database
 7. The full node starts syncing new vertices from the network
 
+### Genesis
 
+Events for the genesis block and two transactions are always emitted when events are generated from `event_id = 0`.
+
+### Snapshots
+
+When generating snapshots, events should not be included, as they will be discarded and regenerated anyway.
 
 ## Flags
 
