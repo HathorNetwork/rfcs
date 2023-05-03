@@ -191,6 +191,8 @@ The way the `is_feature_active()` method is used is very important. If the featu
 ## Explorer User Interface
 [Explorer User Interface]: #explorer-user-interface
 
+### Feature list
+
 There should be a new screen in the explorer showing all features that used the activation process, past and future. It should simply be a table in the following format, filled with some examples, and assuming the blockchain is currently at height 3,400,000:
 
 | Name               | State     | Acceptance | Threshold | Start height | Minimum activation height | Timeout height | Activate on timeout | Since version |
@@ -204,10 +206,14 @@ There should be a new screen in the explorer showing all features that used the 
 
 The meaning of each of those attributes is explained in the [Criteria configuration] section, except State and Acceptance, which are calculated.
 
+### Block interface
+
+In the [Block interface](https://explorer.hathor.network/transaction/000000000000000000a7e88320fd21cd13f0338ea8f06dacd4f416ddb0bf705e), a new card should be added to display the feature criteria and state for each feature. UI specifics are left as unresolved implementation details.
+
 ## REST API
 [REST API]: #rest-api
 
-A `GET` endpoint should be provided, mainly to serve the UI described above. It should return a JSON object like the following:
+A new `GET` endpoint should be provided, mainly to serve the UI described above. It should return a JSON object like the following:
 
 ```json
 {
@@ -375,6 +381,11 @@ class FeatureService:
 
     def get_state(self, block: Block, feature: Feature) -> FeatureState:
         # return the state of a feature at a certain block.
+        raise NotImplementedError()
+
+    def get_bits_description(self, block: Block) -> List[Tuple[Criteria, FeatureState]]:
+        # return the criteria definition and feature states for all features for a certain block,
+        # associated with each signal bit.
         raise NotImplementedError()
 
     def get_bit_count(self, block: Block, feature: Feature) -> int:
@@ -547,15 +558,16 @@ Here's a table of main tasks:
 
 | Task                                                         | Dev days |
 |--------------------------------------------------------------|----------|
-| Create basic data structures                                 | 1        |
+| Create basic data structures                                 | 1.5      |
 | Implement bit signal handling on the block's `version` field | 2        |
 | Implement `BaseTransaction` changes                          | 0.5      |
 | Implement `FeatureService`                                   | 3        |
-| Implement caching mechanism                                  | 1        |
+| Implement caching mechanism                                  | 1.5      |
 | Implement dealing with reorgs                                | 3        |
-| Implement GET endpoint                                       | 0.5      |
-| Implement Explorer User Interface                            | 1        |
-| **Total**                                                    | **12**   |
+| Implement new GET endpoint                                   | 0.5      |
+| Implement Explorer feature list UI                           | 1.5      |
+| Update Explorer block UI                                     | 1.5      |
+| **Total**                                                    | **15**   |
 
 And here's a more detailed list of sub-tasks:
 
