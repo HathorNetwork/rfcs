@@ -1,4 +1,4 @@
-- Feature Name: Feature Activation
+- Feature Name: Feature Activation for Blocks
 - Start Date: 2023-04-05
 - Initial Documents: [New feature after a given block height](https://docs.google.com/document/d/1iBy1AzXYzIq-jlZavCRal0cr1DvLRT50WDpW2wk4xZw/edit), [Flag to signal feature support by miners](https://docs.google.com/document/d/1Ws0BMbLd8B-9AUVdeHphZXVNpbUWvEBnXTFOLWb9HJY/edit)
 - Author: Gabriel Levcovitz <<gabriel@hathor.network>>
@@ -161,28 +161,28 @@ After `ACTIVE` or `FAILED` state, the bit used for defining this each feature be
 ### State retrieval
 [State retrieval]: #state-retrieval
 
-Feature activation will be implemented as a method in `BaseTransaction` that users (that is, developers implementing features in `hathor-core`) can use to conditionally execute different code based on the activation criteria for a certain feature.
+Feature activation will be implemented as a method in `Block` that users (that is, developers implementing features in `hathor-core`) can use to conditionally execute different code based on the activation criteria for a certain feature.
 
 Developers that define feature activation criteria may or may not be the same developers using conditional branching on that feature. For that, all criteria and their evaluation should be transparent for users.
 
-The API entrypoint for using the feature activation process is simply checking if a certain feature is active for some specific vertex (block or transaction). Anytime during the processing of a vertex, an `is_feature_active()` method can be called to evaluate the state for a certain feature, and the code is branched from there. For example:
+The API entrypoint for using the feature activation process is simply checking if a certain feature is active for some specific block. Anytime during the processing of a block, an `is_feature_active()` method can be called to evaluate the state for a certain feature, and the code is branched from there. For example:
 
 ```python
-def some_vertex_processing_method(self, vertex: BaseTransaction):
-    if vertex.is_feature_active(Feature.MY_NEW_FEATURE):
+def some_block_processing_method(self, block: Block):
+    if block.is_feature_active(Feature.MY_NEW_FEATURE):
         # execute code related to the new feature
     else:
         # execute existing code with no changes
 ```
 
-Therefore, this will be implemented as a method in `BaseTransaction`:
+Therefore, this will be implemented as a method in `Block`:
 
 ```python
 def is_feature_active(self, feature: Feature) -> bool:
     return self.feature_service.is_feature_active(self, feature)
 ```
 
-The `feature_service` property will be an instance of the `FeatureService` class. This class will be implemented to encapsulate code related to feature activation and prevent bloating of `BaseTransaction` code. More on that in the [Feature Service] section below.
+The `feature_service` property will be an instance of the `FeatureService` class. This class will be implemented to encapsulate code related to feature activation and prevent bloating of `Block` code. More on that in the [Feature Service] section below.
 
 Notice that for users of the API, only the feature name (enum option) is necessary. The user shouldn't care how or why this feature is activated, only whether it is or not.
 
@@ -369,12 +369,12 @@ As explained in the [State retrieval] section, a `BaseTransaction` will contain 
 
 ```python
 class FeatureService:
-    def is_feature_active(self, vertex: BaseTransaction, feature: Feature) -> bool:
-        # return whether a feature is active at a certain vertex.
+    def is_feature_active(self, block: Block, feature: Feature) -> bool:
+        # return whether a feature is active at a certain block.
         raise NotImplementedError()
 
-    def get_state(self, vertex: BaseTransaction, feature: Feature) -> FeatureState:
-        # return the state of a feature at a certain vertex.
+    def get_state(self, block: Block, feature: Feature) -> FeatureState:
+        # return the state of a feature at a certain block.
         raise NotImplementedError()
 
     def get_bit_count(self, block: Block, feature: Feature) -> int:
@@ -385,13 +385,12 @@ class FeatureService:
 A reference implementation is provided for `is_feature_active()` and `get_state()`, complying with the rules described in this document:
 
 ```python
-def is_feature_active(vertex: BaseTransaction, feature: Feature) -> bool:
-    state = get_state(vertex, feature)
+def is_feature_active(block: Block, feature: Feature) -> bool:
+    state = get_state(block, feature)
 
     return state == FeatureState.ACTIVE
 
-def get_state(vertex: BaseTransaction, feature: Feature) -> FeatureState:
-    block = _get_block(vertex)
+def get_state(block: Block, feature: Feature) -> FeatureState:
     height = block.calculate_height()
 
     # per definition, the genesis block is in the DEFINED state for all features
@@ -449,10 +448,6 @@ def get_bit_count(block: Block, feature: Feature) -> int:
     # in the previous evaluation interval.
     raise NotImplementedError()
 
-def _get_block(vertex: BaseTransaction) -> Block:
-    # return this vertex if it's a block, or its closest parent block if it is a transaction.
-    raise NotImplementedError()
-
 def _get_ancestor_at_height(block: Block, height: int) -> Block:
     # return the block with the given height by walking up the
     # blockchain using block.get_block_parent().
@@ -481,9 +476,9 @@ Since a feature state may change from one block to the next, states can't be cac
 
 In other words, the feature state from the common block downwards is always calculated dynamically, and never cached. The feature state from the common block upwards may be cached.
 
-### Mempool
+### Transactions and Mempool
 
-Transactions in the mempool should behave naturally by getting the state of its respective closest parent block.
+This design does not cover getting feature states for transactions. This means that features activated with this workflow cannot change transaction processing rules. Feature activation for transactions will be defined in a separate design.
 
 ### Example
 
