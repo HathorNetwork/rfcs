@@ -56,6 +56,8 @@ The feature activation implementation on Hathor is heavily inspired by BIP 9 [2]
 
 One notable difference is that on Bitcoin, BIP 8/9 is only used for activating soft forks, that is, backwards-compatible changes (at least until the release of this document). In contrast, Hathor's feature activation is planned to support hard forks as well, which are necessary to implement updates such as Nano Contracts.
 
+Some examples of changes that would use the process described in this document are changes in validation of blocks and changes in the confirmation of blocks, such as adding new types of blocks or changing consensus rules. Similar changes on transactions would use the same process, but will be defined in a separate document. Changes like updating the sync algorithm don't create forks and therefore don't need to use this process.
+
 ### Terms and Concepts
 [Terms and Concepts]: #terms-and-concepts
 
