@@ -465,15 +465,15 @@ def _get_ancestor_at_height(block: Block, height: int) -> Block:
 
 Following the implementation above would make the `get_state()` function call itself recursively until reaching genesis. To prevent this and make the code run efficiently, a state caching mechanism is required.
 
-The state of a block/feature combination is completely determined by the state of the first block in an evaluation period, that is, the previous block with a height that is a multiple of `EVALUATION_INTERVAL`. By caching every one of those interval boundary blocks for each feature, the problem is resolved.
+The state of a block/feature combination is completely determined by the state of the first block in an evaluation period, that is, the previous block with a height that is a multiple of `EVALUATION_INTERVAL`. By caching feature states for every one of those interval boundary blocks, the problem is resolved.
 
-Given the defined `EVALUATION_INTERVAL` value of `40320`, and the current blockchain height of approximately 3,400,000 blocks, the cache will store less than 100 boundary block states for each feature, and that number will be small for years.
+A new field in the block metadata will be created to store the states. It will be a dictionary mapping a `Feature` enum option to a state enum option.
 
-Therefore, it should be enough to store this cache in memory. It would need to be reconstructed every time the full node is restarted. If during implementation tests this reconstruction is deemed to be too slow, RocksDB may be used to permanently store it.
+Given the defined `EVALUATION_INTERVAL` value of `40320`, and the current blockchain height of approximately 3,400,000 blocks, there'll be less than 100 boundary blocks, and that number will be small for years. This means that the great majority of blocks won't consume memory by storing this new metadata attribute.
 
 ### Dealing with reorgs
 
-When a reorg happens, re-computation of states may be necessary. The cache must be voided for every cached block that participates in a reorg.
+When a reorg happens, re-computation of states may be necessary. The cache must be voided for every cached block that participates in a reorg. That is, the feature states metadata attribute will be removed.
 
 Different blockchains, including the best chain, may have different states for each feature. Therefore, each blockchain may operate on a different set of rules that define how blocks are handled (customized by each feature, whether it is activated or not on that blockchain).
 
