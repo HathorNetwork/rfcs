@@ -114,18 +114,35 @@ It is allowed to change code that is conditional on feature activation, but **NO
 ## Feature and Criteria definition
 [Feature and Criteria definition]: #feature-and-criteria-definition
 
-The definition of new features available for feature activation should be as simple as defining the feature name and the criteria required to evaluate its activation state. Once defined, ideally, it should not be changed. The `Feature` enum will contain all features, past and future, activated or not:
+The definition of new features available for feature activation should be as simple as defining the feature name and the criteria required to evaluate its activation state. Once defined, ideally, it should not be changed. Each feature will be defined in its own file, for example, in a `features/nano_contracts.py` file:
 
 ```python
-class Feature(Enum):
-    NANO_CONTRACTS = Criteria(name='NANO_CONTRACTS', ...)
-    SOME_NEW_OP_CODE = Criteria(name='SOME_NEW_OP_CODE', ...)
-    SOME_OTHER_FEATURE = Criteria(name='SOME_OTHER_FEATURE', ...)
+NANO_CONTRACTS = Criteria(name='NANO_CONTRACTS', ...)
 ```
 
 The `Criteria` data class is used to define attributes such as the feature name and activation requirements. Each name should be unique across all features, past and future. Its definition is provided in the [Criteria configuration] section.
 
-Different features with different criteria should be configurable separately for each network, mainnet and testnet. Feature definitions should **NEVER** be removed, even after activation, as explained in the [Burying feature activations] section. This is meant to preserve history.
+Then, a `Feature` enum will contain all features, past and future, activated or not:
+
+```python
+class Feature(Enum):
+    NANO_CONTRACTS = 0
+    SOME_NEW_OP_CODE = 1
+    SOME_OTHER_FEATURE = 2
+```
+
+And finally, a dictionary in `HathorSettings` will map the `Criteria` definition for each `Feature` enum option:
+
+```python
+FEATURE_ACTIVATION: Dict[Feature, Criteria] = {
+    Feature.NANO_CONTRACTS: NANO_CONTRACTS,
+    ...
+}
+```
+
+The `Criteria` definitions are created in separate files to keep organization and the ability to add custom behavior in the future. The `Feature` enum ties all possible feature definitions to a type. And lastly, the `HathorSettings` attribute allows different configurations for each network (mainnet and testnet).
+
+Feature definitions should **NEVER** be removed, even after activation, as explained in the [Burying feature activations] section. This is meant to preserve history.
 
 ## Feature States
 [Feature States]: #feature-states
@@ -390,7 +407,7 @@ def get_state(vertex: BaseTransaction, feature: Feature) -> FeatureState:
 
     ancestor = _get_ancestor_at_height(block, height - EVALUATION_INTERVAL)
     previous_state = get_state(ancestor, feature)
-    criteria = feature.value
+    criteria = settings.FEATURE_ACTIVATION[feature]
 
     # this match statement is a direct implementation of the diagram above
     match previous_state:
