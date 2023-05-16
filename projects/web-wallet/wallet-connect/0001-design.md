@@ -426,6 +426,8 @@ The mechanism for signing a transaction is the following:
 1. The wallet receives raw transaction bytes and parses it locally
 1. The wallet gathers information on this transaction's from the connected (and trusted) fullnode or wallet-service backend
 
+We should also make sure to never trust information received by the `dApp`, all transaction inputs and outputs should be fetched by a trusted fullnode, specifically the one the wallet is currently connected to.
+
 
 #### 3. Get token balance
   
