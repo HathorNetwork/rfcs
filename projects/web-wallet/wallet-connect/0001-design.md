@@ -12,6 +12,7 @@
 	* [What is it?](#overview__what_is_it)
 	- [How does it works](#overview__how_does_it_work)
 	- [Is it secure?](#overview__is_it_secure)
+  - [Privacy](#privacy)
 	- [Resources](#overview__resources)
 - [Guide-level explanation](#guide_level_explanation)
 	- [UI](#guide_level_explanation__ui)
@@ -304,6 +305,31 @@ export function generateRandomBytes32(): string {
 The implementation for the PRNG used by it can be seen [here](https://github.com/StableLib/stablelib/blob/a89a438fcbf855de6b2e9faa2630f03c3f3b3a54/packages/random/source/browser.ts) for when it's used on a browser, and [here](https://github.com/StableLib/stablelib/blob/a89a438fcbf855de6b2e9faa2630f03c3f3b3a54/packages/random/source/node.ts) when it's used on node.js
 
 Given that the shared key is not leaked, the message exchange should be secure from network man in the middle attacks as it is only displayed as a QRCode and scanned on the Wallet
+
+<a name="privacy"/>
+
+### Privacy
+
+As described before, there is no current production-ready implementation of the WalletConnect Relay Server, so we are forced to using their Cloud Infrastructure
+
+The privacy policy for WalletConnect can be read [here](https://walletconnect.com/privacy)
+
+This is the Cloud Infrastructure section:
+
+
+> We offer hosted infrastructure for users of the WalletConnect Cloud. Our infrastructure consists of components such as a relay server, load balancer, and other infrastructure that receives and transmits encrypted data between known parties.
+> 
+> Data processed may include:
+> 
+> * IP address may be temporarily logged to prevent DDOS attacks.
+> * Encrypted data payloads may be stored so that they can be retrieved by clients
+> * A randomly generated clientid used to retrieve messages
+> * Metadata about the protocol such as the message tag and projectId
+> * SDK user agent and version
+> * Country and region
+
+If we choose to use WalletConnect, I suggest we add a modal with a notice explaining that we are currently using the WalletConnect Cloud Infrastructure, poiting to their privacy policy and explaining that the data listed above might be tracked.
+
 
 <a name="overview__resources"/>
 
