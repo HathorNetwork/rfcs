@@ -310,6 +310,8 @@ The implementation for the PRNG used by it can be seen [here](https://github.com
 
 Given that the shared key is not leaked, the message exchange should be secure from network man in the middle attacks as it is only displayed as a QRCode and scanned on the Wallet
 
+One important remark here is that the `symKey` is generated client-side by the `dApp`. The problem with this approach is that `dApps` can generate unsafe random bytes and expose themselves to attack vectors.
+
 <a name="privacy"/>
 
 ### Privacy
