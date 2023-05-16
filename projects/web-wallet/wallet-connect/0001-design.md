@@ -440,6 +440,8 @@ Unlike Ethereum, which uses an account-based model, Hathor employs a UTXO model 
 
 Before answering, the wallet must display a confirmation modal asking the user for permission to search for utxos for a given token and a given value, or authorities for a given token. The modal must also display the utxos that it will respond and ask for confirmation.
 
+This RPC method will be further discussed in another design document which should consider the privacy implications of displaying a list of the user's wallet utxos to `dApps`, ideally doing everything inside the wallet instead of on the `dApp`
+
 
 <a name="guide_level_explanation__design_decisions"/>
 
