@@ -251,6 +251,8 @@ The Wallet then approves or reject this message, here is an `approve_session` ex
 
 Once the approve_session message is received and processed by the dApp, the secure communication channel between the dApp and the wallet is established, and they can exchange encrypted messages through the relay server.
 
+The messages are encrypted using [ChaCha20-Poly1305](https://en.wikipedia.org/wiki/ChaCha20-Poly1305), the implementation for the `encrypt` method can be see [here](https://github.com/WalletConnect/walletconnect-monorepo/blob/557b9e295039285cdbab2e3183211095aee9e94a/packages/utils/src/crypto.ts#L63). On the original spec, it does not accept changing the encryption algorithm.
+
 Here is a flowchart illustrating this linking process:
 
 ```mermaid
