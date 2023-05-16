@@ -293,6 +293,8 @@ The information sent between `dApps` and wallets is encrypted symmetrically with
 
 The key is sent directly to the wallet from the `dApp`. Whether users scan through the QR code or choose deep-link with the wallet, there are no intermediaries, so as long as the `symKey` is not leaked, the communication is safe.
 
+The protocol as is currently designed does not support ephemeral keys, [on their web3wallet implementation](https://github.com/WalletConnect/walletconnect-monorepo/tree/v2.0/packages/web3wallet), the symKey is stored on localStorage during the entire session. **An important remark is that the `symKey` is being stored in plain-text on the device's localStorage.**. If we choose to use WalletConnect, we need to extend their SDK and encrypt it.
+
 This key is generated using the `generateRandomBytes32` method, here is its implementation:
 
 ```typescript
