@@ -27,7 +27,7 @@ The main feature of a bridge is moving tokens between chains, first we will desc
 ## Moving tokens between chains
 
 Weather a chain uses account or UTXO, an owned token is an entry on the chain ledger, this means we cannot actually send the token to the other chain.
-To move a token _ATk_ from chain A to chain B we will "lock" the token on chain A and mint the same ammount of a token _bATk_ token on chain B.
+To move a token _ATk_ from chain A to chain B we will "lock" the token on chain A and mint the same amount of a token _bATk_ token on chain B.
 This way, every _bATk_ in existence has a _ATk_ locked on the original chain so that we can equate the value of 1 _bATk_ to 1 _ATk_.
 
 The value of _bATk_ can only be guaranteed if we have an operation to move the tokens back to their original chain, effectively melting or destroying a certain amount of _bATk_ and "unlocking" the same amount of _ATk_.
@@ -51,7 +51,7 @@ for instance by creating a token with id `0` when deploying the contract, so tha
 #### EVM native token
 
 A token created on the EVM chain does not have a universal identifier, it depends on which ERC the contract of the token is compliant,
-[ERC20] and [ERC-777] tokens are identified by the contract address and [ERC-721] and [ERC-1155] use contract address plus token id (usually `uint256`).
+[ERC-20](https://ethereum.org/pt/developers/docs/standards/tokens/erc-20/) and [ERC-777](https://ethereum.org/pt/developers/docs/standards/tokens/erc-777/) tokens are identified by the contract address and [ERC-721](https://ethereum.org/pt/developers/docs/standards/tokens/erc-721/) and [ERC-1155](https://ethereum.org/pt/developers/docs/standards/tokens/erc-1155/) use contract address plus token id (usually `uint256`).
 We should be able to support all of these standards by creating a local token id (separate from the ids of the tokens managed in this contract) and map it to a struct with the necessary data.
 This id can be mapped to the Hathor token uid created as its equivalent.
 
@@ -71,3 +71,21 @@ On Hathor this is more strict, since the best way to ensure the minimum number a
 The admins of this wallet cannot simply remove a participant from the MultiSig since it would change the actual wallet so any changes on the participants or the number of minimum signatures would require a redeploy of all instances of the service.
 
 The EVM provides events (or logs) which can be used to communicate a new proposal and request for signatures, but for the MultiSig wallet on Hathor the communication needs to be handled in a different way.
+
+## Hathor MultiSig
+
+Hathor MultiSig standard relies on a pay-to-script-hash (P2SH) model, this means that for any data to be written on-chain (e.g. transactions, token create/mint/melt operations) the signatures for this "write" must already be collected.
+This makes is why we need a secondary communication channel for proposals since they were not yet accepted.
+
+To handle operations on the MultiSig wallet each participant will run a copy of a headless wallet initialized with its seed and MultiSig configuration.
+They will coordinate with the other service instances using the secondary communication channel and make operations on the wallet using the headless REST API.
+
+For the service to be notified that a transaction was sent to the "federation" MultiSig wallet we will use the websocket extension of the headless which enabled real time notification of a received transaction.
+
+# Future possibilities
+[future-possibilities]: #future-possibilities
+
+Although Hathor's MultiSig has all the secutiry features required to make the bridge functional we still need to rely on external components,
+i.e. a communication channel for actors and a storage for state management (e.g. token equivalency and transaction proposals).
+This could be changed to use a nano-contract, where it can handle events, listing tx proposals and federation with a changing number of participants with 0 downtime.
+Using nano-contracts would also enable very low cost deployment and infrastructure of bridges to new EVM compatible chains and allow for security updates to take effect on all bridges.
