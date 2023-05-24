@@ -89,3 +89,10 @@ Although Hathor's MultiSig has all the secutiry features required to make the br
 i.e. a communication channel for actors and a storage for state management (e.g. token equivalency and transaction proposals).
 This could be changed to use a nano-contract, where it can handle events, listing tx proposals and federation with a changing number of participants with 0 downtime.
 Using nano-contracts would also enable very low cost deployment and infrastructure of bridges to new EVM compatible chains and allow for security updates to take effect on all bridges.
+
+# Unresolved questions
+[unresolved-questions]: #unresolved-questions
+
+- We require APIs on the headless wallet to create, mint and melt tokens.
+- We require a way to start a MultiSig wallet in the lib without a seed or private key.
+  - It should not be a read-only instance since it can send transactions (from gathered signatures)

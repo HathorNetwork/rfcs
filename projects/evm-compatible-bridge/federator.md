@@ -115,10 +115,3 @@ These requests will be available via polling api.
 
 The federation will then inspect the request to check the validity then sign and send the signature via API.
 Once enough signatures are collected the coordinator service will push the signed transaction and send a fulfillment event.
-
-# Unresolved questions
-[unresolved-questions]: #unresolved-questions
-
-- We require APIs on the headless wallet to create, mint and melt tokens.
-- We require a way to start a MultiSig wallet in the lib without a seed or private key.
-  - It is not a read-only since it can send transactions (from gathered signatures)
