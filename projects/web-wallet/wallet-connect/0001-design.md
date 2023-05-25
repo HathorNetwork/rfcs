@@ -9,7 +9,7 @@
 - [Motivation](#motivation)
 - [Acceptance Criteria](#acceptance_criteria)
 - [Overview of WalletConnect](#overview)
-	* [What is it?](#overview__what_is_it)
+	- [What is it?](#overview__what_is_it)
 	- [How does it works](#overview__how_does_it_work)
 	- [Is it secure?](#overview__is_it_secure)
   - [Privacy](#privacy)
@@ -26,7 +26,6 @@
 - [Conclusion](#conclusion)
 	- [Pros](#conclusion_pros)
 	- [Cons](#conclusion_cons)
-- [Task Break-down](#task_breakdown)
 
 <a name="summary"/>
 
@@ -804,17 +803,3 @@ In my opinion, WalletConnect is a very viable project for our goals and is curre
 
 ### Cons
 - [ ] **The production relay server is not open-source.**, we would have to develop our own if we don't want to depend on them
-
-<a name="task_breakdown"/>
-
-## Task break-down
-
-| Task | Dev/days |
-| --- | --- |
-| Implement the methods described in the API section| 2 |
-| Implement the walletConnect saga | 2 |
-| New screens for pairing and handling sessions and modals | 2 |
-| Implement feature toggles | 0.5 |
-| QA and internal testing | 2 |
-
-
