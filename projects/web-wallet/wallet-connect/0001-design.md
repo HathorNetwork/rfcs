@@ -333,7 +333,7 @@ This is the Cloud Infrastructure section:
 > * SDK user agent and version
 > * Country and region
 
-If we choose to use WalletConnect, I suggest we add a modal with a notice explaining that we are currently using the WalletConnect Cloud Infrastructure, poiting to their privacy policy and explaining that the data listed above might be tracked.
+If we choose to use WalletConnect, I suggest we add a modal with a notice explaining that we are currently using the WalletConnect Cloud Infrastructure, pointing to their privacy policy and explaining that the data listed above might be tracked.
 
 
 <a name="overview__resources"/>
