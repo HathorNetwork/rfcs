@@ -12,9 +12,10 @@ Currently this upload is made manually by a team member, extracting data from th
 ### JS to JSON conversion
 The platform that manages the OpenAPI Documentation static website, [Redoc](https://github.com/Redocly/redoc), only interacts with `.json` files. So we need to convert our `src/api-docs.js` file into a `.json` one whenever we want to use this platform.
 
-A script should be built to make this conversion on the `scripts` folder, outputting the results to the `tmp/` folder. All following steps will be executed on this converted file. Some specific conditions to execute:
-- Remove the `securitySchemes` from the `components` property
-- Ensure the `default` property normally exported by the javascript `.toJSON()` is not present on the output json
+A script should be built to make this conversion on the `scripts` folder, that implements the following:
+- Removes the `securitySchemes` from the `components` property
+- Ensures the `default` property normally exported by the `JSON.stringify()` is not present on the output json
+- Outputs the results to the `tmp/api-docs.json` folder.
 
 This script will be referred to as `scripts/convert-docs.js` from now on.
 
@@ -35,6 +36,9 @@ npx @redocly/cli lint tmp/api-docs.json
 # Local server for validating
 npx @redocly/cli preview-docs tmp/api-docs.json
 xdg-open http://127.0.0.1:8080
+
+# Cleanup after the server is closed
+rm tmp/api-docs.json
 ```
 
 > *Note:* The linter throws some errors on our current documentation. The first implementation of this script will certainly require a refactoring PR.
