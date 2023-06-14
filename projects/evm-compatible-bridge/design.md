@@ -83,7 +83,7 @@ sequenceDiagram
   fed->>cood: Poll for new requests
   cood-->>+fed: Return the list of new requests
   fed-->>-fed: Check if the request is valid
-  fed->>+evm: Vote to create/Mint tokens minus fees
+  fed->>+evm: Vote to create/Mint tokens
   Note over evm: Once enough votes are cast<br/>the tokens are created<br/>If 100 blocks pass and<br/>the votes are not enough<br/>the request is considered<br/>as rejected
   evm->>userE: Send tokens
   evm--)-fed: Notify the request was completed with an event
@@ -128,6 +128,7 @@ When a user wants to cross tokens native to Hathor back to Hathor, they will cal
 ```mermaid
 sequenceDiagram
   box EVM
+  actor admin as Admin address on EVM
   actor userE as User address on EVM
   participant evm as EVM smart contract
   end
@@ -139,6 +140,7 @@ sequenceDiagram
   end
   
   userE->>+evm: Call method to cross the tokens
+  evm-->>admin: Send fees to the admin address
   evm-->>evm: Burn tokens from the user account
   evm--)-fed: emit event with the request to cross tokens
   Note over fed: If the tokens are crossing back to Hathor<br/>we can be sure that there are enough tokens<br/>on the wallet to fulfill the request
@@ -151,10 +153,11 @@ sequenceDiagram
   fed-->>fed: Check if the request is valid
   fed->>+cood: Send signatures for the request
   cood->>ms: Once enough signatures are collected, push transaction
-  ms->>userH: Send tokens minus fees
+  ms->>userH: Send tokens
   ms-->>cood: Return the transaction id
   cood->>-cood: Mark refund request as completed
-  Note over userH: Tokens are with the user
+  Note over userH: Tokens are with the user (minus fees)
+  Note over admin: Fees are sitting on the admin account
 ```
 
 If the request fails, the user will have to contact the administrator to request a refund of tokens.
@@ -169,6 +172,7 @@ When a user wants to cross tokens native to the EVM chain to Hathor, they will c
 ```mermaid
 sequenceDiagram
   box EVM
+  actor admin as Admin address on EVM
   actor userE as User address on EVM
   participant evm as EVM smart contract
   end
@@ -180,6 +184,7 @@ sequenceDiagram
   end
   
   userE->>+evm: Call method to cross the tokens
+  evm-->>admin: Send fees to the admin address
   evm-->>evm: Send tokens from user account to the bridge account<br/>Tokens on the bridge account are considered "locked"
   Note over evm: If the token is not supported<br/>i.e. there is no equivalent token on Hathor yet<br/>the transaction will fail
   evm--)-fed: emit event with the request to cross tokens<br/>This will include the token uid<br/>of the equivalent token on Hathor
@@ -192,11 +197,12 @@ sequenceDiagram
   fed-->>fed: Check if the request is valid
   fed->>+cood: Send signatures for the request
   cood->>ms: Once enough signatures are collected, push transaction
-  ms->>userH: Mint tokens minus fees to user address
+  ms->>userH: Mint tokens to user address
   ms-->>cood: Return the transaction id
   cood->>-cood: Mark cross request as completed
   Note over userH: Equivalent tokens are with the user
   Note over evm: Original tokens are locked on the bridge account
+  Note over admin: Fees are sitting on the admin account
 ```
 
 If the request fails, the user will have to contact the administrator to request a refund of tokens.
@@ -244,9 +250,46 @@ If an admin wishes to support the token, we can think of 2 options:
 
 #### EVM Native: Hathor -> EVM
 
-The flow of this operation is exactly the same as the Hathor native token flow to cross to the EVM chain, the only difference is that the token on the EVM chain is not managed by the smart contract, but by its own contract.
+When crossing an EVM native token back to the EVM chain, the user will send the tokens to the MultiSig wallet on Hathor and the coordinator service will begin the process to melt the tokens, once the tokens are melted the federation will unlock the tokens to the user address on the EVM chain, this operation will send the tokens from the bridge contract to the user address.
 
-Also, the operation when sending the tokens to the user will not be to mint tokens to the user account but to call the token contract to send the tokens to the user account.
+```mermaid
+sequenceDiagram
+  box Hathor
+  actor userH as User wallet on Hathor
+  participant ms as MultiSig Wallet in Hathor
+  end
+  participant cood as Coordinator service
+  participant fed as Federation
+  box EVM
+  participant evm as EVM smart contract
+  actor userE as User address on EVM
+  end
+  
+  userH->>ms: Send tokens
+  ms--)+cood: Find a new transaction
+  Note over cood: Save the request<br/>Wait 5 blocks for confirmation<br/>We will start the process to<br/>melt the tokens on Hathor
+  cood-->-cood: Make melt operation available for polling
+
+  fed->>cood: Poll for new requests
+  cood-->>fed: Return the list of new requests
+  fed-->>fed: Check if the request is valid
+  fed->>+cood: Send signatures for the melt request
+  cood->>ms: Once enough signatures are collected, push transaction
+
+  Note over cood: We will start the process to<br/>send the tokens to the user on the EVM chain
+
+  cood->>-cood: Make request available for polling
+  fed->>cood: Poll for new requests
+  cood-->>fed: Return the list of new requests
+  fed-->>fed: Check if the request is valid
+  fed->>+evm: Vote to create/Mint tokens
+  Note over evm: Once enough votes are cast<br/>the tokens are created<br/>If 100 blocks pass and<br/>the votes are not enough<br/>the request is considered<br/>as rejected
+  evm->>userE: Send tokens
+  evm--)-fed: Notify the request was completed with an event
+  fed->>cood: Mark request as fulfilled
+  Note over ms: Original tokens are locked on the wallet (with fees)
+  Note over userE: Equivalent tokens are with the user (minus fees)
+```
 
 ## Federation service
 
@@ -274,6 +317,21 @@ For the coordinator service to be notified that a transaction was sent to the "f
 The coordinator is not a participant of the federation so his headless wallet will be initialized with the MultiSig configuration but without a seed, this does not mean it is a readonly wallet since we will use it to send transactions with the collected signatures.
 
 The federation will have to inspect any transaction proposed by the coordinator service and check if it is valid, to achieve this we need an API on the headless to that can return the transaction information with metadata (balance to our wallet, decoded data outputs, etc.).
+
+## Bridge crossing fees
+
+The fee percentage will be configured on the EVM contract and will be applied to all tokens crossing the bridge, this fee will be deducted from the amount of tokens being crossed and will be kept on the Hathor MultiSig wallet or the Bridge contract until the admin decides to withdraw it.
+
+For clarification, we will list the operations and where the fees are kept:
+
+- Hathor -> EVM
+  - The fee is deducted from the amount of tokens being crossed and kept on the MultiSig wallet in Hathor.
+  - The admin can request the withdrawal from the wallet by using the coordinator service, which will check that we are not withdrawing more than the collected fees.
+  - For EVM native tokens, we will only melt the amount of tokens minus fees, so the fees will automatically be kept on the MultiSig wallet.
+- EVM -> Hathor
+  - The fee is deducted from the amount of tokens being crossed and they will be sent to the admin account.
+
+When crossing from Hathor and from the EVM chain the same fee will be applied and the services should read the fee from the contract to ensure they are using the correct updated value.
 
 # Alternative solutions
 

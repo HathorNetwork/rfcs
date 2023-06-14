@@ -49,10 +49,8 @@ This contract is "ownable" and the admin will be able to make some operations, f
 - Burn and mint tokens
   - The admin should be able to manage tokens in the bridge.
   - The admin can use this to refund tokens or make manual corrections.
-- Redeem fees
-  - The admin can redeem fees collected by the bridge from the transactions.
-- Change federation contract
-  - The admin can change the federation contract address.
+- Configuration methods
+  - The admin should be able to change the configuration of the contract, this includes changing the fee percentage, changing the federation contract address, etc.
 - Set token id
   - The admin should be able to correct and change the mapping of equivalent tokens.
   - This is to correct any mistakes or to manually support new tokens.
