@@ -45,7 +45,7 @@ rm tmp/api-docs.json
 > *Note:* The linter throws some errors on our current documentation. The first implementation of this script will certainly require a refactoring PR.
 
 ### PR Validation
-A GitHub Workflow, configured to run on every PR merging to `dev`, should run the conversion script and linter to check for errors on the generated documentation. This should be part of the CI process.
+A GitHub Workflow, configured to run on every PR, should run the conversion script and linter to check for errors on the generated documentation. This should be part of the CI process.
 
 ### Deployment
 On the deployment pipeline, namely when there is a new `v*` label on the `master` branch, a new workflow should also upload the generated `json` file to the production documentation S3 bucket. This will update the website to the community.
