@@ -33,10 +33,6 @@ The bridge contract will also be required to have some user and admin methods.
   - The bridge will register this request with the federation contract.
   - The bridge contract will emit an event to log the request.
   - The amount of tokens must be valid according to the granularity rules.
-- `requestSupportForToken`
-  - The user will call this method to request support for a token (native to the EVM chain).
-  - This method will register a unique id and register this request with the federation contract.
-  - The bridge contract will emit an event to log the request.
 - All features supoprted by the ERC-1155 token standard.
 
 #### Admin methods
@@ -99,15 +95,13 @@ To check if the token is native to Hathor or the EVM we can check the contract a
 Some methods can only be called by the federation contract (or admin).
 These methods will be used to manage tokens, include support for new tokens, etc.
 
-The federation will also provide a method so the bridge contract can notify when a user requests support for a token or a crossing of a token to Hathor.
-
 ### Federation contract
 
 A good example implementation can be found [here](https://github.com/onepercentio/tokenbridge/blob/master/bridge/contracts/Federation.sol).
 This contract has a very good example of a federation with all needed functionalities, it also includes an owner account for the federation that can change the members and the bridge being managed.
 
 The main method of the federation is `voteProposal` which will be used to vote on a request.
-Requests can be used to unlock tokens to a user, to support a new token, burn or mint tokens.
+Requests can be used to unlock tokens to a user, burn or mint tokens.
 Each request will be saved with an id so it can be voted on and later checked if it was accepted or not, the id will be a hash of the request data.
 
 The federation contract will gather votes for requests and when a request has reached the amount of votes required it will execute the request calling the necessary methods on the bridge contract.

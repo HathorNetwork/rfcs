@@ -184,9 +184,9 @@ sequenceDiagram
   end
   
   userE->>+evm: Call method to cross the tokens
+  evm-->>evm: Check token is supported, if not, fail transaction
   evm-->>admin: Send fees to the admin address
   evm-->>evm: Send tokens from user account to the bridge account<br/>Tokens on the bridge account are considered "locked"
-  Note over evm: If the token is not supported<br/>i.e. there is no equivalent token on Hathor yet<br/>the transaction will fail
   evm--)-fed: emit event with the request to cross tokens<br/>This will include the token uid<br/>of the equivalent token on Hathor
   fed->>+cood: Notify a crossing of tokens from the EVM event
   Note over cood: Save the request<br/>Wait 5 blocks for confirmation
@@ -209,44 +209,7 @@ If the request fails, the user will have to contact the administrator to request
 The admin will then use an admin method on the EVM contract to unlock the tokens and send them back to the user address.
 Any refunds should check with the coordinator service first since he can check that the original request was fulfilled, rejected or on-going.
 
-If the user wants the bridge to support a new token native to the EVM chain, they will have to call a method requesting the addition of the token. The federation will then create the token on Hathor and save the uid of the token on the EVM chain, so the bridge can be aware of the new token.
-
-```mermaid
-sequenceDiagram
-  box EVM
-  actor userE as User address on EVM
-  participant evm as EVM smart contract
-  end
-  participant fed as Federation
-  participant cood as Coordinator service
-  box Hathor
-  participant ms as MultiSig Wallet in Hathor
-  end
-  
-  userE->>+evm: Call method to request support for the token
-  evm-->>evm: Check if the token is already supported or<br/>if a request for support is already on-going
-  evm--)-fed: emit event with the request<br/>for new token support
-  fed->>+cood: Notify the request for support from the EVM event
-  Note over cood: Save the request<br/>Wait 5 blocks for confirmation
-  cood-->>-cood: Make it available for polling
-
-  fed->>cood: Poll for new requests
-  cood-->>fed: Return the list of new requests
-  fed-->>fed: Check if the request is valid
-  fed->>+cood: Send signatures for the request
-  cood->>ms: Once enough signatures are collected, push transaction
-  ms->>ms: Create equivalent token
-  ms-->>cood: Return the transaction and token uid
-  cood->>evm: Save equivalent token uid
-  cood->>-cood: Mark request as completed
-  Note over evm: Now we have support to cross the requested token
-```
-
-If the request fails, the token will be forever with an "on-going" request for support on the evm contract, this will prevent any other request for support for the same token and prevent the user from crossing the token.
-If an admin wishes to support the token, we can think of 2 options:
-
-- Manually create the token and send the authorities to the MultiSig wallet, then call the admin method on the EVM contract to save the token uid
-- Create a new request for support with the same data as the original request, the coordinator service will then attempt to create the token again and if successful, save the token uid on the EVM contract, making it supported.
+Adding support for tokens can only be done by the admin so the user will have to contact the admin and wait for the token to be added to the bridge allowed tokens.
 
 #### EVM Native: Hathor -> EVM
 
@@ -332,6 +295,57 @@ For clarification, we will list the operations and where the fees are kept:
   - The fee is deducted from the amount of tokens being crossed and they will be sent to the admin account.
 
 When crossing from Hathor and from the EVM chain the same fee will be applied and the services should read the fee from the contract to ensure they are using the correct updated value.
+
+## Add support for a new tokens
+
+When dealing with Hathor native tokens the first crossing is easier since the token already exists on Hathor and the creation of a new token can be done in the same call as the operation to send the token to the user.
+But to cross the bridge we require tokens to be previously approved by the admin.
+
+The list of allowed tokens will be saved on the EVM contract, so the bridge can check if the token is supported before trying to cross it.
+
+### Adding support for Hathor native tokens
+
+The admin will call a method to save the token uid on the allowed tokens, this way the Hathor native token can be crossed.
+
+### Adding support for EVM native tokens
+
+To cross a EVM native token we need to create the equivalent token on Hathor first before allowing it to be crossed.
+
+The process to create the equivalent token can be done in two ways:
+
+- Manually create the token and send the authorities to the MultiSig wallet, then call the admin method on the EVM contract to save the token uid and map it to an EVM native token.
+- Create a request to create a new token with the data of the original token, the coordinator service will then attempt to create the token and if successful, save the token uid on the EVM contract, making it supported.
+  - This process is described in the diagram below.
+
+```mermaid
+sequenceDiagram
+  actor admin as Admin
+  box Hathor
+  participant ms as MultiSig Wallet in Hathor
+  end
+  participant cood as Coordinator service
+  participant fed as Federation
+  box EVM
+  participant evm as EVM smart contract
+  end
+  
+  admin->>+cood: Call method to request support for the token
+  cood->>evm: Check if the token is already supported and<br/>that the token exists and data is valid.
+  cood->>-cood: Make the request to create a token available for polling
+
+  fed->>cood: Poll for new requests
+  cood-->>fed: Return the list of new requests
+  fed-->>fed: Check if the request is valid
+  fed->>cood: Vote to create the token
+  cood->>+ms: Once enough votes are collected, push transaction
+  ms->>-cood: Return the transaction and token uid
+
+  admin->>+cood: Call method to check the request was successful
+  cood->>-admin: Return the equivalent token created.
+  admin->>evm: Call method to save the token uid on the contract and map it to the EVM native token
+
+  Note over evm: Now we have support to cross the requested token
+```
 
 # Alternative solutions
 

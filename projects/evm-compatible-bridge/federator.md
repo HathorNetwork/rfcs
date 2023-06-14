@@ -22,16 +22,12 @@ The polling loop will check the coordinator service polling api and vote to perf
 ### EVM loop
 
 We need to get events from the bridge contract, wait a pre-configured number of blocks (to increase the confirmation level of the transaction) and send the transaction on Hathor as requested.
-There should be 3 types of events:
+There should be 2 types of events:
 
 - A request to cross the token from the EVM chain to Hathor
   - If the token is native to the EVM chain, an equivalent Hathor token should already exist and the MultiSig wallet should own the authority utxos to it.
   - If the token is native to the Hathor chain, the equivalent token is already burned and we need to unlock the tokens on Hathor.
   - The loop will have to use the coordinator service to send the amount of tokens requested from the MultiSig wallet to the destination address.
-- A request to support a new token native to the EVM chain.
-  - We need to check if this is a duplicate request
-  - We need to use the coordinator service to create of the equivalent token on Hathor.
-  - We need to use the bridge smart contract to save the Hathor equivalent token uid once the token is created.
 - Confirmation that an operation is complete
   - This way we can clean any state pertaining to this crossing of tokens and mark it as complete.
   - If the crossing was originated in Hathor, we need to send a request to the coordinator service so it knows the crossing is over.
