@@ -48,9 +48,47 @@ rm tmp/api-docs.json
 A GitHub Workflow, configured to run on every PR, should run the conversion script and linter to check for errors on the generated documentation. This should be part of the CI process.
 
 ### Deployment
-On the deployment pipeline, namely when there is a new `v*` label on the `master` branch, a new workflow should also upload the generated `json` file to the production documentation S3 bucket. This will update the website to the community.
+On the deployment pipeline, namely when there is a new release label on the `master` branch, a new workflow should also upload the generated `json` file to the production documentation S3 bucket. This will update the website to the community.
+
+More on what consists a release label can be found on the reference-level explanation.
 
 > *Note:* All connection data with the S3 should be implemented as secrets. Refer to the [`docker.yml`](https://github.com/HathorNetwork/hathor-wallet-headless/blob/master/.github/workflows/docker.yml) file for reference.
+
+# Reference-level explanation
+
+### Identifying release versions
+One point requires more detailed explanation on the deployment workflow: identifying if a version is a release candidate or a regular version.
+
+What will be considered a release version is a regular [_semver_](https://semver.org/) without any suffixes ( Ex.: v0.21.0 ). This means any release candidates versions ( Ex.: v0.21.0-rc1 ) will not be subject to this workflow.
+
+A lightweight solution for that, one that fits our current default of implementing the whole workflow within the `yml` file itself, would be creating a version validation step, in the lines of ( inspired by the [docker workflow](https://github.com/HathorNetwork/hathor-wallet-headless/blob/master/.github/workflows/docker.yml#L12) ):
+
+```yaml
+steps:
+  - name: Check release version
+    id: tags
+    shell: python
+    run: |
+      import re
+
+      def is_release_version(version):
+          // This patterns accepts "v1.0.0" , "v2.4.6". Rejects "v1.0.0-rc1".
+          pattern = r"^v\d+\.\d+\.\d+$"
+          match = re.match(pattern, version)
+          return match is not None
+
+      ref='${{ github.ref }}'
+
+      if ref.startswith('refs/tags/'):
+          version = ref[10:]
+          if is_release_version(version)
+            sys.exit(0) // This is a release version. Continue the workflow
+          else
+            sys.exit(1) // This is not a release candidate. Interrupt this workflow
+      else
+          sys.exit(2) // This is not a release label. Interrupt this workflow
+      '
+```
 
 # Task breakdown
 
