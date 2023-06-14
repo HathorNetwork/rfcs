@@ -13,11 +13,12 @@ Currently this upload is made manually by a team member, extracting data from th
 The platform that manages the OpenAPI Documentation static website, [Redoc](https://github.com/Redocly/redoc), only interacts with `.json` files. So we need to convert our `src/api-docs.js` file into a `.json` one whenever we want to use this platform.
 
 A script should be built to make this conversion on the `scripts` folder, that implements the following:
-- Removes the `securitySchemes` from the `components` property
 - Ensures the `default` property normally exported by the `JSON.stringify()` is not present on the output json
 - Outputs the results to the `tmp/api-docs.json` folder.
 
 This script will be referred to as `scripts/convert-docs.js` from now on.
+
+> *Note*: The `securitySchemes` from the `components` property is no longer necessary and can be removed from the `js` file when this is implemented.
 
 ### Linting and Preview
 A developer should be able to run a `npm run docs` command with three outcomes:
