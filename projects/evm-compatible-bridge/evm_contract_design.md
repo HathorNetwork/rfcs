@@ -9,12 +9,18 @@ This document will describe the smart contract that will manage the brige on the
 
 ## Contracts
 
-To support the features defined in the [design](./design.md#interactions) we need at least 2 contracts, one for the federation and one for the bridge.
+To support the features defined in the [design](./design.md#interactions) we need multiple contracts:
+
+- Federation contract.
+  - This contract will manage the federation and the voting process.
+- Bridge contract.
+  - This contract will manage the crossing process.
+- Side token factory.
+- Allowed tokens registry.
 
 ### Bridge contract
 
-The bridge contract will require support for the [ERC-1155 Multi-token standard](https://ethereum.org/pt/developers/docs/standards/tokens/erc-1155/) because the contract will be required to mint, destroy and manage multiple tokens (that were crossed from Hathor).
-We will also require the contract to be able to receive tokens from the [ERC-777 token standard](https://eips.ethereum.org/EIPS/eip-777) because users will send tokens to our bridge so we can cross them to Hathor. This standard is compatible with [ERC-20](https://eips.ethereum.org/EIPS/eip-20) so we will also support it.
+The bridge contract will require support to receive [ERC-777](https://eips.ethereum.org/EIPS/eip-777) tokens and since this standard is backwards compatible with [ERC-20](https://eips.ethereum.org/EIPS/eip-20) we will also support it.
 
 Since we only support tokens from the ERC-777 and ERC-20 interfaces we need a client for the ERC-1820 interface to check that a token is compatible with our bridge before starting any process to support it.
 
@@ -22,18 +28,17 @@ The bridge contract will also be required to have some user and admin methods.
 
 #### User methods
 
-- `getTokenId`
-  - All tokens supported by the bridge will have a unique id, this includes tokens native to the EVM chain and tokens managed by the contract.
-  - The user will provide a token address and optionally an integer which will be the ERC-1155 token id (for tokens managed by the bridge).
-  - For the chain native token, the token id will always be `0` so this call is unnecessary.
+- `getTokenUid` and `getSideToken`
+  - These methods will be used to get the Hathor token uid and the side token address for a given token.
+- `receiveTokens` and `tokensReceived`
+  - These methods are required for the contract to receive tokens.
+  - Should call the `crossTokens` method to start the process to cross tokens.
 - `crossTokens`
-  - This method will be called by the user to send tokens to the bridge.
+  - This method will be private and called when the user sends tokens to the bridge.
   - The bridge contract will check if the token is supported and if it is not, it will fail the transaction.
-  - The user will send tokens to the bridge contract address.
   - The bridge will register this request with the federation contract.
   - The bridge contract will emit an event to log the request.
   - The amount of tokens must be valid according to the granularity rules.
-- All features supoprted by the ERC-1155 token standard.
 
 #### Admin methods
 
@@ -43,57 +48,34 @@ This contract is "ownable" and the admin will be able to make some operations, f
   - In case of a security breach or legal obstruction we may have to halt operations.
   - Example implementation [here](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/security/Pausable.sol)
 - Burn and mint tokens
-  - The admin should be able to manage tokens in the bridge.
+  - The admin should be able to manage tokens created by the bridge.
   - The admin can use this to refund tokens or make manual corrections.
 - Configuration methods
   - The admin should be able to change the configuration of the contract, this includes changing the fee percentage, changing the federation contract address, etc.
 - Set token id
   - The admin should be able to correct and change the mapping of equivalent tokens.
-  - This is to correct any mistakes or to manually support new tokens.
+  - This is to correct any mistakes or to add support for new tokens.
 
 #### Bridge contract storage
 
 ##### _Token equivalency_
 
-Other than the storage required to implement the ERC-1155 token standard we require additional storage to track which tokens are allowed in the bridge and to map the equivalency of Hathor and EVM tokens.
+The contract will require some data structures to be stored on the persistent storage mainly to track the mapping of Hathor tokens to EVM tokens and the crossing operations.
 
-For tokens native to the EVM compatible chain we require an identification called `nativeTokenId` which we will map to a local id.
-This local id will be mapped to a Hathor token uid.
-The same will be done in reverse, a Hathor native token when crossing to the EVM chain will mint an equivalent token in our ERC-1155 contract.
-A token created in this contract will have a `uint256` id.
+The ERC-777 and ERC-20 tokens are identified by the contract address and the Hathor token by its 32 bytes token uid.
+There should be a map going both ways to map a contract address to a token uid and a map from token uid to contract address.
 
 ```solidity
-struct nativeTokenId {
-  address contract;
-  uint256 tokenId; // Should be 0 for native tokens
-}
-// This nonce will begin at 2 and will increase with each new native token supported.
-// 0 is reserved for the native token of the chain.
-// 1 is reserved for the native token of Hathor.
-// Tokens created in the bridge contract will also increase this nonce.
-uint256 localIdNonce;
-
-// This is a mapping of each nativeTokenId to a local id.
-// Tokens created in the bridge contract (with erc-1155) will also be mapped here.
-// A local token id of `0` means the native token of the chain (e.g. in ethereum it would be ETH)
-mapping (nativeTokenId => uint256) mappedNativeTokens;
-
-// This maps a local token id to a hathor token uid
+// This maps a local token address to a hathor token uid
 // This can be used to know which token in Hathor is equivalent to our native token.
-mapping (uint256 => bytes32) nativeTokenIdToHathorUid;
+mapping (address => bytes32) localTokenToHathorUid;
 
-// This maps a Hathor token uid to a local token id.
-mapping (bytes32 => uint256) hathorUidToLocalTokenId;
-// The Hathor native token will not be mapped in the mappings above since its uid is 00 and not a 32 byte integer.
-// To use Hathor native token (HTR) we can use the local id 1 which is reserved for this.
+// This maps a Hathor token uid to a local token address.
+mapping (bytes32 => address) hathorUidToLocalToken;
 ```
 
-To check if the token is native to Hathor or the EVM we can check the contract address of the token, since all Hathor native tokens will create an EVM token on the bridge address.
-
-#### Federation methods
-
-Some methods can only be called by the federation contract (or admin).
-These methods will be used to manage tokens, include support for new tokens, etc.
+The only special case is Hathor native token (HTR) which has a token uid of `00` which is not 32 bytes long.
+To use the same method we will map HTR to a 32 bytes sequence of zeroes, i.e. `00000000000000000000000000000000`.
 
 ### Federation contract
 
@@ -120,14 +102,6 @@ The method to calculate log gas can be found [here](https://github.com/ethereum/
 
 Cost is not the only benefit, responding to events is easier to implement than having getter methods for all types of required data.
 
-_Why use ERC-1155?_
-
-An alternative would be to use a SideTokenFactory contract (example [here](https://github.com/onepercentio/tokenbridge/blob/master/bridge/contracts/SideTokenFactory.sol)) but I believe we should strive to use the most common standards.
-
 # Prior art
 
-Although [this bridge](https://github.com/onepercentio/tokenbridge) implements a bridge between 2 EVM compatible chains, the concepts implemented there are a good reference for security and best practices.
-
-# Future possibilities
-
-- Add support for ERC-721 and ERC-1155 tokens.
+[This bridge](https://github.com/onepercentio/tokenbridge) implements a bridge between 2 EVM compatible chains, the concepts implemented there are a good reference for security and best practices.
