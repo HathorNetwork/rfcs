@@ -39,11 +39,10 @@ The safest approach would be to save everything on-chain and since Hathor does n
 #### Hathor native tokens
 
 A Hathor custom token has a name and symbol, but is identified by its uid, a 32 byte string (in solidity it would be a `byte32`).
-On the EVM side, a [ERC-1155](https://ethereum.org/pt/developers/docs/standards/tokens/erc-1155/) contract will handle the creation of multiple tokens in the same contract, each identified by an id (`uint256`).
-So we can map a Hathor token to a token id with `mapping(uint256 => byte32)`.
+On the EVM side, an [ERC-777](https://eips.ethereum.org/EIPS/eip-777) contract will be created for each Hathor token, each identified by a contract address (i.e. `address`).
+So we can map a Hathor token to a token id with `mapping(address => byte32)`.
 
-The only special case would be the Hathor native token (i.e. HTR) that has an id of `00` instead of 32 bytes, this should be handled separately,
-for instance by creating a token with id `0` when deploying the contract, so that the id `0` always represents HTR.
+The only special case would be the Hathor native token (i.e. HTR) that has an id of `00` instead of 32 bytes, to handle this we will use the token uid of `00000000000000000000000000000000` (32 zeroes) when refering to HTR.
 
 #### EVM native token
 
@@ -53,6 +52,7 @@ We will require support for ERC-777 and ERC-20 tokens, which means we can use th
 The token contract address can be mapped to the Hathor token uid created as its equivalent.
 
 With this we can get the equivalent Hathor token from the id of a EVM native token.
+The only special case is the EVM native token which does not have an address, for these we can use a wrapped native token, e.g. WETH or wrapper ether which is an ERC-20 compatible contract ([reference](https://etherscan.io/token/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2)).
 
 ## Interactions
 
@@ -74,7 +74,7 @@ sequenceDiagram
   participant evm as EVM smart contract
   actor userE as User address on EVM
   end
-  
+
   userH->>ms: Send tokens
   ms--)+cood: Find a new transaction
   Note over cood: Save the request<br/>Wait 5 blocks for confirmation
@@ -85,7 +85,7 @@ sequenceDiagram
   fed-->>-fed: Check if the request is valid
   fed->>+evm: Vote to create/Mint tokens
   Note over evm: Once enough votes are cast<br/>the tokens are created<br/>If 100 blocks pass and<br/>the votes are not enough<br/>the request is considered<br/>as rejected
-  evm->>userE: Send tokens
+  evm->>userE: Mint tokens
   evm--)-fed: Notify the request was completed with an event
   fed->>cood: Mark request as fulfilled
   Note over ms: Original tokens are locked on the wallet (with fees)
@@ -104,7 +104,7 @@ sequenceDiagram
   participant cood as Coordinator service
   participant fed as Federation
   participant evm as EVM smart contract
-  
+
   user->>admin: request a refund and provide<br/> data to identify the transaction
   admin->>cood: Request a refund for the provided transaction
   cood->>cood: Check if the request was fulfilled on database
@@ -138,7 +138,7 @@ sequenceDiagram
   participant ms as MultiSig Wallet in Hathor
   actor userH as User wallet on Hathor
   end
-  
+
   userE->>+evm: Call method to cross the tokens
   evm-->>admin: Send fees to the admin address
   evm-->>evm: Burn tokens from the user account
@@ -182,7 +182,7 @@ sequenceDiagram
   participant ms as MultiSig Wallet in Hathor
   actor userH as User wallet on Hathor
   end
-  
+
   userE->>+evm: Call method to cross the tokens
   evm-->>evm: Check token is supported, if not, fail transaction
   evm-->>admin: Send fees to the admin address
@@ -227,7 +227,7 @@ sequenceDiagram
   participant evm as EVM smart contract
   actor userE as User address on EVM
   end
-  
+
   userH->>ms: Send tokens
   ms--)+cood: Find a new transaction
   Note over cood: Save the request<br/>Wait 5 blocks for confirmation<br/>We will start the process to<br/>melt the tokens on Hathor
@@ -247,7 +247,7 @@ sequenceDiagram
   fed-->>fed: Check if the request is valid
   fed->>+evm: Vote to create/Mint tokens
   Note over evm: Once enough votes are cast<br/>the tokens are created<br/>If 100 blocks pass and<br/>the votes are not enough<br/>the request is considered<br/>as rejected
-  evm->>userE: Send tokens
+  evm->>userE: Send tokens.
   evm--)-fed: Notify the request was completed with an event
   fed->>cood: Mark request as fulfilled
   Note over ms: Original tokens are locked on the wallet (with fees)
@@ -276,76 +276,49 @@ Hathor MultiSig standard relies on a pay-to-script-hash (P2SH) model, this means
 
 To handle operations on the MultiSig wallet each participant will run a copy of a headless wallet initialized with its seed and MultiSig configuration.
 
-For the coordinator service to be notified that a transaction was sent to the "federation" MultiSig wallet we will use the websocket extension of the headless which enables real time notification of a received transaction.
+For the coordinator service to be notified that a transaction was sent to the "federation" MultiSig wallet we will use the queue plugin of the headless which enables real time notification of a received transaction (the queue can be SQS or rabbitMQ depending on where the service will be deployed).
 The coordinator is not a participant of the federation so his headless wallet will be initialized with the MultiSig configuration but without a seed, this does not mean it is a readonly wallet since we will use it to send transactions with the collected signatures.
 
 The federation will have to inspect any transaction proposed by the coordinator service and check if it is valid, to achieve this we need an API on the headless to that can return the transaction information with metadata (balance to our wallet, decoded data outputs, etc.).
 
 ## Bridge crossing fees
 
-The fee percentage will be configured on the EVM contract and will be applied to all tokens crossing the bridge, this fee will be deducted from the amount of tokens being crossed and will be kept on the Hathor MultiSig wallet or the Bridge contract until the admin decides to withdraw it.
+The fee percentage will be configured on the EVM contract and will be applied to all tokens crossing the bridge, this fee will be deducted from the amount of tokens being crossed and will be sent to the admin address.
 
 For clarification, we will list the operations and where the fees are kept:
 
 - Hathor -> EVM
-  - The fee is deducted from the amount of tokens being crossed and kept on the MultiSig wallet in Hathor.
-  - The admin can request the withdrawal from the wallet by using the coordinator service, which will check that we are not withdrawing more than the collected fees.
-  - For EVM native tokens, we will only melt the amount of tokens minus fees, so the fees will automatically be kept on the MultiSig wallet.
+  - The fee is deducted from the amount of tokens being crossed and send to the configured admin address in Hathor.
+  - The admin address may be another MultiSig of the reliable admins so the collected fees can be distributed fairly.
+  - For EVM native tokens, we will melt the amount of tokens minus fees and add another output to send the token to the admin.
 - EVM -> Hathor
   - The fee is deducted from the amount of tokens being crossed and they will be sent to the admin account.
+  - The admin account can be a MultSig contract that can receive ERC-777 and ERC-20 tokens but require acknowledgement from multiple accounts to spend these tokens.
 
 When crossing from Hathor and from the EVM chain the same fee will be applied and the services should read the fee from the contract to ensure they are using the correct updated value.
+The admin address on the EVM should be configured on the contract and the admin address on Hathor should be configured on the federation service.
 
 ## Add support for a new tokens
 
-When dealing with Hathor native tokens the first crossing is easier since the token already exists on Hathor and the creation of a new token can be done in the same call as the operation to send the token to the user.
-But to cross the bridge we require tokens to be previously approved by the admin.
+The admins should create the equivalent token and use the EVM contract to add support for this token in the bridge.
 
-The list of allowed tokens will be saved on the EVM contract, so the bridge can check if the token is supported before trying to cross it.
+### Adding support for Hathor tokens
 
-### Adding support for Hathor native tokens
+The admin will call a method on the contract passing the Hathor token data (token_uid, symbol and name), the bridge will create a side token, which is a ERC-777 token but the bridge will have authority to mint and destroy this side token.
+After the side token is created the bridge contract will associate the contract address with the token uid, making the token supported by the bridge.
 
-The admin will call a method to save the token uid on the allowed tokens, this way the Hathor native token can be crossed.
+With the token supported the admin should make a call to the allowed tokens contract to make it possible to use the token on the bridge.
 
 ### Adding support for EVM native tokens
 
 To cross a EVM native token we need to create the equivalent token on Hathor first before allowing it to be crossed.
 
-The process to create the equivalent token can be done in two ways:
-
-- Manually create the token and send the authorities to the MultiSig wallet, then call the admin method on the EVM contract to save the token uid and map it to an EVM native token.
-- Create a request to create a new token with the data of the original token, the coordinator service will then attempt to create the token and if successful, save the token uid on the EVM contract, making it supported.
-  - This process is described in the diagram below.
-
-```mermaid
-sequenceDiagram
-  actor admin as Admin
-  box Hathor
-  participant ms as MultiSig Wallet in Hathor
-  end
-  participant cood as Coordinator service
-  participant fed as Federation
-  box EVM
-  participant evm as EVM smart contract
-  end
-  
-  admin->>+cood: Call method to request support for the token
-  cood->>evm: Check if the token is already supported and<br/>that the token exists and data is valid.
-  cood->>-cood: Make the request to create a token available for polling
-
-  fed->>cood: Poll for new requests
-  cood-->>fed: Return the list of new requests
-  fed-->>fed: Check if the request is valid
-  fed->>cood: Vote to create the token
-  cood->>+ms: Once enough votes are collected, push transaction
-  ms->>-cood: Return the transaction and token uid
-
-  admin->>+cood: Call method to check the request was successful
-  cood->>-admin: Return the equivalent token created.
-  admin->>evm: Call method to save the token uid on the contract and map it to the EVM native token
-
-  Note over evm: Now we have support to cross the requested token
-```
+1. Create a token on Hathor with the same name and symbol.
+1. Melt the tokens created on the transaction above.
+1. Create more authority outputs
+1. Send all authorities to the federation MultiSig address.
+1. Call a method on the bridge contract to map the EVM token to the created token uid.
+1. Call a method on the allowed tokens contract to allow the token to be used on the bridge.
 
 # Alternative solutions
 
