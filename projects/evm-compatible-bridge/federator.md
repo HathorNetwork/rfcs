@@ -46,8 +46,8 @@ The coordinator service will serve the function of the smart contract in the Hat
 It will listen for transactions on the MultiSig wallet, keep a comprehensive persistent database so we do not process the same transaction twice and will gather signatures from the federation.
 It will be started with the MultiSig wallet config but it will not be a participant of the wallet.
 
-The service will download the history of transactions of the MultiSig wallet and process all transactions.
-If a transaction was already processed, the federation contract should have it in its state, so we can safely ignore it.
+During the startup we need to check all existing transactions on the MultiSig address, if the transaction was already processed we can safely ignore it.
+After the startup we can start to listen for transactions using the queue plugin which enqueues events like new transactions made to one of our addresses.
 
 The coordinator service will provide a REST API for the federators and admins to interact with it.
 
@@ -77,10 +77,11 @@ Since this transaction was made from Hathor it will be saved as a Hathor request
 - Amount of tokens being sent to the MultiSig wallet
 - destination address (on EVM chain)
 - Height
-  - Current height of the network when this was received.
-  - Transactions in Hathor do not have a height, so this is the height of blocks when the transaction was received.
+  - Height of the first block that confirms the transaction.
+  - Transactions in Hathor do not have a height but we can use the `first_block_height` metadata.
 
 With this we can safely wait for 5 blocks on Hathor to have passed so we can create the proposal.
+There is an event `best-block-update` which tells the current height of the network.
 This proposal will be available for the polling API as soon as it is created.
 
 ### API
@@ -89,14 +90,14 @@ This proposal will be available for the polling API as soon as it is created.
 
 This is the polling api, an event is a request to collect signatures, this means there are events to collect signatures in the MultiSig wallet and events to collect signatures on the federation contract.
 
-Both kinds of events will be returned by this endpoint, the federator will be responsible to make the appropriate calls to the MultiSig wallet or the federation contract.
+Both kinds of events will be returned by this endpoint, the federator will be responsible to make the appropriate calls to the coordinator service or the federation contract.
 
 The response will contain a list of events and pagination data.
 
 ```ts
-type HathorTxProposal = {
+type Event = {
   eventOrigin: 'htr' | 'evm' | 'admin',
-  type: 'create' | 'mint' | 'send' | 'melt', // This indicates the action on the Hathor MultiSig wallet
+  type: 'mint' | 'melt' | 'send', // This indicates the action on the Hathor MultiSig wallet
   proposalId: number,
   txHex: string,
   // The event will have 1 of the following fields
@@ -104,18 +105,6 @@ type HathorTxProposal = {
   htrRequestId?: number,
   adminRequestId?: number,
 };
-
-type EvmVoteProposal = {
-  eventOrigin: 'htr' | 'evm' | 'admin',
-  type: 'send', // The contract will know to mint or unlock based on the token address
-  proposalId: number,
-  // The event will have 1 of the following fields
-  evmRequestId?: number, // Request for fee collection
-  htrRequestId?: number, // Request to cross tokens
-  adminRequestId?: number, // For refunds
-};
-
-type Event = HathorTxProposal | EvmVoteProposal;
 
 type ApiResponse = {
   events: Event[],
@@ -125,12 +114,12 @@ type ApiResponse = {
 
 #### POST /sign/{proposal_id}
 
-The proposal id is referring a Hathor tx proposal where the federator has signed and this will collect the signatures.
+The proposal id is referring a Hathor tx proposal where the federator has signed and this api will be used to collect the signatures.
 
-Once enough signatures are collected, the transaction will be send to the network.
+Once enough signatures are collected, the transaction will be sent to the network.
 
 The endpoint will be expecting the fields:
-  
+
 ```ts
 type RequestBody = {
   signature: string,
@@ -140,45 +129,23 @@ type RequestBody = {
 
 The public key is required so we can count how many distinct signatures were collected.
 
-#### POST /request/htr
-
-The federators will call this endpoint when a new Hathor request is made, once the event reaches the federators they will call the federation contract to fulfill this request.
-
-The endpoint will be expecting the fields:
-  
-```ts
-type RequestBody = {
-  txId: string,
-  tokenUid: string,
-  amount: string,
-  destinationAddress: string,
-};
-```
-
 #### POST /request/evm
 
 The federators will call this endpoint when an event is received in the EVM loop.
 
 The endpoint will be expecting the fields:
-  
-```ts
-type EvmTokenId = {
-  address: string,
-  tokenId?: number,
-}
 
+```ts
 type RequestBody = {
-  kind: 'cross' | 'new_token',
   blockHash: string,
   txHash: string,
-  evmTokenId: EvmTokenId,
-  // These will only be used for cross requests
-  amount?: string,
-  destinationAddress?: string, // Destination address on Hathor
+  evmTokenAddr: address,
+  amount: string,
+  destinationAddress: string,
 };
 ```
 
-#### POST /fulfill/{htr_request_id}
+#### POST /fulfill/htr/{htr_request_id}
 
 When a request is fulfilled, the federator will call this endpoint to inform the API that the request was fulfilled.
 
@@ -194,45 +161,31 @@ type RequestBody = {
 };
 ```
 
-#### POST /fulfill/{evm_request_id}
+#### POST /fulfill/evm/{evm_request_id}
 
 Requests originated in the EVM chain can only end when the Hathor request is sent to the network.
 This means this endpoint will be called when the coordinator has sent the transaction to the network.
 
-#### POST /fulfill/{admin_request_id}
+#### POST /fulfill/admin/{admin_request_id}
 
-Some admin requests are fulfilled when an action is made on the bridge contract (i.e. in the EVM chain) this should cause an event to be emitted and the federator EVM loop can call this API to mark the request as fulfilled.
+Admin requests are fulfilled when a transaction is sent in Hathor network and this API should be used to mark the request as fulfilled.
 
 ```ts
 type RequestBody = {
-  // Data to identify the transaction that fulfilled the request
-  blockHash: string,
   txHash: string,
-  logIndex: number, // Of the event that confirmed the fulfillment
+  htrTokenUid: string,
+  amount: string,
+  destinationAddress: string,
 };
 ```
 
 #### Admin requests
 
-The admin can request refunds and sending transactions from the MultiSig wallet and the contract to any user address.
-This is to fix any mistakes that might happen.
+The admin should be able to request a transaction from the MultiSig wallet to any user address.
+This is to fix any mistakes that might happen, like refunding a transaction.
 
-- `POST /request/admin/refund/evm`
-  - Requires the block hash and transaction of the user request for a token cross.
-- `POST /request/admin/refund/htr`
+- `POST /request/admin/refund`
   - Requires the transaction id of the user request.
-- `POST /request/admin/send/htr`
-  - Requires the transaction hex to be sent.
-- `POST /request/admin/send/evm`
-  - Requires the destination address, token address or token id.
-- `POST` /request/fee
-  - Requires the destination address, token address or token id.
-  - Similar to `/request/send/evm` but the federation contract will call a fee collection method on the bridge contract.
-
-#### Fulfilling requests without API calls
-
-Requests originated on the EVM chain or admin requests that are fulfilled by sending a transaction on the Hathor network do not require an API call since the coordinator service will be sending the transaction to the network.
-This means it can also save the data on the database without calling its own API.
 
 ### Database
 
@@ -244,15 +197,24 @@ This means it can also save the data on the database without calling its own API
 
 #### Tables: EVM requests
 
-| id | block_hash | tx_hash | log_index | evm_token_id | amount | destination_address | height | fulfilled |
+| id | block_hash | tx_hash | log_index | evm_token_address | amount | destination_address | height | fulfilled |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | Integer | String(64) | String(64) | Integer | String(42) | BigInt | String | Integer | Boolean |
 
 #### Tables: Hathor tx proposals
 
-| id | type | tx_hex | fulfilled | admin_request_id | hathor_request_id | evm_request_id |
-| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Integer | String | String | Boolean | Integer | Integer | Integer |
+| id | type | tx_hex | fulfilled | admin_request_id | evm_request_id |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| Integer | String | String | Boolean | Integer | Integer |
+
+
+Obs: the `hathor_request_id` is not present on this table because a transaction originated in Hathor cannot request a transaction to be made on Hathor network.
+
+#### Tables: EVM tx proposals
+
+| id | evm_request_id | fulfilled |
+| :---: | :---: | :---: |
+| Integer | Integer | Boolean |
 
 #### Tables: Signatures
 
@@ -260,37 +222,24 @@ This means it can also save the data on the database without calling its own API
 | :---: | :---: | :---: | :---: |
 | Integer | Integer | String | String |
 
-#### Tables: Admin requests
+#### Tables: Admin Refund Requests
 
-The following `request_id` fields are a foreign key to the admin request table, which is a table with a single column `id` of type `Integer`.
-This is to ensure the admin request id is unique across all tables.
-
-##### EVM Refunds
-
-| request_id | block_hash | tx_hash |
-| :---: | :---: | :---: |
-| Integer | String(64) | String(64) |
-
-##### HTR Refunds
-
-| request_id | tx_id |
+| id | tx_id |
 | :---: | :---: |
 | Integer | String(64) |
 
-##### HTR Send
 
-| request_id | tx_hex |
-| :---: | :---: |
-| Integer | Text |
+### Supporting new tokens
 
-##### EVM Send
+#### Hathor native token
 
-| request_id | destination_address | evm_token_address | evm_token_id |
-| :---: | :---: | :---: | :---: |
-| Integer | String(42) | String(42) | Integer |
+The admin should make a transaction on the EVM contract passing the Hathor token data to create the new side token and give the bridge address the permission to mint and melt this new token.
 
-##### Fee collection
+This new side token will have an address, this address will be entered in the mapping along with the token uid making this token a valid token to be used.
+Then the admin should add this token on the allowed tokens, this will make the bridge allowed to process transactions with this token.
 
-| request_id | destination_address | evm_token_address | evm_token_id |
-| :---: | :---: | :---: | :---: |
-| Integer | String(42) | String(42) | Integer |
+#### EVM native tokens
+
+The admin should create the equivalent token on Hathor, melt all available tokens then send the authorities to the federation MultiSig address.
+This will make the federation capable of minting and melting the token but the token will only be allowed when its information is added to the allowed tokens contract by the admin.
+
