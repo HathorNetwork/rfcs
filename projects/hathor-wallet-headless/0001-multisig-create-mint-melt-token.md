@@ -34,7 +34,7 @@ The features we need to add for the MultiSig wallet:
 * Create a custom token
 * Mint a custom token
 * Melt a custom token
-* Inspect transaction with wallet metadata
+* Decode transaction with wallet metadata
 * Initialize wallet without seed
 
 ## API endpoints design
@@ -98,6 +98,7 @@ The data fields are:
 * `token`*
 * `amount`*
 * `address`*
+* `create_mint`
 * `change_address`
 * `mint_authority_address`
 * `allow_external_mint_authority_address`
@@ -126,7 +127,8 @@ For the MultiSig wallet the endpoint keeps the same command:
 The data fields are:
 * `token`*
 * `amount`*
-* `address`*
+* `deposit_address`
+* `create_melt`
 * `change_address`
 * `melt_authority_address`
 * `allow_external_melt_authority_address`
@@ -159,7 +161,7 @@ The response scheme for success:
 ```ts
 {
   "success": boolean,
-  "complete": boolean,
+  "completeSignatures": boolean,
   "tx": {
     "version": number,
     "tokens": string[],
@@ -169,7 +171,6 @@ The response scheme for success:
         index: number,
         decoded: {},  // data from the spent ouput
         signed: boolean,
-        mine: boolean,
       },
     ],
     "outputs": [
@@ -185,10 +186,19 @@ The response scheme for success:
   },
   "balance": {
     "<token-uid>":  {
-      "tokens": { available: number, locked: number ),
+      "tokens": {
+        available: number,
+        locked: number
+       },
       "authorities": {
-        mint: { available: number, locked: number ),
-        melt: { available: number, locked: number ),
+        mint: {
+          available: number,
+          locked: number
+        },
+        melt: {
+          available: number,
+          locked: number
+        },
       },
     },
   },
@@ -196,9 +206,8 @@ The response scheme for success:
 ```
 
 Lets represent the response document as ` $ `, as each element of a list ` [*] `, we have:
-* `$.complete` -- that represents the completeness of signatures required to use the transaction
+* `$.completeSignatures` -- that represents the completeness of signatures required to use the transaction
 * `$.tx.inputs[*].signed` -- that indicates this input has a signature
-* `$.tx.inputs[*].mine` -- that indicates this input belongs to this wallet
 * `$.tx.outputs[*].mine` -- that indicates this output belongs to this wallet
 * `$.balance[*].tokens` -- that contains the balance for the token
 * `$.balance[*].authorities` -- that contains the balance of mint and melt for the token
