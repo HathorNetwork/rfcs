@@ -98,8 +98,9 @@ Activation criteria, evaluation criteria, or simply criteria, are the conditions
 Timeout height is a block height that represents the end of an activation process for a feature. Timeout is when that height is reached. When timeout is reached, the feature may or may not be activated.
 
 ### Feature lock-in
+[Feature lock-in]: #feature-lock-in
 
-When a feature is locked-in, it means that the feature is guaranteed to be activated, but is "on hold", to allow peers to update their software.
+When a feature is locked-in, or in the `LOCKED_IN` state, it means that the feature is guaranteed to be activated, but is "on hold". This prevents sync issues that could arise if a feature was used immediately after being activated. If we didn't have this state, a feature could be activated temporarily and then reorg'd back into being disabled, and that could cause a split between nodes that have used the feature and nodes that can't process it. This buffer state prevents this problem. Also, it gives some time for peers to update their software.
 
 #### Bit signaling
 [Bit signaling]: #bit-signaling
@@ -365,7 +366,7 @@ stateDiagram-v2
   FAILED --> FAILED
 ```
 
-Notice that before becoming `ACTIVE`, a feature always stays for at least one evaluation interval in the `LOCKED_IN` state. This allows for peers to update their software accordingly. Then, the feature only transitions from `LOCKED_IN` to `ACTIVE` when the `minimum_activation_height` is reached. Only then the new rules introduced by the feature will be enforced.
+Notice that before becoming `ACTIVE`, a feature always stays for at least one evaluation interval in the `LOCKED_IN` state. This is for sync stability. Then, the feature transitions from `LOCKED_IN` to `ACTIVE` when the `minimum_activation_height` is reached. Only then the new rules introduced by the feature will be enforced. See the [Feature lock-in] section for more info.
 
 There are two ways of reaching lock-in/activation:
 
