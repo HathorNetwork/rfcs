@@ -153,13 +153,15 @@ For each block, there's a state associated with each feature. States are equival
 - `DEFINED`: Represents that a feature is defined. It's the first state for each feature. The genesis block is by definition in this state for all features.
 - `STARTED`: Represents that the activation process for some feature is started. Blocks at or above the start height are in this state, before transitioning to another state.
 - `LOCKED_IN`: Represents that a feature is guaranteed to be activated, but will remain locked in, that is, "on hold", for at least one evaluation interval. Begins when the threshold is reached or when the state `MUST_SIGNAL` is reached, and ends when the `minimum_activation_height` is reached.
-- `MUST_SIGNAL`: Represents that a feature is going to be activated through the `lock_in_on_timeout = true` criteria, if the threshold was not reached.
+- `MUST_SIGNAL`: Represents that a feature is going to be activated through the `lock_in_on_timeout = true` criteria, if the threshold was not reached. In other words, if the feature is going to be forcefully locked in/activated at the end of the activation process, then there will be exactly one evaluation interval in the `MUST_SIGNAL` state, meaning that miners are required to signal support in that interval. After that interval, the state transitions from `MUST_SIGNAL` to `LOCKED_IN`.
 - `ACTIVE`: Represents that a certain feature is activated. Blocks are in this state if the evaluation criteria were met in the previous evaluation interval.
 - `FAILED`: Represents that a certain feature is not and will never be activated. Blocks are in this state if they're above the timeout height and `lock_in_on_timeout` is `false` (more on that below).
 
 Note: features in the `FAILED` state will indeed never be activated, but that doesn't mean a new activation process for the same feature couldn't be retried with a different definition.
 
 After `ACTIVE` or `FAILED` state, the bit used for defining this each feature becomes available again for new features, as explained in the [bit] section.
+
+More information can be found in the [State transitions] section.
 
 ### State retrieval
 [State retrieval]: #state-retrieval
