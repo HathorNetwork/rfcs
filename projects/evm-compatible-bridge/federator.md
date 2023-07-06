@@ -40,6 +40,22 @@ If the event requires a vote on the MultiSig wallet, we will send a message to t
 
 The federator will be responsible to check the data on the event, it will have its own headless wallet to check the information from the Hathor network and it can read the data from the EVM chain.
 
+### Transaction inspection
+
+Each federator will inspect the transactions before signing them, checks they do on each transaction will change depending on the intended action.
+
+Crossing tokens from Hathor to EVM (token native to EVM):
+
+- Check that the transaction is a melt operation.
+- Check the wallet balance has enougth tokens to melt.
+- Check that the amount to melt is equal to the amount crossed.
+
+Crossing tokens from EVM to Hathor (token native to Hathor):
+
+- Check that the token amount minus the fee is being sent to the destination address.
+- Check that the fee amount is sent to the admin address.
+- 
+
 ## Coordinator service
 
 The coordinator service will serve the function of the smart contract in the Hathor side.

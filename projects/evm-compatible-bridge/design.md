@@ -128,7 +128,6 @@ When a user wants to cross tokens native to Hathor back to Hathor, they will cal
 ```mermaid
 sequenceDiagram
   box EVM
-  actor admin as Admin address on EVM
   actor userE as User address on EVM
   participant evm as EVM smart contract
   end
@@ -137,10 +136,10 @@ sequenceDiagram
   box Hathor
   participant ms as MultiSig Wallet in Hathor
   actor userH as User wallet on Hathor
+  actor admin as Admin address on Hathor
   end
 
   userE->>+evm: Call method to cross the tokens
-  evm-->>admin: Send fees to the admin address
   evm-->>evm: Burn tokens from the user account
   evm--)-fed: emit event with the request to cross tokens
   Note over fed: If the tokens are crossing back to Hathor<br/>we can be sure that there are enough tokens<br/>on the wallet to fulfill the request
@@ -153,11 +152,12 @@ sequenceDiagram
   fed-->>fed: Check if the request is valid
   fed->>+cood: Send signatures for the request
   cood->>ms: Once enough signatures are collected, push transaction
-  ms->>userH: Send tokens
+  ms->>userH: Send tokens (minus fees)
+  ms->>admin: Send fees
   ms-->>cood: Return the transaction id
   cood->>-cood: Mark refund request as completed
   Note over userH: Tokens are with the user (minus fees)
-  Note over admin: Fees are sitting on the admin account
+  Note over admin: Fees are sitting on the admin address
 ```
 
 If the request fails, the user will have to contact the administrator to request a refund of tokens.
@@ -231,7 +231,7 @@ sequenceDiagram
   userH->>ms: Send tokens
   ms--)+cood: Find a new transaction
   Note over cood: Save the request<br/>Wait 5 blocks for confirmation<br/>We will start the process to<br/>melt the tokens on Hathor
-  cood-->-cood: Make melt operation available for polling
+  cood-->-cood: Make melt operation available for polling<br/>The operation will melt the amount of tokens minus fees
 
   fed->>cood: Poll for new requests
   cood-->>fed: Return the list of new requests
@@ -283,15 +283,21 @@ The federation will have to inspect any transaction proposed by the coordinator 
 
 ## Bridge crossing fees
 
-The fee percentage will be configured on the EVM contract and will be applied to all tokens crossing the bridge, this fee will be deducted from the amount of tokens being crossed and will be sent to the admin address.
+The fee percentage will be configured on the EVM contract and will be applied to all tokens crossing the bridge, the fee tokens will be kept on the chain their native of.
 
 For clarification, we will list the operations and where the fees are kept:
 
-- Hathor -> EVM
-  - The fee is deducted from the amount of tokens being crossed and send to the configured admin address in Hathor.
-  - The admin address may be another MultiSig of the reliable admins so the collected fees can be distributed fairly.
-  - For EVM native tokens, we will melt the amount of tokens minus fees and add another output to send the token to the admin.
-- EVM -> Hathor
+- Hathor -> EVM (Hathor native)
+  - The fee is deducted from the amount of tokens being crossed and kept on the MultiSig wallet in Hathor.
+  - The admin can request the withdrawal from the wallet by using the coordinator service, which will check that we are not withdrawing more than the collected fees.
+  - For EVM native tokens, we will only melt the amount of tokens minus fees, so the fees will automatically be kept on the MultiSig wallet.
+- Hathor -> EVM (EVM native)
+  - All tokens are melted on Hathor.
+  - The tokens unlocked will be sent minus fees to the destination address.
+  - The fees are sent to the admin account.
+- EVM -> Hathor (Hathor native)
+  - All tokens are destroyed on EVM and the transaction to unlock the tokens on Hathor will send the tokens minus fees to the destination and the fees to the admin address
+- EVM -> Hathor (EVM native)
   - The fee is deducted from the amount of tokens being crossed and they will be sent to the admin account.
   - The admin account can be a MultSig contract that can receive ERC-777 and ERC-20 tokens but require acknowledgement from multiple accounts to spend these tokens.
 
