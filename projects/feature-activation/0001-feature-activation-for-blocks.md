@@ -1,6 +1,6 @@
 - Feature Name: Feature Activation for Blocks
 - Start Date: 2023-04-05
-- Initial Documents: [New feature after a given block height](https://docs.google.com/document/d/1iBy1AzXYzIq-jlZavCRal0cr1DvLRT50WDpW2wk4xZw/edit), [Flag to signal feature support by miners](https://docs.google.com/document/d/1Ws0BMbLd8B-9AUVdeHphZXVNpbUWvEBnXTFOLWb9HJY/edit)
+- Initial Document: [Feature Activation](https://docs.google.com/document/d/1IiFTVW1wH6ztSP_MnObYIucinOYd-MsJThprmsCIdDE/edit)
 - Author: Gabriel Levcovitz <<gabriel@hathor.network>>
 
 # Table of Contents
@@ -20,11 +20,11 @@
   * [Evaluation interval](#evaluation-interval-1)
   * [Criteria configuration](#criteria-configuration)
   * [State transitions](#state-transitions)
+  * [Invalidation of new blocks in `MUST_SIGNAL`](#invalidation-of-new-blocks-in-must_signal)
   * [Feature Service](#feature-service)
   * [GET endpoint](#get-endpoint)
 - [Rationale and alternatives](#rationale-and-alternatives)
 - [Prior art](#prior-art)
-- [Future possibilities](#future-possibilities)
 - [Task breakdown](#task-breakdown)
 - [References](#references)
 
@@ -97,6 +97,11 @@ Activation criteria, evaluation criteria, or simply criteria, are the conditions
 
 Timeout height is a block height that represents the end of an activation process for a feature. Timeout is when that height is reached. When timeout is reached, the feature may or may not be activated.
 
+### Feature lock-in
+[Feature lock-in]: #feature-lock-in
+
+When a feature is locked-in, or in the `LOCKED_IN` state, it means that the feature is guaranteed to be activated, but is "on hold". This prevents sync issues that could arise if a feature was used immediately after being activated. If we didn't have this state, a feature could be activated temporarily and then reorg'd back into being disabled, and that could cause a split between nodes that have used the feature and nodes that can't process it. This buffer state prevents this problem. Also, it gives some time for peers to update their software.
+
 #### Bit signaling
 [Bit signaling]: #bit-signaling
 
@@ -104,7 +109,7 @@ Bit signaling is an activation criteria that may or may not be used in conjuncti
 
 This should not be confused with voting. When a feature is defined in the feature activation process, it is assumed that it has been agreed by the community and ideally it should be activated by the end of the process. What bit signaling does, is preventing that some feature is activated before a super majority of miners are ready to support it. It is not voting whether to accept or reject some feature. This was a problem in Bitcoin's SegWit update, where some miners used their influence (through hash rate) to delay the update, for either economical, political, or other obscure reasons. [4][5]
 
-With that being said, it is possible that a feature may or may not be activated at the end of an activation process. To preserve flexibility, that behavior will be configurable on a per-feature basis through the `activate_on_timeout` attribute, explained below. That attribute is analogous to the infamous Bitcoin LOT attribute (lock in on timeout) [6], proposed in BIP 8.
+With that being said, it is possible that a feature may or may not be activated at the end of an activation process. To preserve flexibility, that behavior will be configurable on a per-feature basis through the `lock_in_on_timeout` attribute, explained below. That attribute is analogous to the Bitcoin LOT attribute [6], proposed in BIP 8.
 
 #### Burying feature activations
 [Burying feature activations]: #burying-feature-activations
@@ -116,54 +121,52 @@ It is allowed to change code that is conditional on feature activation, but **NO
 ## Feature and Criteria definition
 [Feature and Criteria definition]: #feature-and-criteria-definition
 
-The definition of new features available for feature activation should be as simple as defining the feature name and the criteria required to evaluate its activation state. Once defined, ideally, it should not be changed. Each feature will be defined in its own file, for example, in a `features/nano_contracts.py` file:
+The definition of new features available for feature activation should be as simple as defining the feature in code and the criteria required to evaluate its activation state in configuration. Once defined, ideally, it should not be changed. The `Criteria` data class is used to define attributes such as the feature bit and activation requirements. Its definition is provided in the [Criteria configuration] section.
 
-```python
-NANO_CONTRACTS = Criteria(name='NANO_CONTRACTS', ...)
-```
-
-The `Criteria` data class is used to define attributes such as the feature name and activation requirements. Each name should be unique across all features, past and future. Its definition is provided in the [Criteria configuration] section.
-
-Then, a `Feature` enum will contain all features, past and future, activated or not:
+A `Feature` enum will contain all features, past and future, activated or not:
 
 ```python
 class Feature(Enum):
-    NANO_CONTRACTS = 0
-    SOME_NEW_OP_CODE = 1
-    SOME_OTHER_FEATURE = 2
+    NANO_CONTRACTS = 'NANO_CONTRACTS'
+    SOME_NEW_OP_CODE = 'SOME_NEW_OP_CODE'
+    SOME_OTHER_FEATURE = 'SOME_OTHER_FEATURE'
 ```
 
-And finally, a dictionary in `HathorSettings` will map the `Criteria` definition for each `Feature` enum option:
+Each name should be unique across all features. And then, a dictionary in `HathorSettings` will map the `Criteria` definition for each `Feature` enum option:
 
 ```python
-FEATURE_ACTIVATION: Dict[Feature, Criteria] = {
-    Feature.NANO_CONTRACTS: NANO_CONTRACTS,
+features: dict[Feature, Criteria] = {
+    Feature.NANO_CONTRACTS: Criteria(bit=0, ...),
     ...
 }
 ```
 
-The `Criteria` definitions are created in separate files to keep organization and the ability to add custom behavior in the future. The `Feature` enum ties all possible feature definitions to a type. And lastly, the `HathorSettings` attribute allows different configurations for each network (mainnet and testnet).
+The `Feature` enum ties all possible feature definitions to a type, and the `HathorSettings` attribute allows different configurations for each network (mainnet and testnet).
 
 Feature definitions should **NEVER** be removed, even after activation, as explained in the [Burying feature activations] section. This is meant to preserve history.
 
 ## Feature States
 [Feature States]: #feature-states
 
-For each block, there's a state associated with each feature. Possible states are similar to BIP 8, but `LOCKED_IN` and `MUST_SIGNAL` are left out and kept as future possibilities. These are the possible states:
+For each block, there's a state associated with each feature. States are equivalent to BIP 8:
 
 - `DEFINED`: Represents that a feature is defined. It's the first state for each feature. The genesis block is by definition in this state for all features.
-- `STARTED`: Represents that the activation process for some feature is started. Blocks at or above the start height are in this state.
+- `STARTED`: Represents that the activation process for some feature is started. Blocks at or above the start height are in this state, before transitioning to another state.
+- `LOCKED_IN`: Represents that a feature is guaranteed to be activated, but will remain locked in, that is, "on hold", for at least one evaluation interval. Begins when the threshold is reached or when the state `MUST_SIGNAL` is reached, and ends when the `minimum_activation_height` is reached.
+- `MUST_SIGNAL`: Represents that a feature is going to be activated through the `lock_in_on_timeout = true` criteria, if the threshold was not reached. In other words, if the feature is going to be forcefully locked in/activated at the end of the activation process, then there will be exactly one evaluation interval in the `MUST_SIGNAL` state, meaning that miners are required to signal support in that interval. After that interval, the state transitions from `MUST_SIGNAL` to `LOCKED_IN`.
 - `ACTIVE`: Represents that a certain feature is activated. Blocks are in this state if the evaluation criteria were met in the previous evaluation interval.
-- `FAILED`: Represents that a certain feature is not and will never be activated. Blocks are in this state if they're above the timeout height and `activate_on_timeout` is `false` (more on that below).
+- `FAILED`: Represents that a certain feature is not and will never be activated. Blocks are in this state if they're above the timeout height and `lock_in_on_timeout` is `false` (more on that below).
 
 Note: features in the `FAILED` state will indeed never be activated, but that doesn't mean a new activation process for the same feature couldn't be retried with a different definition.
 
 After `ACTIVE` or `FAILED` state, the bit used for defining this each feature becomes available again for new features, as explained in the [bit] section.
 
+More information can be found in the [State transitions] section.
+
 ### State retrieval
 [State retrieval]: #state-retrieval
 
-Feature activation will be implemented as a method in `Block` that users (that is, developers implementing features in `hathor-core`) can use to conditionally execute different code based on the activation criteria for a certain feature.
+Feature activation will be implemented as a service that users (that is, developers implementing features in `hathor-core`) can call to conditionally execute different code based on the activation criteria for a certain feature, during the processing of a `Block`.
 
 Developers that define feature activation criteria may or may not be the same developers using conditional branching on that feature. For that, all criteria and their evaluation should be transparent for users.
 
@@ -171,20 +174,13 @@ The API entrypoint for using the feature activation process is simply checking i
 
 ```python
 def some_block_processing_method(self, block: Block):
-    if block.is_feature_active(Feature.MY_NEW_FEATURE):
+    if feature_service.is_feature_active(block, Feature.MY_NEW_FEATURE):
         # execute code related to the new feature
     else:
         # execute existing code with no changes
 ```
 
-Therefore, this will be implemented as a method in `Block`:
-
-```python
-def is_feature_active(self, feature: Feature) -> bool:
-    return self.feature_service.is_feature_active(self, feature)
-```
-
-The `feature_service` property will be an instance of the `FeatureService` class. This class will be implemented to encapsulate code related to feature activation and prevent bloating of `Block` code. More on that in the [Feature Service] section below.
+Therefore, this will be implemented as a method in `feature_service`, which will be an instance of the `FeatureService` class. This class will be implemented to encapsulate code related to feature activation and prevent bloating of `Block` code. More on that in the [Feature Service] section below.
 
 Notice that for users of the API, only the feature name (enum option) is necessary. The user shouldn't care how or why this feature is activated, only whether it is or not.
 
@@ -228,7 +224,7 @@ A new `GET` endpoint should be provided, mainly to serve the UI described above.
       "start_height": 3000000,
       "minimum_activation_height": 3200000,
       "timeout_height": 3300000,
-      "activate_on_timeout": false,
+      "lock_in_on_timeout": false,
       "version": "v0.52.2"
     }
   ]
@@ -284,7 +280,7 @@ class Criteria(BaseModel):
     timeout_height: int
     threshold: int
     minimum_activation_height: int
-    activate_on_timeout: bool
+    lock_in_on_timeout: bool
     version: str
 ```
 
@@ -309,9 +305,9 @@ Must be an exact multiple of `EVALUATION_INTERVAL` (that is, at an evaluation in
 
 #### `timeout_height`
 
-Specifies the height of the first block at which this feature's activation process is over. Once this height has been reached, if the feature is not activated and `activate_on_timeout` is `False`, the activation is considered failed on all descendants of the block.
+Specifies the height of the first block at which this feature's activation process is over. Once this height has been reached, if the feature is not `LOCKED_IN` and `lock_in_on_timeout` is `False`, the activation is considered failed on all descendants of the block.
 
-Should be some height greater than `start_height`. Should be an exact multiple of `EVALUATION_INTERVAL` (that is, at an evaluation interval boundary).
+Must be an exact multiple of `EVALUATION_INTERVAL` (that is, at an evaluation interval boundary), and at least two evaluation intervals after the `start_height`.
 
 #### `threshold`
 
@@ -325,9 +321,9 @@ Specifies the height of the first block at which the feature is allowed to becom
 
 Must be less than or equal to `timeout_height`. Must be an exact multiple of `EVALUATION_INTERVAL` (that is, at an evaluation interval boundary).
 
-#### `activate_on_timeout`
+#### `lock_in_on_timeout`
 
-Specifies if the feature should be activated even if the activation criteria are not met when the `timeout_height` is reached, effectively forcing activation. Should be used with caution, only when we are confident about community consensus, and especially confident that miners will comply.
+Specifies if the feature should be locked in even if the activation criteria are not met when the `timeout_height` is reached, effectively forcing activation. Should be used with caution, only when we are confident about community consensus, and especially confident that miners will comply.
 
 #### `version`
 
@@ -343,9 +339,9 @@ Rules that should be enforced between different `Criteria` instances should be d
 
 Some criteria configuration examples can be found in the table in the [Explorer User Interface] section. There,
 
-- `MY_NEW_FEATURE_1` failed because it didn't reach the threshold before the timeout and `activate_on_timeout` was `False`.
+- `MY_NEW_FEATURE_1` failed because it didn't reach the threshold before the timeout and `lock_in_on_timeout` was `False`.
 - `MY_NEW_FEATURE_2` was activated on height 3,200,00 (the `minimum_activation_height`), because it reached the threshold before timeout.
-- `MY_NEW_FEATURE_3`, similarly to `MY_NEW_FEATURE_1`, didn't reach the threshold before the timeout, but in this case it was activated on height 3,300,000 (the `timeout_height`) because `activate_on_timeout` was `True`.
+- `MY_NEW_FEATURE_3`, similarly to `MY_NEW_FEATURE_1`, didn't reach the threshold before the timeout, but in this case it was activated on height 3,300,000 (the `timeout_height`) because `lock_in_on_timeout` was `True`.
 - `MY_NEW_FEATURE_4` was configured with `threshold = 0`, meaning that it was only dependent on block height, and not on miner support. It was activated at height 3,200,000 (the `minimum_activation_height`).
 - `MY_NEW_FEATURE_5` activation process is ongoing. Its minimum activation height is `0`, meaning that it can be activated as soon as the threshold is reached, if it is before timeout.
 - `MY_NEW_FEATURE_6` activation process is defined but has not started yet. It will start at height 3,500,000.
@@ -359,16 +355,31 @@ Here's a diagram illustrating how states are updated for each feature and block:
 
 ```mermaid
 stateDiagram-v2
-  direction LR
+  direction TB
   DEFINED --> DEFINED
   DEFINED --> STARTED : height >= start_height
   STARTED --> STARTED
-  STARTED --> FAILED : height >= timeout_height<br />and not activate_on_timeout
-  STARTED --> ACTIVE : height >= timeout_height<br />and activate_on_timeout<br />and height >= minimum_activation_height
-  STARTED --> ACTIVE : height < timeout_height<br />and threshold reached<br />and height >= minimum_activation_height
+  STARTED --> FAILED : height >= timeout_height<br />AND NOT lock_in_on_timeout
+  STARTED --> MUST_SIGNAL : height + EVALUATION_INTERVAL >= timeout_height<br />AND lock_in_on_timeout
+  STARTED --> LOCKED_IN : height < timeout_height<br />AND threshold reached
+  MUST_SIGNAL --> LOCKED_IN : always
+  LOCKED_IN --> ACTIVE : height >= minimum_activation_height
   ACTIVE --> ACTIVE
   FAILED --> FAILED
 ```
+
+Notice that before becoming `ACTIVE`, a feature always stays for at least one evaluation interval in the `LOCKED_IN` state. This is for sync stability. Then, the feature transitions from `LOCKED_IN` to `ACTIVE` when the `minimum_activation_height` is reached. Only then the new rules introduced by the feature will be enforced. See the [Feature lock-in] section for more info.
+
+There are two ways of reaching lock-in/activation:
+
+- If there's one evaluation interval left before the `timeout_height` and the `lock_in_on_timeout` is `true` (through the `MUST_SIGNAL` path)
+- If the `timeout_height` has not been reached and the threshold has been reached (through the direct path from `STARTED` to `LOCKED_IN`)
+
+## Invalidation of new blocks in `MUST_SIGNAL`
+
+During the `MUST_SIGNAL` state, the threshold must be enforced by invalidating blocks that don't signal support for the feature.
+
+That is, during one evaluation interval, if there are `EVALUATION_INTERVAL - threshold` non-signaling blocks, all new blocks are required to signal support and will be invalidated otherwise.
 
 ## Feature Service
 [Feature Service]: #feature-service
@@ -430,18 +441,27 @@ def get_state(block: Block, feature: Feature) -> FeatureState:
             return FeatureState.DEFINED
 
         case FeatureState.STARTED:
-            if height >= criteria.timeout_height and not criteria.activate_on_timeout:
+            if height >= criteria.timeout_height and not criteria.lock_in_on_timeout:
                 return FeatureState.FAILED
-
-            if height >= criteria.timeout_height and criteria.activate_on_timeout and height >= criteria.minimum_activation_height:
-                return FeatureState.ACTIVE
 
             count = get_bit_count(block, feature)
 
-            if height < criteria.timeout_height and count >= criteria.threshold and height >= criteria.minimum_activation_height:
-                return FeatureState.ACTIVE
+            if height < criteria.timeout_height and count >= criteria.threshold:
+                return FeatureState.LOCKED_IN
+
+            if (height + EVALUATION_INTERVAL >= criteria.timeout_height) and criteria.lock_in_on_timeout:
+                return FeatureState.MUST_SIGNAL
 
             return FeatureState.STARTED
+
+        case FeatureState.MUST_SIGNAL:
+            return FeatureState.LOCKED_IN
+
+        case FeatureState.LOCKED_IN:
+            if height >= criteria.minimum_activation_height:
+                return FeatureState.ACTIVE
+
+            return FeatureState.LOCKED_IN
 
         case FeatureState.ACTIVE:
             return FeatureState.ACTIVE
@@ -534,25 +554,6 @@ Here are some other alternatives:
 [prior-art]: #prior-art
 
 This design is heavily inspired by BIP 8, as explained in the [Overview] and [Rationale and alternatives] sections.
-
-# Future possibilities
-[future-possibilities]: #future-possibilities
-
-Here are some future possibilities that exist in BIP 8 but were intentionally left out of this design for simplicity. I don't view them as necessary in our context, but we may decide to implement them in the future.
-
-### Locked in period
-
-A period represented by a state (`LOCKED_IN`) between `STARTED` and `ACTIVE` states. Should last at least one evaluation interval after the first interval with `STARTED`. Represents that the feature is guaranteed to be activated (the activation criteria have been met), but creates a time period that allows peers to update their full nodes before actual activation.
-
-Was left out because configuring a long enough `minimum_activation_height` serves the same purpose.
-
-### Mandatory signaling
-
-Another period/state, `MUST_SIGNAL`, related to the state above. Lies between `STARTED` and `LOCKED_IN` states. Lasts one evaluation period before the timeout, if the feature has not reached the `LOCKED_IN` state and `activate_on_timeout` is `True`.
-
-Since `activate_on_timeout = True` means that the feature will be forcefully activated, this period enforces that blocks that do not signal this feature's bit will be rejected.
-
-Was left out because forcing a feature through the `activate_on_timeout` attribute should be rare, and used only in cases where we are confident that miners will comply. With or without this state, a hard fork is created when the feature is activated and miners do not comply.
 
 # Task breakdown
 
