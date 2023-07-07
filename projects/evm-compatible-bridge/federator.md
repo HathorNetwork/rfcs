@@ -187,11 +187,6 @@ type RequestBody = {
 };
 ```
 
-#### POST /fulfill/evm/{evm_request_id}
-
-Requests originated in the EVM chain can only end when the Hathor request is sent to the network.
-This means this endpoint will be called when the coordinator has sent the transaction to the network.
-
 #### POST /fulfill/admin/{admin_request_id}
 
 Admin requests are fulfilled when a transaction is sent in Hathor network and this API should be used to mark the request as fulfilled.
@@ -212,6 +207,11 @@ This is to fix any mistakes that might happen, like refunding a transaction.
 
 - `POST /request/admin/refund`
   - Requires the transaction id of the user request.
+
+#### Coordinator fulfilling requests
+
+When a request is fulfilled by a transaction being sent on Hathor, it means that the coordinator will be aware of the fulfillment since it will be the one sending the transaction.
+This means that when the confirmation of the request is received by the coordinator it will be responsible to mark the request as fulfilled.
 
 ### Database
 
