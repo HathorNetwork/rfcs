@@ -314,6 +314,7 @@ The admins should create the equivalent token and use the EVM contract to add su
 ### Adding support for Hathor tokens
 
 The admin will call a method on the contract passing the Hathor token data (token_uid, symbol and name), the bridge will create a side token, which is a ERC-777 token but the bridge will have authority to mint and destroy this side token.
+The new side token will be created with an available supply of 0 tokens so any token will be from the bridge crossing.
 After the side token is created the bridge contract will associate the contract address with the token uid, making the token supported by the bridge.
 
 With the token supported the admin should make a call to the allowed tokens contract to make it possible to use the token on the bridge.
