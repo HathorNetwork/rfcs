@@ -32,7 +32,9 @@ The bridge contract will also be required to have some user and admin methods.
   - These methods will be used to get the Hathor token uid and the side token address for a given token.
 - `receiveTokens` and `tokensReceived`
   - These methods are required for the contract to receive tokens.
-  - Should call the `crossTokens` method to start the process to cross tokens.
+- `sendTokens`
+  - The user will provide the Hathor destination address along with the tokens to cross.
+  - The method will be responsible to accept the tokens on the bridge, validate the Hathor address provided and calling `crossTokens` to initiate the process.
 - `crossTokens`
   - This method will be private and called when the user sends tokens to the bridge.
   - The bridge contract will check if the token is supported and if it is not, it will fail the transaction.

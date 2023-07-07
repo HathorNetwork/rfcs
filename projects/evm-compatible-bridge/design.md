@@ -276,8 +276,11 @@ Hathor MultiSig standard relies on a pay-to-script-hash (P2SH) model, this means
 
 To handle operations on the MultiSig wallet each participant will run a copy of a headless wallet initialized with its seed and MultiSig configuration.
 
+We will have a single instance of a coordinator service that all members of the federation will interact with, this coordinator service will be a certerpiece to avoid conflicts in utxo choosing which can block operations if not handled carefully.
+
+Each member of the federation will run a headless wallet configured with the MultiSig configuration and his seed, while the coordinator service will run a headless with the same MultiSig configuration but without a seed since it is not a member of the federation.
+
 For the coordinator service to be notified that a transaction was sent to the "federation" MultiSig wallet we will use the queue plugin of the headless which enables real time notification of a received transaction (the queue can be SQS or rabbitMQ depending on where the service will be deployed).
-The coordinator is not a participant of the federation so his headless wallet will be initialized with the MultiSig configuration but without a seed, this does not mean it is a readonly wallet since we will use it to send transactions with the collected signatures.
 
 The federation will have to inspect any transaction proposed by the coordinator service and check if it is valid, to achieve this we need an API on the headless to that can return the transaction information with metadata (balance to our wallet, decoded data outputs, etc.).
 
@@ -328,6 +331,20 @@ To cross a EVM native token we need to create the equivalent token on Hathor fir
 
 # Alternative solutions
 
+## Higher throughput of transactions
+
+When an output is spent on Hathor any change or outputs created on the transaction will only be available after a short cycle is done:
+
+1. Transaction is mined and accepted by fullnode
+1. Transaction is accepted by fullnode and sent via websocket to wallets listening for events.
+1. The wallet receives the transaction on the websocket and process the transaction, making changes to balance, available utxos and tokens.
+
+After the cycle is done a wallet can then use the utxos of the new transaction and for operations of mint and melt which spends an authority output the wallet will only be able to start a new mint/melt operation when the previous has finished.
+
+This is only if the wallet has a single authority output, but we can create multiple authorities and the number of concurrent mint/melt operations depend on the number of mint/melt authority outputs on the wallet.
+
+We can have any number of authority outputs, but we can expect that having 100 authority outputs for mint/melt for any token of the bridge would be enough to cover any throughput requirements in the foreseeable future.
+
 ## Granularity
 
 Tokens defined in the ERC-777 have a granularity of 1e18, this means that the smallest amount of tokens that can be transferred is 1e18.
@@ -352,3 +369,4 @@ Using nano-contracts would also enable very low cost deployment and infrastructu
 - We require an API on the headless to return the transaction information with metadata (balance to our wallet, decoded data outputs, etc.).
 - We require a way to start a MultiSig wallet in the lib without a seed or private key.
   - It should not be a read-only instance since it can send transactions (from gathered signatures)
+- We may require an API on the headless to delegate authorities to another address (for P2PKH wallets).

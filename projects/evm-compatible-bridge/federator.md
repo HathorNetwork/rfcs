@@ -50,16 +50,25 @@ Crossing tokens from Hathor to EVM (token native to EVM):
 - Check the wallet balance has enougth tokens to melt.
 - Check that the amount to melt is equal to the amount crossed.
 
+Crossing tokens from Hathor to EVM (token native to Hathor):
+
+- This operation does not require the federation to send a transaction in Hathor, so the validations will be done in the smart contract.
+
+Crossing tokens from EVM to Hathor (token native to EVM):
+
+- Check that the transaction is a mint operation.
+- Check the wallet balance has enougth HTR to mint.
+- Check that the amount to mint is equal to the amount requested minus fees.
+
 Crossing tokens from EVM to Hathor (token native to Hathor):
 
 - Check that the token amount minus the fee is being sent to the destination address.
 - Check that the fee amount is sent to the admin address.
-- 
 
 ## Coordinator service
 
 The coordinator service will serve the function of the smart contract in the Hathor side.
-It will listen for transactions on the MultiSig wallet, keep a comprehensive persistent database so we do not process the same transaction twice and will gather signatures from the federation.
+It will listen for transactions on the MultiSig wallet, keep a comprehensive persistent database and will gather signatures from the federation.
 It will be started with the MultiSig wallet config but it will not be a participant of the wallet.
 
 During the startup we need to check all existing transactions on the MultiSig address, if the transaction was already processed we can safely ignore it.
@@ -100,7 +109,7 @@ With this we can safely wait for 5 blocks on Hathor to have passed so we can cre
 There is an event `best-block-update` which tells the current height of the network.
 This proposal will be available for the polling API as soon as it is created.
 
-### API
+### Coordinator service API
 
 #### GET /events
 
