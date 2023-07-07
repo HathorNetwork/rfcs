@@ -157,6 +157,7 @@ The public key is required so we can count how many distinct signatures were col
 #### POST /request/evm
 
 The federators will call this endpoint when an event is received in the EVM loop.
+The coordinator will check the smart contract to validate the information received by the federation.
 
 The endpoint will be expecting the fields:
 
