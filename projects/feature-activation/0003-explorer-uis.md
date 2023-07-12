@@ -21,7 +21,12 @@ This section defines what the interfaces will contain and provides a simple mock
 
 There must be a new option in the Tools dropdown, at the Explorer header. When clicked, it will open a new page specific for Feature Activation information. It will include a table as described in [this section](https://github.com/HathorNetwork/rfcs/blob/master/projects/feature-activation/0001-feature-activation-for-blocks.md#explorer-user-interface) of the original RFC, containing all Criteria for each feature, and also it's current state and acceptance percentage.
 
-Also, there must be an indication on the block used to retrieve the "current" information, that is, the best block when the request was made. Its height should be displayed and there should be a link to its page (this is not shown in the mockup below).
+Here are some more details, not shown in the mockup below:
+
+1. There must be an indication on the block used to retrieve the "current" information, that is, the best block when the request was made. Its height should be displayed and there should be a link to its page.
+2. The table should be sorted showing the latest features first, so we can see the new information first. That is, it should be sorted by  descending `start_height`.
+3. The table should be paginated to show at most 10 items.
+4. Add a `?` icon for each column title, that displays the column description when hovered.
 
 ### Mockup
 
@@ -30,6 +35,10 @@ Also, there must be an indication on the block used to retrieve the "current" in
 ## New panel in Block interface
 
 There must be a new panel in the Block interface containing the Feature Activation information for that block, that is, a table with the block's signal value for each feature, the corresponding bit and feature name, and the feature state at that point.
+
+Here are some more details, not shown in the mockup below:
+
+1. The signal column should display a checkmark icon for enabled features, instead of `1`. It should be blank for disabled features.
 
 ### Mockup
 
