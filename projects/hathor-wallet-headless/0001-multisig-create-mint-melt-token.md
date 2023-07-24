@@ -34,7 +34,7 @@ The features we need to add for the MultiSig wallet:
 * Create a custom token
 * Mint a custom token
 * Melt a custom token
-* Decode transaction with wallet metadata
+* Inspect transaction with wallet metadata
 * Initialize wallet without seed
 
 ## API endpoints design
@@ -97,8 +97,7 @@ For the MultiSig wallet the endpoint keeps the same command:
 The data fields are:
 * `token`*
 * `amount`*
-* `address`*
-* `create_mint`
+* `address`
 * `change_address`
 * `mint_authority_address`
 * `allow_external_mint_authority_address`
@@ -128,7 +127,6 @@ The data fields are:
 * `token`*
 * `amount`*
 * `deposit_address`
-* `create_melt`
 * `change_address`
 * `melt_authority_address`
 * `allow_external_melt_authority_address`
@@ -145,7 +143,7 @@ The response scheme for success:
 
 The purpose of the command is only produce the `txHex` not signed and nothing more, it will not push the transaction to the network. The returned `txHex` will be handled by the coordinator service, and later on by the federation service, which is responsible to sign the transaction.
 
-With this specification we cover the possibility to melt tokens, send it to another wallet, create or not another melt authority, and send the authority to another wallet.
+With this specification we cover the possibility to melt tokens, send it to another wallet, create or not another melt authority, send the authority to another wallet, and define an address to deposit the withdraw amount if any.
 
 ## Decode transaction with wallet metadata
 
@@ -161,54 +159,61 @@ The response scheme for success:
 ```ts
 {
   "success": boolean,
-  "completeSignatures": boolean,
+  "complete": boolean,
   "tx": {
     "version": number,
     "tokens": string[],
     "inputs": [
       {
-        tx_id: string,
+	    txId: string,
         index: number,
-        decoded: {},  // data from the spent ouput
+        decoded: {
+            type: string,
+            address: string,
+            timelock: number,
+        },  // data from the spent ouput
+        token: string,
+        value: number,
+        tokenData: number, // user face
+        token_data: number, // internal use
+        script: string,
         signed: boolean,
+        mine: boolean,
       },
     ],
     "outputs": [
       {
+	    decoded: {
+		    address: string,
+		    timelock: number,
+		    mine: boolean,
+	    },
         value: number,
-        token_data: number,
+        tokenData: number, // user face
+        token_data: number, // internal use
         script: string,
-        decoded: {},
-        authorities: number,
-        mine: boolean,
+        type: string,
+        token?: string,
       }
     ],
   },
   "balance": {
     "<token-uid>":  {
-      "tokens": {
-        available: number,
-        locked: number
-       },
+      "tokens": { available: number, locked: number ),
       "authorities": {
-        mint: {
-          available: number,
-          locked: number
-        },
-        melt: {
-          available: number,
-          locked: number
-        },
+        mint: { available: number, locked: number ),
+        melt: { available: number, locked: number ),
       },
     },
   },
 }
 ```
 
-Lets represent the response document as ` $ `, as each element of a list ` [*] `, we have:
-* `$.completeSignatures` -- that represents the completeness of signatures required to use the transaction
+Lets represent the response document as ` $ `, and each element of a list ` [*] `, we have:
+* `$.complete` -- that represents the completeness of signatures required to use the transaction
 * `$.tx.inputs[*].signed` -- that indicates this input has a signature
-* `$.tx.outputs[*].mine` -- that indicates this output belongs to this wallet
+* `$.tx.inputs[*].mine` -- that indicates this input belongs to this wallet
+* `$.tx.outputs[*].decoded.mine` -- that indicates this output belongs to this wallet
 * `$.balance[*].tokens` -- that contains the balance for the token
 * `$.balance[*].authorities` -- that contains the balance of mint and melt for the token
 
