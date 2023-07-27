@@ -41,10 +41,10 @@ The features we need to add for the MultiSig wallet:
 
 Taking by example the `POST:/wallet/p2sh/tx-proposal` and `POST:/wallet/p2sh/tx-proposal/get-my-signatures` endpoints we can identify the following semantic:
 
-`/wallet` -- the wallet module
-`/p2sh` -- a submodule representing a domain of wallet
-`/tx-proposal` -- a command to create a new transaction proposal
-`/tx-proposal/get-my-signatures` -- this time `/tx-proposal` assumes the role of a component of p2sh domain in the wallet module, and `/get-my-signatures` is the command to sign the transaction with the wallet private key
+- `/wallet` -- the wallet module
+- `/p2sh` -- a submodule representing a domain of wallet
+- `/tx-proposal` -- a command to create a new transaction proposal
+- `/tx-proposal/get-my-signatures` -- this time `/tx-proposal` assumes the role of a component of p2sh domain in the wallet module, and `/get-my-signatures` is the command to sign the transaction with the wallet private key
 
 In summary, we can have either syntax:
 
@@ -159,7 +159,7 @@ The response scheme for success:
 ```ts
 {
   "success": boolean,
-  "complete": boolean,
+  "completeSignatures": boolean,
   "tx": {
     "version": number,
     "tokens": string[],
@@ -210,7 +210,7 @@ The response scheme for success:
 ```
 
 Lets represent the response document as ` $ `, and each element of a list ` [*] `, we have:
-* `$.complete` -- that represents the completeness of signatures required to use the transaction
+* `$.completeSignatures` -- that represents the completeness of signatures required to use the transaction
 * `$.tx.inputs[*].signed` -- that indicates this input has a signature
 * `$.tx.inputs[*].mine` -- that indicates this input belongs to this wallet
 * `$.tx.outputs[*].decoded.mine` -- that indicates this output belongs to this wallet
