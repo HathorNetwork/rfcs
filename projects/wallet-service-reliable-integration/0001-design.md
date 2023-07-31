@@ -1,14 +1,14 @@
-## Summary
+# Summary
 
 The goal of this document is to describe a new method of syncing with a Hathor node, using the reliable integrations feature and replace the current sync daemon on our production services
 
-## Motivation
+# Motivation
 
 At present, our wallet-service sync daemon operates by utilizing the fullnode's WebSocket and HTTP APIs to maintain synchronization with the fullnode. With this approach, we have to manually handle reorganizations, making it not very maintenance friendly as we have to deal with all potential edge cases that are already handled in the fullnode, again in the daemon.
   
 It was precisely with such applications in mind that we developed our '[Reliable Integrations](https://github.com/HathorNetwork/rfcs/blob/master/projects/reliable-integration/0001-high-level-design.md)' feature. The concept behind this feature is to implement a reliable, integrated event management system. Through this system, a series of events would be dispatched in the exact order of their occurrence, ensuring that if we follow this exact series of events, the same state will be obtained
 
-## Reference-level explanation
+# Reference-level explanation
 
 In a nutshell, when the reliable integrations mechanism proposes a built-in event management system for applications interacting with a full-node. This system ensures events are sent in the order they occur, assigns unique IDs to each event, and offers both REST API and WebSocket access for event queries.
 
@@ -43,11 +43,11 @@ stateDiagram-v2
     }
 ```
 
-#### States
+### States
 
 The machine starts by entering the `CONNECTING` state. It invokes an [`actor`](https://xstate.js.org/docs/guides/actors.html) that connects to the fullnode websocket feed and when it's done, it transitions to the `CONNECTED` state
 
-##### `CONNECTED` 
+#### `CONNECTED` 
 
 **Entry Action**: As soon as the machine enters the `CONNECTED` state, it starts the streaming process by executing the `startStream` action, which will be documented in the `Actions` section of this document.
     
@@ -56,7 +56,7 @@ The machine starts by entering the `CONNECTING` state. It invokes an [`actor`](h
 
 This machine has sub-states, the initial substate for this state is `idle`
 
-##### `CONNECTED.idle`
+#### `CONNECTED.idle`
 
 This is the resting state where the machine awaits incoming events
     
@@ -77,7 +77,7 @@ This is the resting state where the machine awaits incoming events
   - **Target**: The machine transitions to the `success` sub-state.
 
 
-##### `CONNECTED.handlingVertexAccepted`
+#### `CONNECTED.handlingVertexAccepted`
 
 The machine will transition to this state to process a `NEW_VERTEX_ACCEPTED` event.
 
@@ -92,7 +92,7 @@ This event means that a new transaction passed the consensus mechanism on the fu
   - **Target**: The machine transitions to the `error` sub-state.
 
 
-##### `CONNECTED.handlingMetadataChanged`
+#### `CONNECTED.handlingMetadataChanged`
 
 The machine will transition to this state to process a `NEW_METADATA_ACCEPTED` event.
 
@@ -110,7 +110,7 @@ This event happens when the metadata of a transaction changes, this can happen f
     - **Target**: The machine transitions to the `CONNECTED.error` sub-state.
 
 
-##### `CONNECTED.success`
+#### `CONNECTED.success`
 
 The machine will transition to this state when a event is successfully processed
 
@@ -119,7 +119,7 @@ The machine will transition to this state when a event is successfully processed
   - The machine always transitions back to the `CONNECTED.idle` sub-state after performing the entry actions.
 
 
-##### `CONNECTED.error`
+#### `CONNECTED.error`
 
 The machine will transition to this state when an error is detected when event handling or invoking a `service`.
 
@@ -128,31 +128,31 @@ This is a `final` state, meaning that no further transitions can occur from this
 **Entry Action**: The machine logs the error using the `logError` action.
 
 
-### Potential challenges
+## Potential challenges
 
 1. **Event Ordering and Consistency**: Given that events are sent in the order they occurred, it's crucial to ensure that the daemon maintains this order when processing events. This is especially important in scenarios like reorgs where the event order can significantly impact the wallet-service's state.
 2. **Event Volume and Scalability**: Depending on the full-node's activity, the number of events generated can be significant and considering that we are processing those events one at a time, we should make sure that we are doing this as efficiently as possible
 3. **Error Handling and Recovery**: There might be situations where the daemon encounters an error processing an event or loses connection to the full-node. We should make sure that we always have the latest successfully synced event id persisted and that we are rolling back changes that were unsuccessful to prevent invalid states
 
 
-## Guide-level explanation
+# Guide-level explanation
 
-### Actors
+## Actors
 
 > The [Actor model (opens new window)](https://en.wikipedia.org/wiki/Actor_model)is a mathematical model of message-based computation that simplifies how multiple "entities" (or "actors") communicate with each other. Actors communicate by sending messages (events) to each other. An actor's local state is private, unless it wishes to share it with another actor, by sending it as an event.
 https://xstate.js.org/docs/guides/actors.html
 
 
-##### WebSocketActor
+#### WebSocketActor
 
 The `WebSocketActor` will initiate and maintain a connection with the full-node's WebSocket feed.
 
 We are using actors to have a bi-directional channel to the WebSocket feed from the machine, it will receive events and send those events to the machine, using the same type as received from the feed, so if new events are added in the future, they will be automatically emitted to the machine (and probably handled by the '\*' transition)
 
 
-### Services
+## Services
 
-##### handleVertexAccepted
+#### handleVertexAccepted
 
 This service handles the `NEW_VERTEX_ACCEPTED` event from the WebSocket feed, it means that the full-node's consensus mechanism accepted this transaction and added it to the blockchain, so we need to also include it in the wallet-service's database.
 
@@ -172,7 +172,7 @@ These are the steps that need to be taken when processing a new transaction:
 
 *We already have those methods well tested in the wallet-service lambdas, we can just migrate them to the daemon.*
 
-##### handleMetadataChanged
+#### handleMetadataChanged
 
 This service handles the `VERTEX_METADATA_CHANGED` event from the WebSocket feed, it will be emitted from the full-node on different situations:
 
@@ -199,7 +199,7 @@ If we do have the transaction on the database, we need to check both the `voided
 *We already have those methods well tested in the wallet-service lambdas, we can just migrate them to the daemon.*
 
 
-### Suggestions
+## Suggestions
 
 - [ ] Maybe send the outputs already decoded, just like in the transactions API
 
