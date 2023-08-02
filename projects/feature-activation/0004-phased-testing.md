@@ -11,7 +11,7 @@ This RFC describes a phased procedure for testing the Feature Activation project
 # Motivation
 [motivation]: #motivation
 
-After all changes introduced by the previous Feature Activation RFCs are implemented, the mechanism should be tested with some "fake" features in both the testnet and mainnet environments, and only then we'll be able to use it with confidence in the mainnet to change real features like updating the maximum merkle path length, for example.
+After all changes introduced by the previous Feature Activation RFCs are implemented, the mechanism should be tested with some "dull" features in both the testnet and mainnet environments. Such features do not change any full node behavior and are used exclusively to test the Feature Activation mechanism itself. Only then we'll be able to use it with confidence in the mainnet to change real features like updating the maximum merkle path length, for example.
 
 # Guide-level explanation
 [Guide-level explanation]: #guide-level-explanation
@@ -42,7 +42,7 @@ In this phase, 3 NOP features are defined for testnet and each one of them under
 We'll be using 3 NOP features and define them in `testnet.yml`. We'll test different Feature Activation behavior by configuring different settings for each feature:
 
 1. `NOP_FEATURE_1` is expected to be signaled and activated through bit signaling. Therefore, its `signal_support_by_default` will be set to `True`, so testnet miners (the ones used in `tx-mining-service`) will receive block templates with their signal bit enabled. It'll also have a `minimum_activation_height`.
-2. `NOP_FEATURE_2` is expected to NOT be activated through bit signaling. Instead, it'll have `lock_in_on_timeout=True` and will be "forcefully" activated. (TODO: `MUST_SIGNAL` enforcement is not implemented yet. How do we set bits in testnet miners without using `signal_support_by_default`? What about in mainnet?)
+2. `NOP_FEATURE_2` is expected to NOT be activated through bit signaling. Instead, it'll have `lock_in_on_timeout=True` and will be "forcefully" activated.
 3. `NOP_FEATURE_3` is expected to FAIL. It'll have `signal_support_by_default=False` and `lock_in_on_timeout=False`.
 
 By doing this, we'll test different paths of the Feature Activation workflow. To define the configuration, we'll first choose some block height `N`, that is, the block height where Phase 1 will start. It can only be chosen when we actually implement this RFC. All other heights are relative to `N`. Here's the reference configuration:
@@ -184,7 +184,11 @@ And it's expected to reach its threshold and become active in 4 weeks (2 in `STA
 
 ## Phase 3
 
-Phase 3 can start as soon as Phase 1 ends, and it is completely analogous to Phase 1, except the NOP features will be configured on `mainnet.yml` instead of `testnet.yml`, and that `N` will be different.
+Phase 3 can start as soon as Phase 1 ends, and it is mostly analogous to Phase 1, minus a few exceptions:
+
+- The NOP features will be configured on `mainnet.yml` instead of `testnet.yml`.
+- `N` will be different.
+- We won't test `NOP_FEATURE_2`, that is, we won't test `lock_in_on_timeout=True` on mainnet, as we have no easy way of coordinating bit signals with miners during the `MUST_SIGNAL` phase.
 
 ## Conclusion
 
