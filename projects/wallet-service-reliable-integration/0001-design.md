@@ -16,33 +16,9 @@ Given the synchronous nature of the event processing, I propose we design the da
 
 Here is the proposed state diagram for handling fullnode's events:
 
-```mermaid
-stateDiagram-v2
-    [*] --> CONNECTING
-    CONNECTING --> CONNECTED: CONNECTED
-    state CONNECTED {
-        onEntry: startStream
-        cond: ['checkPeerId', 'checkNetwork'],
-        on: DISCONNECT --> CONNECTING
-        
-        [*] --> idle
-        idle --> handlingVertexAccepted: NEW_VERTEX_ACCEPTED
-        idle --> handlingMetadataChanged: VERTEX_METADATA_CHANGED
-        idle --> idle: LOAD_STARTED
-        idle --> idle: ACK
-        idle --> idle: '*'
-        
-        handlingMetadataChanged --> success: onDone
-        handlingMetadataChanged --> error: onError
-        
-        handlingVertexAccepted --> success: onDone
-        handlingVertexAccepted --> error: onError
-        
-        success --> idle
-        
-        error: type final
-    }
-```
+![state](https://github.com/HathorNetwork/rfcs/assets/3586068/67af12d5-1afe-481d-841c-1685e2dc8f90)
+
+There's an interactive version [here](https://stately.ai/registry/editor/f547b9f5-1987-4895-b3a1-be35e4daea54?machineId=bce0604d-b536-4086-8a7c-992e1754f54f)
 
 ### States
 
