@@ -22,6 +22,7 @@ stateDiagram-v2
     CONNECTING --> CONNECTED: CONNECTED
     state CONNECTED {
         onEntry: startStream
+        cond: ['checkPeerId', 'checkNetwork'],
         on: DISCONNECT --> CONNECTING
         
         [*] --> idle
@@ -52,7 +53,10 @@ The machine starts by entering the `CONNECTING` state. It invokes an [`actor`](h
 **Entry Action**: As soon as the machine enters the `CONNECTED` state, it starts the streaming process by executing the `startStream` action, which will be documented in the `Actions` section of this document.
     
 **Transitions**:
-    - If a `DISCONNECT` event occurs (which can be sent from the websocket actor), the machine transitions back to the `CONNECTING` state.
+  - If a `DISCONNECT` event occurs (which can be sent from the websocket actor), the machine transitions back to the `CONNECTING` state.
+**Guards**:
+  - `checkPeerId` - The machine will only transition to `CONNECTED.idle` if the `checkPeerId` returns `true` (described in the Guards section)
+  - `checkNetwork` - The machine will only transition to `CONNECTED.idle` if the `checkNetwork` returns `true` (described in the Guards section)
 
 This machine has sub-states, the initial substate for this state is `idle`
 
@@ -149,6 +153,15 @@ The `WebSocketActor` will initiate and maintain a connection with the full-node'
 
 We are using actors to have a bi-directional channel to the WebSocket feed from the machine, it will receive events and send those events to the machine, using the same type as received from the feed, so if new events are added in the future, they will be automatically emitted to the machine (and probably handled by the '\*' transition)
 
+## Guards
+
+#### checkPeerId
+
+This guard will if check the connected fullnode's peer-id is the same as the one set in the env `PEER_ID`.
+
+#### checkNetwork
+
+This guard will if check the connected fullnode's Network is the same as the one set in the env `NETWORK`.
 
 ## Services
 
