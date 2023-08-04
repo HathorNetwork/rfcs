@@ -186,6 +186,22 @@ The `WebSocketActor` will initiate and maintain a connection with the full-node'
 
 We are using actors to have a bi-directional channel to the WebSocket feed from the machine, it will receive events and send those events to the machine, using the same type as received from the feed, so if new events are added in the future, they will be automatically emitted to the machine (and probably handled by the '\*' transition)
 
+## Actions
+
+#### sendAck
+
+The `sendAck` action will publish an `ACK` message on the websocket connection acknowledging the last processed event.
+
+```json
+{
+  "type": "ACK",
+  "window_size": 1,
+  "ack_event_id": lastEventId,
+};
+```
+
+We will always send a `window_size` of 1 because we need to process events sequentially
+
 ## Guards
 
 #### checkPeerId
