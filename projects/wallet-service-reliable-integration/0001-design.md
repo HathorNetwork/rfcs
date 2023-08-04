@@ -122,6 +122,14 @@ The machine will transition to this state when a event is successfully processed
 **Transitions**:
   - The machine always transitions back to the `CONNECTED.idle` sub-state after performing the entry actions.
 
+**Services**:
+- The machine invokes (on entry) the `storeLastEvent` service, passing the event data and will only transition to `CONNECTED.idle` if the `event_id` was stored successfully
+
+**Transitions**:
+- If the service invocation completes successfully (`onDone`):
+    - **Target**: The machine transitions to the `CONNECTED.idle` sub-state.
+- If there's an error during the service invocation (`onError`):
+    - **Target**: The machine transitions to the `CONNECTED.error` sub-state.
 
 #### `CONNECTED.error`
 
@@ -140,6 +148,31 @@ This is a `final` state, meaning that no further transitions can occur from this
 
 
 # Guide-level explanation
+
+## Database design
+
+Aside from the wallet-service existing database, we need to store metadata related event processing:
+
+```sql
+CREATE TABLE sync_metadata (
+    id INT PRIMARY KEY,
+    last_event_id INT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+`id` - This column will always be '1', the idea is to always have a single row in this table to keep track of the last event received
+`last_event_id` - This column will hold the last event that was successfully synced
+`updated_at` -
+
+This table should be created with the same migration mechanism the wallet-service uses. More about this in the monorepo section.
+
+## Monorepo
+
+We should merge both the wallet-service lambdas and the daemon in a single repository so they can share database migrations and we can have a better control over versions and database structures.
+
+I suggest we do this using [yarn workspaces](https://classic.yarnpkg.com/lang/en/docs/workspaces/).
+
 
 ## Actors
 
@@ -164,6 +197,11 @@ This guard will if check the connected fullnode's peer-id is the same as the one
 This guard will if check the connected fullnode's Network is the same as the one set in the env `NETWORK`.
 
 ## Services
+
+#### storeLastEvent
+
+This service will store the last successful `event_id` on the `sync_metadata` table.
+
 
 #### handleVertexAccepted
 
