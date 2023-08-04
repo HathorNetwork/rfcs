@@ -290,17 +290,17 @@ The fee percentage will be configured on the EVM contract and will be applied to
 
 For clarification, we will list the operations and where the fees are kept:
 
-- Hathor -> EVM (Hathor native)
+- Hathor -> EVM (token native to Hathor)
   - The fee is deducted from the amount of tokens being crossed and kept on the MultiSig wallet in Hathor.
   - The admin can request the withdrawal from the wallet by using the coordinator service, which will check that we are not withdrawing more than the collected fees.
   - For EVM native tokens, we will only melt the amount of tokens minus fees, so the fees will automatically be kept on the MultiSig wallet.
-- Hathor -> EVM (EVM native)
+- Hathor -> EVM (token native to EVM)
   - All tokens are melted on Hathor.
   - The tokens unlocked will be sent minus fees to the destination address.
   - The fees are sent to the admin account.
-- EVM -> Hathor (Hathor native)
+- EVM -> Hathor (token native to Hathor)
   - All tokens are destroyed on EVM and the transaction to unlock the tokens on Hathor will send the tokens minus fees to the destination and the fees to the admin address
-- EVM -> Hathor (EVM native)
+- EVM -> Hathor (token native to EVM)
   - The fee is deducted from the amount of tokens being crossed and they will be sent to the admin account.
   - The admin account can be a MultSig contract that can receive ERC-777 and ERC-20 tokens but require acknowledgement from multiple accounts to spend these tokens.
 
