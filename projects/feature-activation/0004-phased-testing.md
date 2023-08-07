@@ -19,14 +19,12 @@ After all changes introduced by the previous Feature Activation RFCs are impleme
 The testing will consist of 3 phases:
 
 1. NOP features in testnet
-2. Maximum merkle path length update in testnet
-3. NOP features in mainnet
+2. NOP features in mainnet
+3. Maximum merkle path length update
 
-Phase 1 will happen independently, and then Phase 2 and Phase 3 can happen concurrently. Note: updating the maximum merkle path length in mainnet is outside the scope of this project and will be described in a separate RFC.
+Phase 1 will happen independently, and then Phase 2 and Phase 3 can happen concurrently. Phase 3 will be specified in a separate RFC.
 
-The NOP features used in Phases 1 and 3 are simply defined in the respective network's settings file, but their activation has no real effect in any computation of the full node, that is, no forks are created no matter whether those features are activated or not. Instead, their states will simply be logged by the full node.
-
-After Phase 1 is complete, Phase 2 will introduce a real change that creates a fork in testnet between nodes that recognize its feature activation, and nodes that do not. At the same time, Phase 3 can start. It is analogous to Phase 1, but on mainnet instead of testnet.
+The NOP features used in Phases 1 and 2 are simply defined in the respective network's settings file, but their activation has no real effect in any computation of the full node, that is, no forks are created no matter whether those features are activated or not. Instead, their states will simply be logged by the full node. After Phase 1 and 2 are complete, Phase 3 will introduce a real change that creates a fork between nodes that recognize its feature activation, and nodes that do not.
 
 # Reference-level explanation
 [Reference-level explanation]: #reference-level-explanation
@@ -112,7 +110,6 @@ Therefore, `NOP_FEATURE_2`'s process takes 6 weeks.
 
 Therefore, `NOP_FEATURE_3`'s process takes 4 weeks.
 
-
 ### Validation via the Hathor Explorer
 
 By manually inspecting blocks via the Hathor Explorer interfaces described in the [Feature Activation Explorer UIs RFC](https://github.com/HathorNetwork/rfcs/blob/master/projects/feature-activation/0003-explorer-uis.md), we'll be able to validate the expected state for each block-feature pair according to the lists described above.
@@ -143,9 +140,23 @@ def log_feature_states(self, vertex: BaseTransaction) -> None:
 
 This logging will be removed after Phase 1 is complete.
 
+### Phase 1b
+
+After the initial part of Phase 1 is complete, Phase 1b will start. On this phase, we'll force a reorg on testnet to undo the activation of `NOP_FEATURE_1`. We'll have to disable support of said feature in our miners and use a higher hash rate to generate more blocks than the original best chain, using some block before the 75% threshold is reached as the common block. After the procedure is complete, we must observe that `NOP_FEATURE_1` transitions back to `FAILED` instead of `ACTIVE`.
+
 ## Phase 2
 
-Phase 2 can start as soon as Phase 1 ends. Let `M` be a block height for the beginning of Phase 2. It'll define a new `INCREASE_MAX_MERKLE_PATH_LENGTH` feature that will actually affect how the full node verifies merged mining blocks.
+Phase 2 can start as soon as Phase 1 ends, and it is mostly analogous to Phase 1, minus a few exceptions:
+
+- The NOP features will be configured on `mainnet.yml` instead of `testnet.yml`.
+- `N` will be different.
+- We won't test `NOP_FEATURE_2`, that is, we won't test `lock_in_on_timeout=True` on mainnet, as we have no easy way of coordinating bit signals with miners during the `MUST_SIGNAL` phase.
+
+## Phase 3
+
+Phase 3 can start after Phase 2 ends. It'll define a new `INCREASE_MAX_MERKLE_PATH_LENGTH` feature that will actually affect how the full node verifies merged mining blocks.
+
+Its details will be described in a separate RFC, specifying the process for both testnet and mainnet, including the new value for the maximum merkle path length. Just for completeness, below we provide a reference for the update in testnet.
 
 Currently, there's a `MAX_MERKLE_PATH_LENGTH: int = 12` constant in `aux_pow.py`. This constant will be replaced by a function call to `get_max_merkle_path_length()`, with its reference implementation as follows:
 
@@ -160,9 +171,7 @@ def get_max_merkle_path_length(feature_service: FeatureService, block: Block) ->
     return OLD_MAX_MERKLE_PATH_LENGTH
 ```
 
-Where this function is actually defined will be left as an implementation detail. TODO: what's a good value for `NEW_MAX_MERKLE_PATH_LENGTH`?
-
-Then, its reference configuration is:
+Where this function is actually defined will be left as an implementation detail. Let `M` be a block height for the beginning of Phase 3. Then, its reference configuration is:
 
 ```yml
 # testnet.yml
@@ -182,29 +191,19 @@ FEATURE_ACTIVATION:
 
 And it's expected to reach its threshold and become active in 4 weeks (2 in `STARTED`, 2 in `LOCKED_IN`). We'll use the same validation mechanisms described in Phase 1 to make sure the feature states transition as expected. Also, we should configure a merged miner to mine blocks with a higher merkle path length, making sure its blocks are invalidated before the feature becomes `ACTIVE`, and validated after it does.
 
-## Phase 3
-
-Phase 3 can start as soon as Phase 1 ends, and it is mostly analogous to Phase 1, minus a few exceptions:
-
-- The NOP features will be configured on `mainnet.yml` instead of `testnet.yml`.
-- `N` will be different.
-- We won't test `NOP_FEATURE_2`, that is, we won't test `lock_in_on_timeout=True` on mainnet, as we have no easy way of coordinating bit signals with miners during the `MUST_SIGNAL` phase.
-
 ## Conclusion
 
-As described above, Phase 1 takes 6 weeks, and Phase 2 and Phase 3 can run concurrently, respectively for 6 and 4 weeks. This makes for a total Phased Testing duration of 12 weeks. If this duration is deemed too high, we can actually shift Phase 2 and 3 earlier, as they do not conflict with Phase 1 in any way. Another option to make it even faster, is decreasing the `EVALUATION_INTERVAL`, for example from 2 weeks to 1 week, only in testnet.
+As described above, both Phase 1 and Phase 2 take 6 weeks. This makes for a total Phased Testing duration of 12 weeks. If this duration is deemed too high, we can actually shift Phase 2 earlier, as it does not conflict with Phase 1 in any way. Another option to make it even faster, is decreasing the `EVALUATION_INTERVAL`, for example from 2 weeks to 1 week, only in testnet.
 
 After all phases are completed, we'll have enough confidence on the process' stability to use it to increase the maximum merkle path length on mainnet.
 
 # Task breakdown
 
-| Task                                                                                      | Dev days |
-|-------------------------------------------------------------------------------------------|----------|
-| [Phase 1] Release a new hathor-core version with NOP features on testnet                  | 0.5      |
-| [Phase 1] Validate feature states during the following weeks                              | 0.5      |
-| [Phase 2] Run a local merged miner on testnet                                             | 1        |
-| [Phase 2] Release a new hathor-core version with the merkle path update on testnet        | 0.5      |
-| [Phase 2] Validate feature states and merkle path verification during the following weeks | 0.5      |
-| [Phase 3] Release a new hathor-core version with NOP features on mainnet                  | 0.5      |
-| [Phase 3] Validate feature states during the following weeks                              | 0.5      |
-| **Total**                                                                                 | **4**    |
+| Task                                                                     | Dev days |
+|--------------------------------------------------------------------------|----------|
+| [Phase 1] Release a new hathor-core version with NOP features on testnet | 0.5      |
+| [Phase 1] Validate feature states during the following weeks             | 0.5      |
+| [Phase 1b] Force a reorg on testnet                                      | 1        |
+| [Phase 2] Release a new hathor-core version with NOP features on mainnet | 0.5      |
+| [Phase 2] Validate feature states during the following weeks             | 0.5      |
+| **Total**                                                                | **3**    |
