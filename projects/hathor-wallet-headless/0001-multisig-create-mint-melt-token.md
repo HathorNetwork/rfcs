@@ -186,13 +186,13 @@ The response scheme for success:
 	    decoded: {
 		    address: string,
 		    timelock: number,
-		    mine: boolean,
 	    },
         value: number,
         tokenData: number, // user face
         token_data: number, // internal use
         script: string,
         type: string,
+        mine: boolean,
         token?: string,
       }
     ],
@@ -213,7 +213,7 @@ Lets represent the response document as ` $ `, and each element of a list ` [*] 
 * `$.completeSignatures` -- that represents the completeness of signatures required to use the transaction
 * `$.tx.inputs[*].signed` -- that indicates this input has a signature
 * `$.tx.inputs[*].mine` -- that indicates this input belongs to this wallet
-* `$.tx.outputs[*].decoded.mine` -- that indicates this output belongs to this wallet
+* `$.tx.outputs[*].mine` -- that indicates this output belongs to this wallet
 * `$.balance[*].tokens` -- that contains the balance for the token
 * `$.balance[*].authorities` -- that contains the balance of mint and melt for the token
 
