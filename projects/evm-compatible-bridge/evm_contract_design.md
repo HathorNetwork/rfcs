@@ -74,8 +74,6 @@ There should be function for data conversion on bridge contract.
     }
 ```
 
-The only special case is Hathor native token (HTR) which has a token uid of `00` which is not 32 bytes long.
-
 ### Federation contract
 
 A good example implementation can be found [here](https://github.com/onepercentio/tokenbridge/blob/master/bridge/contracts/Federation.sol).
