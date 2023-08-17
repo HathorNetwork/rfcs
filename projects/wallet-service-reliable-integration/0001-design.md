@@ -50,6 +50,9 @@ This is the resting state where the machine awaits incoming events
 - On receiving a `LOAD_STARTED` event:
   - **Actions**: The machine stores the event with the `storeEvent` action.
   - **Target**: The machine transitions to the `success` sub-state.
+- On receiving a `LOAD_FINISHED` event:
+  - **Actions**: The machine stores the event with the `storeEvent` action.
+  - **Target**: The machine transitions to the `success` sub-state.
 - On receiving an `ACK` event:
   - **Actions**: The machine sends an acknowledgment using the `sendAck` action.
 - On receiving any other event (represented by `'*'`):
