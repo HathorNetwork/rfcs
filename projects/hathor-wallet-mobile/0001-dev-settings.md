@@ -16,7 +16,7 @@
 - [Prior-art](#prior-art)
 - [Unresolved questions](#unresolved-questions)
 - [Future possibilities](#future-possibilities)
-- [Task break-down](#task-break-down)
+- [Task break-down](https://github.com/HathorNetwork/rfcs/pull/65#issue-1853692955)
 
 # Summary
 [summary]: #summary
@@ -70,14 +70,14 @@ SafePal also groups settings by theme, however it doesn't have section titles, w
 
 Using the Trezor as a role model again we can see that every setting topic contains a description informing the "why" of the setting, and may contain a risk disclaimer.
 
-![[trezor-option-description.png]]
+![](img/0001-dev-settings/trezor-option-description.png)
 
 ### Error prevention
 [error-prevention]: #error-prevention
 
 Beyond the descriptions, some settings options need an extra layer of protection because of its severity, and that justifies an alert message or a confirmation.
 
-![[trezor-option-warning.png]]
+![](img/0001-dev-settings/trezor-option-warning.png)
 
 ## Network Settings
 [network-settings]: #network-settings
@@ -374,20 +374,3 @@ No questions.
 [future-possibilities]: #future-possibilities
 
 We can extend the "Danger Area" with more settings, for example, we can let developers enable and disable the wallet service. Also, we can let developers add network pre-settings beyond "testnet" and "mainnet".
-
-# Task break-down
-[test-break-down]: #test-break-down
-
-| Task                                                                        | Dev/days |
-| --------------------------------------------------------------------------- | -------- |
-| Add the pre-defined network settings                                        | 0.1      |
-| Add default network settings                                                | 0.1      |
-| Implement the networkSettings saga                                          | 0.5      |
-| Implement the Alert UI                                                      | 0.2      |
-| Refactor the wallet saga                                                    | 1        |
-| Refactor the public explorer component                                      | 0.1      |
-| Refactor the Settings page to contain the "Safe Area" and the "Danger Area" | 0.5      |
-| Implement the "Risk disclaimer" page                                        | 0.2      |
-| Implement the "Pre settings" page                                           | 0.5      |
-| Implement the "Custom settings" page                                        | 0.5      |
-
