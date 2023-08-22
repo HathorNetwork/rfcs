@@ -1,5 +1,5 @@
 - Feature Name: lib_hsm_integration
-- Start Date: (fill me in with today's date, 2023-07-31)
+- Start Date: 2023-07-31
 - RFC PR:
 - Hathor Issue:
 - Author: Tulio Vieira tulio@hathor.network
@@ -108,7 +108,7 @@ This project has three main phases that need implementing:
 3. Adapting the Headless wallet to use the Hardware feature of the Wallet Lib
 
 ## The HSM Client
-The main library offered by Dinamo to interact with the HSM device [is available in C code](https://manual.dinamonetworks.io/c/index.html).
+The main library offered by Dinamo to interact with the HSM device [is available in C language](https://manual.dinamonetworks.io/c/index.html).
 
 A proof-of concept application was partially developed in C as a bridge between the Wallet Lib javascript environment and the C environment. A dedicated design will be written about this interface, but in short:
 - The C code expects to be called from the operating system. In NodeJS terms this menas using [`child_process.spawn()`](https://nodejs.org/docs/latest-v18.x/api/child_process.html#child_processspawncommand-args-options)
@@ -160,112 +160,137 @@ Once the wallet is started successfully, any request to fetch signatures or to s
 | This step was also not tested on the PoC and can add uncertainty to the development phase |
 
 Since the *HSM Client* connections are closed immediately after the command execution, there is no need to manage any other process while interacting with the HSM.
+### Creating a BIP32 on the HSM
+This operation should be done via script, as it is the most critical writing operation on the HSM.
 
-## Wallet Lib adaptation
+As such, a new `scripts/createHSMKey.js` file will be created, offering a way to quickly generate a new BIP32 wallet on a developer machine. This created key should be inserted on the `config.js` file along with a `walletId` for it. Other wallet generation possibilities are discussed on the _Alternatives_ section of this document.
+
+### Error handling
+Errors while communicating with the HSM are treated and, where applicable, retried before returning an error the the end user.
+
+The mapped errors for this context are:
+
+| Type                     | Action taken                                                                                                                                        |
+|:------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Executable command error | The user is informed that the Headless was not properly configured to interact with an HSM, either because the executables are missing or defective |
+| Network error            | When receiving a "Network Error" from the executable, a number of retries is attempted before returning the error to the end user.                  |
+| Missing BIP32 key        | This error is raised when trying to access a key that was not configured on the HSM  |
+| Invalid BIP32 key        | This error is raised on Wallet Start. The end user is informed that the HSM device is not properly configured for interacting with the Headless     |
+
+For example, in cases where the `fetch key on HSM` command returns with a common network error, the command should be retried for a configured amount of times. This new configuration will be specified on the `config.js` file.
+## Wallet Lib integration
 No change on the lib code will be necessary.
 
 The interaction with the Wallet Lib will be similar to the current *Hardware Wallet* implementation on the Wallet Desktop.
 
 The wallet storage will be initialized with the `xPub` ( reference: [`initHWStorage`](https://github.com/HathorNetwork/hathor-wallet/blob/ef57015015375a477cffd72baf62f4e14baf541a/src/storage.js#L127-L140) function ) obtained from the HSM and signatures made with the [`ledger/sendTx()` function](https://github.com/HathorNetwork/hathor-wallet/blob/ef57015015375a477cffd72baf62f4e14baf541a/src/utils/ledger.js#L126-L166), as described on the Headless section above.
-## Error handling
-Errors while communicating with the HSM are treated and, where applicable, retried before returning an error the the end user.
 
-The mapped errors for this context are:
+### Considerations on the HSM Client
+[considerations-hsm-client]: #considerations-hsm-client
 
-| Type                     | Action taken |
-| :--- | --- |
-| Executable command error | The user is informed that the Headless was not properly configured to interact with an HSM  |
-| Network error            | When receiving a "Network Error" from the executable, a number of retries is attempted before returning the error to the end user. |
-| Invalid BIP32 key        | This error is raised on Wallet Start. The end user is informed that the HSM device is not properly configured for interacting with the Headless |
+The HSM firmware must be configured with the Hathor version if the `getAddress` HSM API is to be used.
 
-For example, in cases where the `fetch key on HSM` command returns with a common network error, the command should be retried for a configured amount of times. This new configuration will be specified on the `config.js` file.
+From [the lib's `models/network.ts`](https://github.com/HathorNetwork/hathor-wallet-lib/blob/b26e784f73504d57bc762524b9e361c82b575271/src/models/network.ts#L10-L32):
+```js
 
----
-| 🚧 Work In Progress |
-|--- |
+// Version bytes for address generation
+const versionBytes = {
+  'mainnet': {
+    'p2pkh': 0x28,
+    'p2sh': 0x64,
+    'xpriv': 0x03523b05,
+    'xpub': 0x0488b21e,
+  },
+  'testnet': {
+    'p2pkh': 0x49,
+    'p2sh': 0x87,
+    'xpriv': 0x0434c8c4,
+    'xpub': 0x0488b21e,
+  },
+  'privatenet': {
+    'p2pkh': 0x49,
+    'p2sh': 0x87,
+    'xpriv': 0x0434c8c4,
+    'xpub': 0x0488b21e,
+  },
+}
+```
 
-
-This is the technical portion of the RFC. Explain the design in sufficient
-detail that:
-
-- Its interaction with other features is clear.
-- It is reasonably clear how the feature would be implemented.
-- Corner cases are dissected by example.
-
-The section should return to the examples given in the previous section, and
-explain more fully how the detailed proposal makes those examples work.
-
-# Drawbacks
-[drawbacks]: #drawbacks
-
-Why should we *not* do this?
+If only the `xPriv` and `xPub` are to be used, these should not raise any problem.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
-> Mention the possibility of not having `xPub` and fetching every address directly from the HSM
+## Multiple HSM devices
+The current structure enforces that only one HSM device can be accessed by a headless application environment, since the authentication credentials are stored on environment variables.
 
-> This structure enforces that a headless application can only communicate with exactly one HSM device for all listed wallets.
+Another approach to this would be to transfer these credentials to the `config.js` file, allowing each `walletId` to store its own credentials besides the HSM key itself.
 
+The downside of this solution is that credentials would be stored in plain text on disk, or require additional complexity to encrypt/decrypt it at runtime.
 
-- Why is this design the best in the space of possible designs?
-- What other designs have been considered and what is the rationale for not
-  choosing them?
-- What is the impact of not doing this?
+## HSM Client communication through TCP
+A more standardized way of communicating with the _HSM Client_ would be through common HTTP and websocket channels.
 
+This would mean the client would need to become a standalone daemon application instead of a single request process, requiring a dockerized environment for itself.
+
+That would increase its maintainability at the cost of the added complexity both for code construction and process maintenance.
+
+Because of that, this solution was discarded as the first version of this client.
+
+## Dynamic hardware wallets
+An alternative to explicitly declaring each hardware wallet on the `config.js` file would be to allow the HSM key name to be declared on the `[POST] /start` request.
+
+To make that option more functional, there would also need to be an option to create the passed key on the HSM, instead of returning an error in case it's not already there.
+
+The main downside of this approach is the HSM Key name conflict:
+- By not having a static mapping between HSM keys and `walletId`s, the responsibility to ensure they are correctly related falls to the end user of the Headless application.
+- If poorly managed, this could lead to headless end users interacting with a working wallet that does not contain the expected `xPriv`
+- There is also no proposed implementation of deleting `xPriv` keys on the HSM through the Headless wallet. This may increase the possibility of reusing a key name that was already used before, especially common ones as `test`.
+
+The proposed static solution addresses this by requiring manual developer intervention both to create keys on the HSM and to register them on the config file.
+
+## Avoiding the use of the `xPub`
+As of August/2023, there is no API available for retrieving the `xPub` of a given BIP32 key on the HSM. Since the expected release of this API is just a couple of weeks, a decision was made to wait until it's available to implement the actual HSM integration.
+
+However, should we decide not to use it, another path to implement this integration would be to modify the Wallet Lib, allowing the starting of a wallet without a way to derive public keys internally.
+
+#### Approach 1: Requesting addresses directly
+The functions `deriveAddressP2PKH` ([link](https://github.com/HathorNetwork/hathor-wallet-lib/blob/91118d5335c2b63afb559e5deddc7a81f73cbc13/src/utils/address.ts#L38-L48)) and `deriveAddressP2SH` ([link](https://github.com/HathorNetwork/hathor-wallet-lib/blob/91118d5335c2b63afb559e5deddc7a81f73cbc13/src/utils/address.ts#L69-L79)) should be modified to access the `storage` and retrieve the HSM authentication credentials, and instead of calculating locally the address data, retrieve it through use of the _HSM Client_.
+
+This approach requires the HSM firmware to already be configured to accept Hathor version bytes as mentioned [above](#considerations-hsm-client).
+
+#### Approach 2: Requesting `pubkey` and calculating locally
+The _HSM Client_ would also be called on the `deriveAddress*` functions mentioned above, but instead of requesting the `getAddress` API, the `getPubKey` would be requested.
+
+With this information, new functions would need to be created in place of `deriveAddressFromXPubP2PKH` and `deriveAddressFromDataP2SH` to receive the `pubkey` directly, instead of deriving them from the `xPub`.
+
+The benefit of this approach is not needing the HSM firmware to be configured, since the address would be calculated locally and `pubkeys` are not affected by version bytes. ( ⏳Pending confirmation through PoC )
 # Prior art
 [prior-art]: #prior-art
 
-Discuss prior art, both the good and the bad, in relation to this proposal.
-A few examples of what this can include are:
+A similar solution to this was implemented on the Desktop Wallet for interacting with the Ledger Hardware Wallet. This design uses many of the concepts and code implementations to achieve a similar objective.
 
-- For protocol, network, algorithms and other changes that directly affect the
-  code: Does this feature exist in other blockchains and what experience have
-  their community had?
-- For community proposals: Is this done by some other community and what were
-  their experiences with it?
-- For other teams: What lessons can we learn from what other communities have
-  done here?
-- Papers: Are there any published papers or great posts that discuss this? If
-  you have some relevant papers to refer to, this can serve as a more detailed
-  theoretical background.
-
-This section is intended to encourage you as an author to think about the
-lessons from other blockchains, provide readers of your RFC with a fuller
-picture. If there is no prior art, that is fine - your ideas are interesting to
-us whether they are brand new or if it is an adaptation from other blockchains.
-
-Note that while precedent set by other blockchains is some motivation, it does
-not on its own motivate an RFC. Please also take into consideration that Hathor
-sometimes intentionally diverges from common blockchain features.
+The main difference between the Ledger and the HSM is that here there is no need for human intervention on the steps. Also, there is no javascript SDK available for the HSM, requiring the headless implementation to also consider the _HSM Client_ in its scope.
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-- What parts of the design do you expect to resolve through the RFC process
-  before this gets merged?
-- What parts of the design do you expect to resolve through the implementation
-  of this feature before stabilization?
-- What related issues do you consider out of scope for this RFC that could be
-  addressed in the future independently of the solution that comes out of this
-  RFC?
+As indicated above, the following questions remain to be answered by the proof of concepts:
+- Is our code correctly decoding HSM data to initialize a wallet locally?
+- Is our code correctly encoding and decoding input data to sign a transaction successfully?
+
+This RFC also aims to confirm the proposed solution as superior choice in cost-benefit to the alternatives studied here, within the current project constraints.
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-Think about what the natural extension and evolution of your proposal would be
-and how it would affect the network and project as a whole in a holistic way.
-Try to use this section as a tool to more fully consider all possible
-interactions with the project and network in your proposal. Also consider how
-this all fits into the roadmap for the project and of the relevant sub-team.
+## Optimizations on the *HSM Client*
+As mentioned on the [alternatives](#rationale-and-alternatives) section, many improvements could be implemented on the _HSM Client_, including:
+- Developing a full daemon application to run it
+- HTTP/Websocket communication between the headless and the this client
 
-This is also a good place to "dump ideas", if they are out of scope for the
-RFC you are writing but otherwise related.
+Future implementations of this solution could also see the HSM wallet usage on the Desktop wallet, for a friendlier GUI to the end user.
 
-If you have tried and cannot think of any future possibilities,
-you may simply state that you cannot think of anything.
-
-Note that having something written down in the future-possibilities section
-is not a reason to accept the current or a future RFC; such notes should be
-in the section on motivation or rationale in this or subsequent RFCs.
-The section merely provides additional information.
+# Task Breakdown
+| 🚧 Work in Progress |
+| --- |
