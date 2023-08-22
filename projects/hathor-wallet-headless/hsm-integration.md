@@ -7,18 +7,18 @@
 # Summary
 [summary]: #summary
 
-This proposal aims to allow the creation and usage of a Hathor Wallet integrated with a certified and industry-proven Hardware Security System ( HSM ), especifically the ones from [Dinamo Networks](https://www.dinamonetworks.com/en/hardware-security-module-hsm/), for increased security of all of an use case's operations.
+This proposal aims to allow the creation and usage of a Hathor Wallet integrated with a certified and industry-proven Hardware Security System ( HSM ), specifically the ones from [Dinamo Networks](https://www.dinamonetworks.com/en/hardware-security-module-hsm/), for increased security of all of a use case's operations.
 
 # Motivation
 [motivation]: #motivation
 
-Hardware Security Modules are enterprise cryptographic key management designed for big corporations. Integrating our wallet with a Hardware Security Module (HSM) is highly relevant and beneficial for us due to the following reasons:
+Hardware Security Modules are enterprise cryptographic key management devices designed for big corporations. Integrating our wallet with a Hardware Security Module (HSM) is highly relevant and beneficial for us due to the following reasons:
 
 1) **Enhanced Security**: these devices are specialized to provide a high level of security for cryptographic operations.
 1) **Protection against attacks**: HSM devices help mitigate various cyberattacks by securely storing private keys and performing critical cryptographic operations within a secure environment
-1) **Compliance and regulatory requirements**: in many industries and jurisdictions, compliance with security standards and regulations is crucial. Integrating a certified and recognized HSM device with our wallet can help meet these requirements. Their usage can also demonstrate a commitment to data protection and security best practices.
+1) **Compliance and regulatory requirements**: in many industries and jurisdictions, compliance with security standards and regulations is crucial. Integrating a certified and recognized HSM device with our wallet can help use cases meet those requirements. Their usage can also demonstrate a commitment to data protection and security best practices.
 1) **Offline key generation**: keys generated within an HSM never come into contact with potentially insecure environments, which adds an extra layer of protection against external threats
-1) **Audit Trail and Accountability**: HSMs often provide robust audit trail capabilities. This feature helps maintain accounability and traceability, crucial in enterprise and compliance-driven industries
+1) **Audit Trail and Accountability**: HSMs often provide robust audit trail capabilities. This feature helps maintain accountability and traceability, crucial in enterprise and compliance-driven industries
 1) **Trust and Confidence**: Integrating an HSM with Hathor instills trust and confidence among use cases. When corporations know that their assets are secured by industry-standard HSMs, they are more likely to trust our platform and use it for their financial and business needs.
 
 Overall, the integration of our wallet with an HSM helps elevate the security posture of your project, reduces the risk of unauthorized access and manipulation, and increases trust among stakeholders.
@@ -40,7 +40,7 @@ For the Wallet Lib this means that the following operations are executed within 
 ### The HSM Environment
 The full documentation of the HSM and its API can be found on [their docs GitBook](https://docs.dinamonetworks.com/). In short, the architecture of this device from our client standpoint consists of:
 - A web server that provides the API endpoints
-- Each connection **session** is authenticated using an username and password
+- Each connection **session** is authenticated using a username and password
 - Each username has access to a **partition** containing **objects** of secure data within the HSM
   - Any user has full permissions within its own partition
   - A user can grant other users granular access to its own partition
@@ -111,7 +111,7 @@ This project has three main phases that need implementing:
 The main library offered by Dinamo to interact with the HSM device [is available in C language](https://manual.dinamonetworks.io/c/index.html).
 
 A proof-of concept application was partially developed in C as a bridge between the Wallet Lib javascript environment and the C environment. A dedicated design will be written about this interface, but in short:
-- The C code expects to be called from the operating system. In NodeJS terms this menas using [`child_process.spawn()`](https://nodejs.org/docs/latest-v18.x/api/child_process.html#child_processspawncommand-args-options)
+- The C code expects to be called from the operating system. In Node.js terms this means using [`child_process.spawn()`](https://nodejs.org/docs/latest-v18.x/api/child_process.html#child_processspawncommand-args-options)
 - Parameters such as the derivation path and input data to be signed should be passed through `stdin`, not the `argv` command parameters. This avoids leaking sensitive data to the public command line history of the OS
 - Responses are sent through `stdout` and read using the child process `stdout.on('data')` event listener
 
@@ -145,7 +145,7 @@ When requesting to `[POST] /start` a wallet with the `walletId` within this mapp
 > An error is thrown indicating the HSM has not been properly configured to have the `xPriv` on this specific key.
 >
 > **Possibility 3: The key is not a BIP32 xPriv**
-> An error is thrown indicating that the key exists on the HSM but it's invalid for this use.
+> An error is thrown indicating that the key exists on the HSM, but it's invalid for this use.
 
 The key being available, the next call requests the wallet's `xPub`. The parsing of `xPub` information received from the HSM can be based on the desktop hardware wallet [`handlePublicKeyData` function](https://github.com/HathorNetwork/hathor-wallet/blob/ef57015015375a477cffd72baf62f4e14baf541a/src/screens/StartHardwareWallet.js#L106-L138).
 
@@ -166,7 +166,7 @@ This operation should be done via script, as it is the most critical writing ope
 As such, a new `scripts/createHSMKey.js` file will be created, offering a way to quickly generate a new BIP32 wallet on a developer machine. This created key should be inserted on the `config.js` file along with a `walletId` for it. Other wallet generation possibilities are discussed on the _Alternatives_ section of this document.
 
 ### Error handling
-Errors while communicating with the HSM are treated and, where applicable, retried before returning an error the the end user.
+Errors while communicating with the HSM are treated and, where applicable, retried before returning an error the end user.
 
 The mapped errors for this context are:
 
@@ -287,7 +287,7 @@ This RFC also aims to confirm the proposed solution as superior choice in cost-b
 ## Optimizations on the *HSM Client*
 As mentioned on the [alternatives](#rationale-and-alternatives) section, many improvements could be implemented on the _HSM Client_, including:
 - Developing a full daemon application to run it
-- HTTP/Websocket communication between the headless and the this client
+- HTTP/Websocket communication between the headless and this client
 
 Future implementations of this solution could also see the HSM wallet usage on the Desktop wallet, for a friendlier GUI to the end user.
 
