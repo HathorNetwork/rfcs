@@ -4,6 +4,9 @@
 - Hathor Issue:
 - Author: Tulio Vieira tulio@hathor.network
 
+- Say that there will be a need to change the lib if we want to use simple_send_tx
+- Say that for now only the tx proposal routes will be integrated with the HSM
+
 # Summary
 [summary]: #summary
 
@@ -117,6 +120,7 @@ A proof-of concept application was partially developed in C as a bridge between 
 This means that headless applications that are supposed to interact with the HSM should copy the compiled executables of the *HSM Client* to their environment before or during operation.
 
 ## Headless implementation
+[headless-implementation]: #headless-implementation
 The headless application will be responsible for calling the *HSM Client* directly.
 
 The connection authentication credentials will be stored securely on the environment variables, allowing the leverage of other security best practices to avoid credential leaks.
@@ -151,7 +155,9 @@ If the generated `xPub` is not valid, an error is thrown to the user indicating 
 | :--- |
 | The HSM API to retrieve the `xPub`  from a generated `BIP32` wallet is still under development. An initial estimate from the Dinamo team is for this to be available on September. A degree of development uncertainty can be found when this API is available. |
 
-Once the wallet is started successfully, any request to fetch signatures or to sign transactions will send the data to be signed to the *HSM Client*. This can be based on the desktop hardware wallet [`ledger/sendTx()` function](https://github.com/HathorNetwork/hathor-wallet/blob/ef57015015375a477cffd72baf62f4e14baf541a/src/utils/ledger.js#L126-L166).
+Once the wallet is started successfully, the signature of HSM inputs can be made through a `Tx Proposal`, using the Atomic Swap API. The `wallet/atomic-swap/get-my-signatures` route will be modified to identify that the wallet is related to an HSM and will send the data to be signed to the *HSM Client*. This can be based on the desktop hardware wallet [`ledger/sendTx()` function](https://github.com/HathorNetwork/hathor-wallet/blob/ef57015015375a477cffd72baf62f4e14baf541a/src/utils/ledger.js#L126-L166).
+
+_Note:_ For this initial version, only this route will be adapted for using the hardware wallet, since it's the only one that has an implementation close enough to the Desktop Ledger. The other endpoints, such as `wallet/simple_send_tx` will require more complex refactorings and will be discussed on the _Future Possibilites_ section.
 
 | ⚠ Incomplete PoC - sign tx |
 | :--- |
@@ -280,6 +286,13 @@ This RFC also aims to confirm the proposed solution as superior choice in cost-b
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
+## Full integration on all headless endpoints
+As explained in the [headless implementation section](#headless-implementation), only the atomic swap `get-my-signatures` endpoint was adapted to interact with the HSM.
+
+Adapting all endpoints to use the HSM would require more profound refactorings. For example, the `wallet/simple-send-tx` endpoint uses a complete abstraction from the Wallet Lib to make all the transaction information and sign within a single lib call.
+
+A discussion would be necessary to identify the best way to implement this: either through a refactor of the lib code itself, receiving the HSM information via optional parameters, or rethinking the implementation of these methods on the headless to avoid the simplifications offered by the lib.
+
 ## Optimizations on the *HSM Client*
 As mentioned on the [alternatives](#rationale-and-alternatives) section, many improvements could be implemented on the _HSM Client_, including:
 - Developing a full daemon application to run it
@@ -287,6 +300,17 @@ As mentioned on the [alternatives](#rationale-and-alternatives) section, many im
 
 Future implementations of this solution could also see the HSM wallet usage on the Desktop wallet, for a friendlier GUI to the end user.
 
+## Direct access to C libraries
+Some npm libs such as [`node-gyp`](https://www.npmjs.com/package/node-gyp) indicate the potential to directly access the HSM C libraries without having to compile executables for the Headless environment separately.
+
+There are, however uncertainties about their usage and added complexity of using them on an existing application. So they need extra investigation before being considered an option.
+
 # Task Breakdown
-| 🚧 Work in Progress |
-| --- |
+| Task                                                                       | Effort | Pending PoC |
+|----------------------------------------------------------------------------|:------:|:-----------:|
+| Validate `/start` requests with `hsmWallets` config                        |  0.2   |             |
+| Implement call to _HSM Client_ `getXPub` on wallet start                   |  0.3   |      ⚠      |
+| Unit test success and errors with `getXPub` call                           |  0.2   |             |
+| Mock `getXPub` result and start a wallet with it                           |  0.3   |             |
+| Implement call to _HSM Client_ `signData` on `/get-my-signatures` endpoint |  0.8   |      ⚠      |
+
