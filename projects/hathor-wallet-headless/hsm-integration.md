@@ -4,9 +4,6 @@
 - Hathor Issue:
 - Author: Tulio Vieira tulio@hathor.network
 
-- Say that there will be a need to change the lib if we want to use simple_send_tx
-- Say that for now only the tx proposal routes will be integrated with the HSM
-
 # Summary
 [summary]: #summary
 
