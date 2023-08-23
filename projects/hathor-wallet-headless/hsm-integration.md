@@ -313,4 +313,6 @@ There are, however uncertainties about their usage and added complexity of using
 | Unit test success and errors with `getXPub` call                           |  0.2   |             |
 | Mock `getXPub` result and start a wallet with it                           |  0.3   |             |
 | Implement call to _HSM Client_ `signData` on `/get-my-signatures` endpoint |  0.8   |      ⚠      |
-
+| Unit test success and errors with the `signData` call                      |  0.4   |             |
+| -------------------------------------------------------------------------- |  ----  | ----------- |
+| Total                                                                      |  2.2   |             |
