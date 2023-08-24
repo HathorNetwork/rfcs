@@ -249,3 +249,34 @@ If we do have the transaction on the database, we need to check both the `voided
 
 - [ ] Maybe send the outputs already decoded, just like in the transactions API
 
+
+# Future Considerations
+
+## Simplified balance calculation
+
+There is a potential optimization to handling events by using the `group_id` attribute in our advantage for processing events in parallel. The approach can be summarized as follows:
+
+1. Group events by group_id.
+1. For each group of events, start a new database transaction by executing BEGIN TRANSACTION.
+1. Process each event individually. When an output is unspent, add an entry to the UTXO table. If an output is spent, remove the corresponding UTXO.
+  1. Note: Inputs or parents related actions are not necessary in this step
+  1. Events can be processed in parallel if and only if they're from different transactions.
+1. After processing all events in a group:
+  1. Generate new addresses.
+  1. Unlock any time-locked UTXOs.
+  1. Recalculate the balance.
+  1. Commit the changes to the database using COMMIT.
+
+We decided not to implement it in the initial version because we don't yet have a mechanism to know when a group has started or ended.
+
+## Reduced database reads with hashing
+
+Another potential enhancement to improve performance and reduce unnecessary database queries revolves around the use of hashing techniques, something similar to how "ETAG" used by modern browsers for detecting when a resource has changed.
+
+The proposal is to generate a hash, using a swift hashing algorithm like md5 or any other that might be faster yet equally efficient, on specific attributes we're keen on comparing (e.g., voided_by, height).
+
+By storing and comparing these hashes, it becomes feasible to quickly determine if there have been changes in the pertinent attributes without having to perform a full query or comparison.
+
+The comparison should be done by using a in-memory Least Recently Used (LRU) cache of these "e-tags" indexed by the transaction id. This cache should store up to 100,000 transaction hashes (configurable), ensuring quick access to the most frequently used or recently accessed hashes. 
+
+This approach can significantly decrease the load on the database, especially in situations where frequent checks or comparisons are required, but actual changes to the data of interest are infrequent (as is the case with multiple transactions being added as children for another transaction)
