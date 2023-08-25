@@ -64,6 +64,13 @@ After that, for UNIX-like systems, compile the generated file using a command si
 
 Another more robust approach is to use [CMake](https://cmake.org/), generating a makefile based on the local operating system configurations.
 
+This compilation would be necessary for each kind of environment where the Headless Wallet will be run. For this first version, our focus will be compiling it to [run on Alpine Linux 3.14](https://github.com/HathorNetwork/hathor-wallet-headless/blob/master/Dockerfile), the version used by [our public dockerized application](https://hub.docker.com/r/hathornetwork/hathor-wallet-headless).
+
+### Code Delivery
+On environments where this HSM communication will happen, the executables should be moved to the main Headless Wallet application folder, to ensure they will be accessible by the running Node.js process within its docker environment.
+
+Since the usage of this kind of device is a niche of large corporate partners, this should be implemented initially in a dedicated `Dockerfile` for HSM-enabled clients, ensuring a reproducible environment for both tests and production code.
+
 ### Sample code
 Sample code for signing a transaction:
 ```c
@@ -264,84 +271,57 @@ int main(int argc, char **argv)
 ### Exception Handling
 A map will be made between the [Dinamo C library return codes](https://manual.dinamonetworks.io/c/_r_c.html) and the expected results on the Headless wallet in cases of retriable network errors. These are described below:
 
-| Dinamo return code       | Hathor return code |
-|--------------------------|:------------------:|
-| D_CONNECT_FAILED         |   NETWORK_ERROR    |
-| D_SEND_FAILED            |   NETWORK_ERROR    |
-| D_RECV_FAILED            |   NETWORK_ERROR    |
-| D_SETSOCKOPT_FAILED      |   NETWORK_ERROR    |
-| D_CRL_OPERATION_TIMEDOUT |   NETWORK_ERROR    |
-| D_CRL_SEND_ERROR         |   NETWORK_ERROR    |
-| D_CRL_RECV_ERROR         |   NETWORK_ERROR    |
+| Dinamo return code       | Return value | Hathor return code |
+|--------------------------|:------------:|:------------------:|
+| D_CONNECT_FAILED         |     -12      |   NETWORK_ERROR    |
+| D_SEND_FAILED            |     -13      |   NETWORK_ERROR    |
+| D_RECV_FAILED            |     -14      |   NETWORK_ERROR    |
+| D_SETSOCKOPT_FAILED      |     -16      |   NETWORK_ERROR    |
+| D_CRL_OPERATION_TIMEDOUT |     105      |   NETWORK_ERROR    |
+| D_CRL_SEND_ERROR         |     108      |   NETWORK_ERROR    |
+| D_CRL_RECV_ERROR         |     109      |   NETWORK_ERROR    |
+| ERR_NET_FAIL             |     5001     |   NETWORK_ERROR    |
 
 All other errors should be passed to the Node.js client as fatal errors, along with their Dinamo return codes for easier debugging.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
-Why should we *not* do this?
+The only drawback to this Bridge approach is that it will be implemented by the Hathor Labs team.
+
+The Dinamo Networks team is also working on a Javascript implementation that could be imported as a library through _npm_ directly to the Headless Wallet application, avoiding many of the issues of this simpler approach proposed here. However, the ETA for this library is still undefined.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
-- Why is this design the best in the space of possible designs?
-- What other designs have been considered and what is the rationale for not
-  choosing them?
-- What is the impact of not doing this?
+### Bridge communication through TCP
+A more standardized way of communicating with the javascript applications would be through common HTTP and websocket channels.
+
+This would mean this bridge would need to become a standalone daemon and webserver application instead of a single request process, requiring a dockerized environment for itself.
+
+That would increase its maintainability at the cost of the added complexity both for code construction and process maintenance.
+
+Because of that, this solution was discarded as the first version of this client.
+
+### Connection and credentials through `stdin`
+To increase the flexibility of this bridge while retaining its current architecture, all credentials and connection information could be passed at runtime on each call. That would allow a single Headless Wallet application to connect to many HSM devices.
+
+Since this case is more advanced, it was decided this approach would not offer sensible advantages, and direct access to the environment variables would be simpler and just as secure.
 
 # Prior art
 [prior-art]: #prior-art
 
-Discuss prior art, both the good and the bad, in relation to this proposal.
-A few examples of what this can include are:
-
-- For protocol, network, algorithms and other changes that directly affect the
-  code: Does this feature exist in other blockchains and what experience have
-  their community had?
-- For community proposals: Is this done by some other community and what were
-  their experiences with it?
-- For other teams: What lessons can we learn from what other communities have
-  done here?
-- Papers: Are there any published papers or great posts that discuss this? If
-  you have some relevant papers to refer to, this can serve as a more detailed
-  theoretical background.
-
-This section is intended to encourage you as an author to think about the
-lessons from other blockchains, provide readers of your RFC with a fuller
-picture. If there is no prior art, that is fine - your ideas are interesting to
-us whether they are brand new or if it is an adaptation from other blockchains.
-
-Note that while precedent set by other blockchains is some motivation, it does
-not on its own motivate an RFC. Please also take into consideration that Hathor
-sometimes intentionally diverges from common blockchain features.
+This approach has not been taken by other applications on Hathor Labs at the time. It is, however, common practice in a UNIX-like environment to use inter process communication like this to allow applications built in different languages to interact.
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-- What parts of the design do you expect to resolve through the RFC process
-  before this gets merged?
-- What parts of the design do you expect to resolve through the implementation
-  of this feature before stabilization?
-- What related issues do you consider out of scope for this RFC that could be
-  addressed in the future independently of the solution that comes out of this
-  RFC?
+As indicated above, the following questions remain to be answered by the proof of concepts:
+- Is our code correctly decoding HSM data to initialize a wallet locally?
+- Is our code correctly encoding and decoding input data to sign a transaction successfully?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-Think about what the natural extension and evolution of your proposal would be
-and how it would affect the network and project as a whole in a holistic way.
-Try to use this section as a tool to more fully consider all possible
-interactions with the project and network in your proposal. Also consider how
-this all fits into the roadmap for the project and of the relevant sub-team.
-
-This is also a good place to "dump ideas", if they are out of scope for the
-RFC you are writing but otherwise related.
-
-If you have tried and cannot think of any future possibilities,
-you may simply state that you cannot think of anything.
-
-Note that having something written down in the future-possibilities section
-is not a reason to accept the current or a future RFC; such notes should be
-in the section on motivation or rationale in this or subsequent RFCs.
-The section merely provides additional information.
+### HSM available through the default `Dockerfile`
+A conditional could be added to add the HSM files through a docker initialization command, removing the need for a dedicated `Dockerfile` for the interested partners.
