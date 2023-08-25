@@ -7,7 +7,7 @@
 # Summary
 [summary]: #summary
 
-This document describes the C Bridge between the Headless Wallet and the [Dinamo Networks Hardware Security System](from [Dinamo Networks](https://www.dinamonetworks.com/en/hardware-security-module-hsm/)) ( HSM ).
+This document describes the C Bridge between the Headless Wallet and the Dinamo Networks Hardware Security System (from [Dinamo Networks](https://www.dinamonetworks.com/en/hardware-security-module-hsm/)) ( HSM ).
 
 # Motivation
 [motivation]: #motivation
@@ -17,7 +17,7 @@ This bridge is necessary to make NodeJS [client applications](https://github.com
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-The bridge is comprised mostly of code from the [examples on Dinamo docs site](https://manual.dinamonetworks.io/c/examples.html), added with structures to facilitate communication with the NodeJS through `stdin` input and output interpretation of the `stdout` and/or `stderr`.
+The bridge is comprised mostly of code from the [examples on Dinamo docs site](https://manual.dinamonetworks.io/c/examples.html), with added structures to facilitate communication with the NodeJS through `stdin` input and output interpretation of the `stdout` and/or `stderr`.
 
 The key aspects this bridge must consider are:
 ### Credentials security
@@ -34,7 +34,7 @@ That way this information won't be available to the operating system in any kind
 The main ones will be described below.
 
 ### Create offline `xPriv` Key
-This will likely be the first interaction between the Hathor environment with the Dinamo HSM, generating the extended private key of a wallet.
+This will likely be the first interaction between the Hathor environment and the Dinamo HSM, generating the extended private key of a wallet.
 
 A simple command will be sent to the HSM requesting the creation of an `xPriv` with the key name where it should be stored. No response is expected on success.
 
@@ -128,7 +128,7 @@ int main(int argc, char **argv)
 	}
 	nChild = atoi(argv[2]);
 
-  // Stdin input implementation, the main way to communicate with the bridge
+	// Stdin input implementation, the main way to communicate with the bridge
 	printf("Insert the message to be signed on stdin: ");
 	if (fgets(pbMsg, sizeof(pbMsg), stdin) == NULL) {
 		perror("Error reading message input");
@@ -143,8 +143,8 @@ int main(int argc, char **argv)
 	nRet = DInitialize(0);
 	if (nRet)
 	{
-			printf("Failure at: DInitialize \nError code: %d\n", nRet);
-			exit(1);
+		printf("Failure at: DInitialize \nError code: %d\n", nRet);
+		exit(1);
 	}
 
 	// Initializing data structure to establishing connection with the HSM
@@ -156,8 +156,8 @@ int main(int argc, char **argv)
 	nRet = DOpenSession(&hSession, SS_USER_PWD, (BYTE *)&authPwd, sizeof(authPwd), ENCRYPTED_CONN);
 	if (nRet)
 	{
-			printf("Failure at: DOpenSession \nError code: %d\n", nRet);
-			goto clean;
+		printf("Failure at: DOpenSession \nError code: %d\n", nRet);
+		goto clean;
 	}
 
 	// ==============================================
@@ -179,7 +179,7 @@ int main(int argc, char **argv)
 	}
 
 	/*
-		Based on https://manual.dinamonetworks.io/c/sign_verify_bchain_8c-example.html
+	 * Based on https://manual.dinamonetworks.io/c/sign_verify_bchain_8c-example.html
 	*/
 	nRet = DBchainHashData(hSession,
 													DN_BCHAIN_HASH_KECCAK256,
@@ -193,7 +193,7 @@ int main(int argc, char **argv)
 			printf("Failure at: DBchainHashData \nError code: %d\n", nRet);
 			goto clean;
 	}
-  // Outputting in hex enconding for the NodeJS interpreter
+	// Outputting in hex enconding for the NodeJS interpreter
 	buffer_to_hex(pbHash,
 								dwHashLen,
 								pbOutputEncode);
@@ -212,7 +212,7 @@ int main(int argc, char **argv)
 			printf("Failure at: DBchainSignHash \nError code: %d\n", nRet);
 			goto clean;
 	}
-  // Outputting in hex encoding for the NodeJS interpreter
+	// Outputting in hex encoding for the NodeJS interpreter
 	buffer_to_hex(pbSig,
 								dwSigLen,
 								pbOutputEncode);
@@ -235,7 +235,7 @@ int main(int argc, char **argv)
 			goto clean;
 	}
 
-  // Double checking sinature validity
+	// Double checking sinature validity
 	nRet = DBchainVerify(hSession,
 												DN_BCHAIN_SIG_RAW_ECDSA,
 												DN_BCHAIN_HASH_KECCAK256,
@@ -252,14 +252,14 @@ int main(int argc, char **argv)
 			printf("Failure at: DBchainVerify \nError code: %d\n", nRet);
 			goto clean;
 	}
-  // By reaching here, the signature is completely valid
+	// By reaching here, the signature is completely valid
 
 	// =====
 	// Clean
 	// =====
 	clean:
 
-  // No persistent key was built. Just closing the session
+	// No persistent key was built. Just closing the session
 	if (hSession) {
 			DCloseSession(&hSession, 0);
 	}
