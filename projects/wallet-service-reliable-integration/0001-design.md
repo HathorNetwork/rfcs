@@ -42,9 +42,11 @@ This is the resting state where the machine awaits incoming events
     
 **Transitions**:
 - On receiving a `NEW_VERTEX_ACCEPTED` event:
+  - **Guards**: if the `checkNew` guard (described in the Guards section) returns false, the machine will transition to the `CONNECTED.idle` state and ignore this event.
   - **Actions**: The machine stores the event using the `storeEvent` action.
   - **Target**: The machine transitions to the `handlingVertexAccepted` sub-state.
 - On receiving a `VERTEX_METADATA_CHANGED` event:
+  - **Guards**: if the `checkNew` guard (described in the Guards section) returns false, the machine will transition to the `CONNECTED.idle` state and ignore this event.
   - **Actions**: The machine stores the event using the `storeEvent` action.
   - **Target**: The machine transitions to the `handlingMetadataChanged` sub-state.
 - On receiving a `LOAD_STARTED` event:
@@ -191,6 +193,23 @@ This guard will if check the connected fullnode's peer-id is the same as the one
 
 This guard will if check the connected fullnode's Network is the same as the one set in the env `NETWORK`.
 
+#### checkNew
+
+This guard will receive an event and check if the transaction has changed by comparing the data we have on the database with the data received on the event.
+
+As an optimization, we will store an in-memory cache of recent transactions by holding a md5 hash of all the fields we are interested in (hash, voided_by length, first_block and height) so we can quickly detect if anything was changed without the need of a database query.
+
+Here is an example of the method that will hash the data we're interested in
+
+```javascript
+const data = `${meta.hash}|${meta.voided_by.length > 0}|${meta.first_block}|${meta.height}`;
+const hash = crypto.createHash('md5');
+hash.update(data);
+return hash.digest('hex');
+```
+
+The size of the LRU cache should be configured by an env variable.
+
 ## Services
 
 #### storeLastEvent
@@ -245,11 +264,6 @@ If we do have the transaction on the database, we need to check both the `voided
 *We already have those methods well tested in the wallet-service lambdas, we can just migrate them to the daemon.*
 
 
-## Suggestions
-
-- [ ] Maybe send the outputs already decoded, just like in the transactions API
-
-
 # Future Considerations
 
 ## Simplified balance calculation
@@ -268,15 +282,3 @@ There is a potential optimization to handling events by using the `group_id` att
   1. Commit the changes to the database using COMMIT.
 
 We decided not to implement it in the initial version because we don't yet have a mechanism to know when a group has started or ended.
-
-## Reduced database reads with hashing
-
-Another potential enhancement to improve performance and reduce unnecessary database queries revolves around the use of hashing techniques, something similar to how "ETAG" used by modern browsers for detecting when a resource has changed.
-
-The proposal is to generate a hash, using a swift hashing algorithm like md5 or any other that might be faster yet equally efficient, on specific attributes we're keen on comparing (e.g., voided_by, height).
-
-By storing and comparing these hashes, it becomes feasible to quickly determine if there have been changes in the pertinent attributes without having to perform a full query or comparison.
-
-The comparison should be done by using a in-memory Least Recently Used (LRU) cache of these "e-tags" indexed by the transaction id. This cache should store up to 100,000 transaction hashes (configurable), ensuring quick access to the most frequently used or recently accessed hashes. 
-
-This approach can significantly decrease the load on the database, especially in situations where frequent checks or comparisons are required, but actual changes to the data of interest are infrequent (as is the case with multiple transactions being added as children for another transaction)
