@@ -44,7 +44,7 @@ The ability to customize network settings already exists in our other wallets an
 		- [2. Risk disclaimer page](#2-risk-disclaimer-page)
 		- [3. Pre settings page](#3-pre-settings-page)
 		- [4. Custom settings page](#4-custom-settings-page)
-		- [5. Success feedback](#5-success-feedback)
+		- [5. Reload wallet](#5-reload-wallet)
 - [UI for a custom network settings](#ui-custom-network-settings)
 	
 The proposed solution is to have a "Danger Area" section in the settings page with a "Network Settings" action on it.
@@ -126,46 +126,46 @@ SafePal add custom network form.
 
 The starting point for the dangerous flows, in this case for the "Network Settings" flow.
 
-![](img/0001-dev-settings/mock-1-settings-page.png)
+![](img/0001-dev-settings/mock-1-settings-page-v2.png)
 
 #### 2. Risk disclaimer page
 [2-risk-disclaimer-page]: #2-risk-disclaimer-page
 
 The "Network Settings" action navigates the user to the "Risk Disclaimer" page when the current network settings remains with default value. This page should not appear again while the network settings is altered.
 
-![](img/0001-dev-settings/mock-2-risk-disclaimer-page.png)
+![](img/0001-dev-settings/mock-2-risk-disclaimer-page-v2.png)
 
 #### 3. Pre settings page
 [3-pre-settings-page]: #3-pre-settings-page
 
 The "Continue" action navigates the user to the "Pre Settings" page where the user is presented to at least the "Testnet" pre-settings, but also to the "Customize" action.
 
-If the user select the "Testnet" pre-settings the wallet should apply it and return a feedback. See the section 5 for the "Success feedback" description.
+If the user select the "Testnet" pre-settings the wallet should apply it and restart the wallet. See the section 5 for the "Reload wallet" description.
+
+The network selection will trigger a pin confirmation before proceed.
 
 ![](img/0001-dev-settings/mock-3-presettings-page.png)
 
 #### 4. Custom settings page
 [4-custom-settings-page]: #4-custom-settings-page
 
-At this page the user can change the network settings and then trigger the "Save" action. The "Save" action make the wallet applies te configuration and return a feedback. See the next section "Success feedback" for more details.
+At this page the user can change the network settings and then trigger the "Save" action. The "Save" action make the wallet applies te configuration and reload. See the next section "Reload wallet" for more details.
 
-![](img/0001-dev-settings/mock-4-custom-settings-page.png)
+The "Save" action will trigger a pin confirmation before proceed.
 
-#### 5. Success feedback
-[5-success-feedback]: #5-success-feedback
+![](img/0001-dev-settings/mock-4-custom-settings-page-v2.png)
 
-[sucess-feedback]: #sucess-feedback
+#### 5. Reload wallet
+[5-reload-wallet]: #5-reload-wallet
 
-A feedback is given after trigger the "Save" action. The success feedback dismiss action redirects the user to the "Settings" page.
-
-![](img/0001-dev-settings/mock-5-feedback-success.png)
+We trigger the reload wallet to apply all the changes and reload the transactions.
 
 ## UI for a custom network settings
 [ui-custom-network-settings]: #ui-custom-network-settings
 
-We should use an alert color as the primary color of the app as a simple visual signaling that the network settings is not the default one.
+We should use an alert color as the primary color of the app as a simple visual signaling that the network settings is not the default one and add a fixed message at the top with the network name in a danger color background to reiforce the different environment. 
 
-![](img/0001-dev-settings/mock-alert-ui.png)
+![](img/0001-dev-settings/mock-alert-ui-v2.png)
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
@@ -262,14 +262,18 @@ export function* saga() {
 }
 ```
 
-* `updateNetworkSettings` - should process the update request and emit either `NETWORK_SETTINGS_UPDATE_SUCCESS` or `NETWORK_SETTINGS_UPDATE_FAILURE`.
+* `updateNetworkSettings` - should process the update request to get more details from the network, set the stage to `dev-privnet` and emit either `NETWORK_SETTINGS_UPDATE_SUCCESS` or `NETWORK_SETTINGS_UPDATE_FAILURE`.
 * `persistNetworkSettings` - should persist in the app storage the network settings, this way the wallet can retrieve its values in the initialization phase.
 * `cleanNetworkSettings` - should delete the network settings from the storage, this way letting the wallet use the default value.
 
 All the action types that need to be created:
 * `NETWORK_SETTINGS_UPDATE_REQUESTED` - used in the saga.
-* `NETWORK_SETTINGS_UPDATE_SUCCESS` - used in the saga, the reducer and the view to provide a feedback to the user.
-* `NETWORK_SETTINGS_UPDATE_FAILURE` - used in the view to provide a feedback to the user.
+* `NETWORK_SETTINGS_UPDATE_SUCCESS` - used in the saga, the reducer, and views to provide a trigger for the wallet reload and apply a new look for the wallet.
+* `NETWORK_SETTINGS_UPDATE_FAILURE` - used in the reducer and the view to provide a feedback to the user.
+
+To make easy the stage configuration for developers that uses our unleash instance, we can determine the stage `dev-privnet` for all custom networks. This stage value should be created in our unleash.
+
+The wallet reload uses the action `RELOAD_WALLET_REQUESTED`.
 
 ### Alert UI
 [alert-ui]: #alert-ui
@@ -286,9 +290,13 @@ const initialState = {
 
 We should create the constant `ALERT_COLOR` and assign it to the `primaryColor` property whenever the action `NETWORK_SETTINGS_UPDATE_SUCCESS` happens and the network settings is not the default.
 
+Also, we need to add a bar in the top of all views of the wallet, using a `DANGER_COLOR` backbround, to show the name of the custom network.
+
 We need to create:
-* The `ALERT_COLOR` constant with the value `#ffd43b`, and
-* The reducer `onNetworkSettingsUpdateSuccess` to process the payload and assign the `primaryColor` if needed.
+* The `ALERT_COLOR` constant with the value `#ffd43b`;
+* The `DANGER_COLOR` constant with the value `#ffc9c9`;
+* The reducer `onNetworkSettingsUpdateSuccess` to process the payload and assign the `primaryColor` if needed;
+* The component `CustomNetworkBar.js` to show the network name in all wallet views.
 
 We also need to refactor the code for every usage of `PRIMARY_COLOR` across the project, which happens in all these files:
 
@@ -320,16 +328,14 @@ In the saga action `startWallet` the initialization logic uses network constants
 
 We need to retrieve the `networkSettings` value from the `STORE`:
 ```ts
-const networkSettings = STORE.getItem(dangerAreaKey.networkSettings);
+const networkSettings = STORE.getItem(devSettingsKey.networkSettings);
 ```
 
-We need create the `dangerAreaKey` constant and a key value for `networkSettings`:
+We need create the `devSettingsKey` constant and a key value for `networkSettings`:
 ```ts
-export const dangerAreaKey = {
-  networkSettings: 'dangerArea:networkSettings',
+export const devSettingsKey = {
+  networkSettings: 'devSettings:networkSettings',
 ```
-
-As the `startWallet` happens only once, in the wallet initialization, it implies that the user need to kill the app and open it again to see the new network settings applied.
 
 ### Public explorer component refactoring
 [public-explorer-component-refactoring]: #public-explorer-component-refactoring
@@ -350,10 +356,12 @@ const explorerLink = `${explorerUrl}transaction/${txId}`;
 # Drawbacks
 [drawbacks]: #drawbacks
 
-By making it available for all users we are adding the risk of possible scams to occur. Despite all the mitigations like the "Risk disclaimer" page and the warning notice in the "Custom settings" page, we can't avoid it of happen. If the scams becoming a problem we may need to restrict the access to the "Danger Area" in the "Settigs" page possibly using the Unleash feature activation.
+By making it available for all users we are adding the risk of possible scams to occur. Despite all the mitigations like the "Risk disclaimer" page and the warning notice in the "Custom settings" page, we can't avoid it of happening. If the scams becoming a problem we may need to restrict the access to the "Dev Settings" in the "Settigs" page possibly using the Unleash feature activation.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
+
+### Conceal the Dev Settings
 
 We could conceal the dev settings and make it appear only with a special procedure like tap 3 times in the Hathor title in the about page. However, this approaches creates unecessary difficulties when we want more engagemente from the dev comunity.
 
@@ -373,4 +381,4 @@ No questions.
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-We can extend the "Danger Area" with more settings, for example, we can let developers enable and disable the wallet service. Also, we can let developers add network pre-settings beyond "testnet" and "mainnet".
+We can extend the "Dev Settings" with more settings, for example, we can let developers enable and disable the wallet service. Also, we can let developers add network pre-settings beyond "testnet" and "mainnet".
