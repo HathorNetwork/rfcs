@@ -382,3 +382,5 @@ No questions.
 [future-possibilities]: #future-possibilities
 
 We can extend the "Dev Settings" with more settings, for example, we can let developers enable and disable the wallet service. Also, we can let developers add network pre-settings beyond "testnet" and "mainnet".
+
+Besides that, you should consider a project to align the experiences among the wallets.
