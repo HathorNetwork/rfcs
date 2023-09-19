@@ -262,7 +262,7 @@ export function* saga() {
 }
 ```
 
-* `updateNetworkSettings` - should process the update request to get more details from the network, set the stage to `dev-privnet` and emit either `NETWORK_SETTINGS_UPDATE_SUCCESS` or `NETWORK_SETTINGS_UPDATE_FAILURE`.
+* `updateNetworkSettings` - should process the update request to get more details from the network, set the stage to `dev-privnet` and emit either `NETWORK_SETTINGS_UPDATE_SUCCESS` or `NETWORK_SETTINGS_UPDATE_FAILURE`. If the user didn't fill the Wallet Service fields, we should disable the features that depends on it.
 * `persistNetworkSettings` - should persist in the app storage the network settings, this way the wallet can retrieve its values in the initialization phase.
 * `cleanNetworkSettings` - should delete the network settings from the storage, this way letting the wallet use the default value.
 
