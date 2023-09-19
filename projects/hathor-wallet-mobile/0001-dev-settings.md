@@ -163,9 +163,9 @@ We trigger the reload wallet to apply all the changes and reload the transaction
 ## UI for a custom network settings
 [ui-custom-network-settings]: #ui-custom-network-settings
 
-We should use an alert color as the primary color of the app as a simple visual signaling that the network settings is not the default one and add a fixed message at the top with the network name in a danger color background to reiforce the different environment. 
+We should use an alert color as the primary color of the app as a simple visual signaling that the network settings is not the default one and add a fixed message at the top with the network name in a an alert color background to reiforce the different environment. 
 
-![](img/0001-dev-settings/mock-alert-ui-v2.png)
+![](img/0001-dev-settings/mock-alert-ui-v3.png)
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
