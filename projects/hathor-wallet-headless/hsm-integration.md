@@ -97,7 +97,7 @@ Lib->>Lib: Assemble Tx
 Lib->>Headless: Tx Y with signed input
 ```
 
-Eventual network failures when trying to communicate with the HSM are retried and only interrupt the flow if the amount of retries reach a configurable threshold. Logic errors like not finding a `xPriv` key are treated and returned to the end user in an informative way.
+Eventual network failures when trying to communicate with the HSM are retried and only interrupt the flow if the amount of retries reach a configurable threshold. Logic errors like not finding an `xPriv` key are treated and returned to the end user in an informative way.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
@@ -132,7 +132,7 @@ A configuration attribute will be added to the `config.js` file, similar to the 
 ```js
 // On config.js
 const hsmWallets = {
-	'headless-wallet-id': 'HSM_KEY_NAME'
+  'headless-wallet-id': 'HSM_KEY_NAME'
 }
 ```
 
@@ -148,17 +148,13 @@ The key being available, the next call requests the wallet's `xPub`. The parsing
 
 If the generated `xPub` is not valid, an error is thrown to the user indicating that the designated HSM key does not contain a valid `BIP32 xPriv` and is unsuitable for using as a wallet.
 
-| ⚠ Incomplete PoC - xPub |
-| :--- |
-| The HSM API to retrieve the `xPub`  from a generated `BIP32` wallet is still under development. An initial estimate from the Dinamo team is for this to be available on September. A degree of development uncertainty can be found when this API is available. |
-
 Once the wallet is started successfully, the signature of HSM inputs can be made through a `Tx Proposal`, using the Atomic Swap API. The `wallet/atomic-swap/get-my-signatures` route will be modified to identify that the wallet is related to an HSM and will send the data to be signed to the *HSM Client*. This can be based on the desktop hardware wallet [`ledger/sendTx()` function](https://github.com/HathorNetwork/hathor-wallet/blob/ef57015015375a477cffd72baf62f4e14baf541a/src/utils/ledger.js#L126-L166).
 
 _Note:_ For this initial version, only this route will be adapted for using the hardware wallet, since it's the only one that has an implementation close enough to the Desktop Ledger. The other endpoints, such as `wallet/simple_send_tx` will require more complex refactorings and will be discussed on the _Future Possibilites_ section.
 
-| ⚠ Incomplete PoC - sign tx |
-| :--- |
-| This step was also not tested on the PoC and can add uncertainty to the development phase |
+| ⚠ Incomplete PoC - sign tx                                                                           |
+|:-----------------------------------------------------------------------------------------------------|
+| This step was also not fully implemented on the PoC and can add uncertainty to the development phase |
 
 Since the *HSM Client* connections are closed immediately after the command execution, there is no need to manage any other process while interacting with the HSM.
 
@@ -219,10 +215,51 @@ The main downside of this approach is the HSM Key name conflict:
 
 The proposed static solution mitigates this risk by requiring manual developer intervention both to create keys on the HSM and to register them on the config file.
 
-## Avoiding the use of the `xPub`
-As of August/2023, there is no API available for retrieving the `xPub` of a given BIP32 key on the HSM. Since the expected release of this API is just a couple of weeks, a decision was made to wait until it's available to implement the actual HSM integration.
+# Prior art
+[prior-art]: #prior-art
 
-However, should we decide not to use it, another path to implement this integration would be to modify the Wallet Lib, allowing the starting of a wallet without a way to derive public keys internally.
+A similar solution to this integration was implemented on the Desktop Wallet for interacting with the Ledger Hardware Wallet. This design uses many of the concepts and code implementations to achieve a similar objective.
+
+The main difference between the Ledger and the HSM is that here there is no need for human intervention on the steps. Also, there is no javascript SDK available for the HSM, requiring the headless implementation to also consider the _HSM Client_ in its scope.
+
+# Unresolved questions
+[unresolved-questions]: #unresolved-questions
+
+As indicated above, the following questions remain to be answered by the proof of concepts:
+- Is our code correctly encoding and decoding input data to sign a transaction successfully?
+
+This RFC also aims to confirm the proposed solution as superior choice in cost-benefit to the alternatives studied here, within the current project constraints.
+
+# Future possibilities
+[future-possibilities]: #future-possibilities
+
+## Full integration on all headless endpoints
+As explained in the [headless implementation section](#headless-implementation), only the atomic swap `get-my-signatures` endpoint was adapted to interact with the HSM.
+
+Adapting all endpoints to use the HSM would require more profound refactorings. For example, the `wallet/simple-send-tx` endpoint uses a complete abstraction from the Wallet Lib to make all the transaction information and sign within a single lib call.
+
+A discussion would be necessary to identify the best way to implement this: either through a refactor of the lib code itself, receiving the HSM information via optional parameters, or rethinking the implementation of these methods on the headless to avoid the simplifications offered by the lib.
+
+## Optimizations on the *HSM Client*
+As mentioned on the [alternatives](#rationale-and-alternatives) section, many improvements could be implemented on the _HSM Client_, including:
+- Developing a full daemon application to run it
+- HTTP/Websocket communication between the headless and this client
+
+Future implementations of this solution could also see the HSM wallet usage on the Desktop wallet, for a friendlier GUI to the end user.
+
+## Direct access to C libraries
+Some npm dependencies indicate the potential to directly access the HSM C libraries without having to compile executables for the Headless environment separately. A few research references for this approach are:
+- [`node-addon-api`](https://www.npmjs.com/package/node-addon-api)
+- [`node-ffi-napi`](https://www.npmjs.com/package/ffi-napi)
+- [`node-gyp`](https://www.npmjs.com/package/node-gyp)
+- Reference [article](https://medium.com/ai-innovation/a-guide-for-javascript-developers-to-build-c-add-ons-with-node-addon-api-28c84a0c0cb1))
+
+There are, however uncertainties about their usage and added complexity of using them on an existing application. So they need extra investigation before being considered an option.
+
+## Avoiding the use of the `xPub`
+There is the possibility of some partner needing a wallet with a higher level of security, avoiding even the export of the `xPub` data.
+
+Should this become a requirement, another path to implement this integration would be to modify the Wallet Lib, allowing the starting of a wallet without a way to derive public keys internally.
 
 #### Approach 1: Requesting addresses directly
 The functions `deriveAddressP2PKH` ([link](https://github.com/HathorNetwork/hathor-wallet-lib/blob/91118d5335c2b63afb559e5deddc7a81f73cbc13/src/utils/address.ts#L38-L48)) and `deriveAddressP2SH` ([link](https://github.com/HathorNetwork/hathor-wallet-lib/blob/91118d5335c2b63afb559e5deddc7a81f73cbc13/src/utils/address.ts#L69-L79)) should be modified to access the `storage` and retrieve the HSM authentication credentials, and instead of calculating locally the address data, retrieve it through use of the _HSM Client_.
@@ -260,53 +297,14 @@ The _HSM Client_ would also be called on the `deriveAddress*` functions mentione
 
 With this information, new functions would need to be created in place of `deriveAddressFromXPubP2PKH` and `deriveAddressFromDataP2SH` to receive the `pubkey` directly, instead of deriving them from the `xPub`.
 
-The benefits of this approach are:
-- Not needing the HSM firmware to be configured, since the address would be calculated locally and `pubkeys` are not affected by version bytes. ( ⏳Pending confirmation through PoC )
-- Not needing the `xPub` API that is currently under development
+The benefit of this approach is not needing the HSM firmware to be configured, since the address would be calculated locally and `pubkeys` are not affected by network version bytes.
 
-# Prior art
-[prior-art]: #prior-art
-
-A similar solution to this integration was implemented on the Desktop Wallet for interacting with the Ledger Hardware Wallet. This design uses many of the concepts and code implementations to achieve a similar objective.
-
-The main difference between the Ledger and the HSM is that here there is no need for human intervention on the steps. Also, there is no javascript SDK available for the HSM, requiring the headless implementation to also consider the _HSM Client_ in its scope.
-
-# Unresolved questions
-[unresolved-questions]: #unresolved-questions
-
-As indicated above, the following questions remain to be answered by the proof of concepts:
-- Is our code correctly decoding HSM data to initialize a wallet locally?
-- Is our code correctly encoding and decoding input data to sign a transaction successfully?
-
-This RFC also aims to confirm the proposed solution as superior choice in cost-benefit to the alternatives studied here, within the current project constraints.
-
-# Future possibilities
-[future-possibilities]: #future-possibilities
-
-## Full integration on all headless endpoints
-As explained in the [headless implementation section](#headless-implementation), only the atomic swap `get-my-signatures` endpoint was adapted to interact with the HSM.
-
-Adapting all endpoints to use the HSM would require more profound refactorings. For example, the `wallet/simple-send-tx` endpoint uses a complete abstraction from the Wallet Lib to make all the transaction information and sign within a single lib call.
-
-A discussion would be necessary to identify the best way to implement this: either through a refactor of the lib code itself, receiving the HSM information via optional parameters, or rethinking the implementation of these methods on the headless to avoid the simplifications offered by the lib.
-
-## Optimizations on the *HSM Client*
-As mentioned on the [alternatives](#rationale-and-alternatives) section, many improvements could be implemented on the _HSM Client_, including:
-- Developing a full daemon application to run it
-- HTTP/Websocket communication between the headless and this client
-
-Future implementations of this solution could also see the HSM wallet usage on the Desktop wallet, for a friendlier GUI to the end user.
-
-## Direct access to C libraries
-Some npm libs such as [`node-gyp`](https://www.npmjs.com/package/node-gyp) indicate the potential to directly access the HSM C libraries without having to compile executables for the Headless environment separately.
-
-There are, however uncertainties about their usage and added complexity of using them on an existing application. So they need extra investigation before being considered an option.
 
 # Task Breakdown
 | Task                                                                       | Effort | Pending PoC |
 |----------------------------------------------------------------------------|:------:|:-----------:|
 | Validate `/start` requests with `hsmWallets` config                        |  0.2   |             |
-| Implement call to _HSM Client_ `getXPub` on wallet start                   |  0.3   |      ⚠      |
+| Implement call to _HSM Client_ `getXPub` on wallet start                   |  0.3   |             |
 | Unit test success and errors with `getXPub` call                           |  0.2   |             |
 | Mock `getXPub` result and start a wallet with it                           |  0.3   |             |
 | Implement call to _HSM Client_ `signData` on `/get-my-signatures` endpoint |  0.8   |      ⚠      |
