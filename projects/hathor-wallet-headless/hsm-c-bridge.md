@@ -41,16 +41,12 @@ A simple command will be sent to the HSM requesting the creation of an `xPriv` w
 ### Get `xPub` for a wallet
 Requests the `xPub` of an `xPriv` associated with a given key name. The resulting derivation will be already on the Hathor coin path.
 
-| ⚠ Incomplete PoC - xPub |
-| :--- |
-| The HSM API to retrieve the `xPub`  from a generated `BIP32` wallet is still under development. An initial estimate from the Dinamo team is for this to be available on September. A degree of development uncertainty can be found when this API is available. |
-
 ### Sign data
 Requests a given arbitrary string to be signed using the `xPriv` from the given key name.
 
-| ⚠ Incomplete PoC - sign tx |
-| :--- |
-| This step was also not tested on the PoC and can add uncertainty to the development phase |
+| ⚠ Incomplete PoC - sign tx                                                           |
+|:-------------------------------------------------------------------------------------|
+| This step was unfinished on the PoC and can add uncertainty to the development phase |
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
@@ -166,13 +162,13 @@ int main(int argc, char **argv)
 
 	// Child Key Derivation operation (temporary data)
 	nRet = DBchainCreateBip32Ckd(hSession,
-								ver,
-								DN_BCHAIN_SECURE_BIP32_INDEX_BASE + nChild,
-								BCHAIN_KEY | TEMPORARY_KEY,
-								szId,
-								szDest,
-								&pbKeyInfo,
-								0);
+                               ver,
+                               DN_BCHAIN_SECURE_BIP32_INDEX_BASE + nChild,
+                               BCHAIN_KEY | TEMPORARY_KEY,
+                               szId,
+                               szDest,
+                               &pbKeyInfo,
+                               0);
 	if(nRet){
 		printf("Failure at: DBchainCreateBip32Ckd \nError code: %d\n", nRet);
 		goto clean;
@@ -182,12 +178,12 @@ int main(int argc, char **argv)
 	 * Based on https://manual.dinamonetworks.io/c/sign_verify_bchain_8c-example.html
 	*/
 	nRet = DBchainHashData(hSession,
-													DN_BCHAIN_HASH_KECCAK256,
-													pbMsg,
-													sizeof(pbMsg),
-													pbHash,
-													&dwHashLen,
-													0);
+                         DN_BCHAIN_HASH_KECCAK256,
+                         pbMsg,
+                         sizeof(pbMsg),
+                         pbHash,
+                         &dwHashLen,
+                         0);
 	if (nRet)
 	{
 			printf("Failure at: DBchainHashData \nError code: %d\n", nRet);
@@ -200,14 +196,14 @@ int main(int argc, char **argv)
 	printf("Encoded hash: %s\n\n", pbOutputEncode);
 
 	nRet = DBchainSignHash(hSession,
-													DN_BCHAIN_SIG_RAW_ECDSA,
-													DN_BCHAIN_HASH_KECCAK256,
-													pbHash,
-													dwHashLen,
-													szId,
-													pbSig,
-													&dwSigLen,
-													0);
+                         DN_BCHAIN_SIG_RAW_ECDSA,
+                         DN_BCHAIN_HASH_KECCAK256,
+                         pbHash,
+                         dwHashLen,
+                         szId,
+                         pbSig,
+                         &dwSigLen,
+                         0);
 	if(nRet){
 			printf("Failure at: DBchainSignHash \nError code: %d\n", nRet);
 			goto clean;
@@ -221,14 +217,14 @@ int main(int argc, char **argv)
 	 * Retrieves the public key from the signature for double-checking
 	 */
 	nRet = DBchainRecoverPbkFromSignature(hSession,
-																				DN_BCHAIN_SIG_RAW_ECDSA,
-																				DN_BCHAIN_HASH_KECCAK256,
-																				pbHash,
-																				dwHashLen,
-																				pbSig,
-																				dwSigLen,
-																				&pPbk,
-																				0);
+                                        DN_BCHAIN_SIG_RAW_ECDSA,
+                                        DN_BCHAIN_HASH_KECCAK256,
+                                        pbHash,
+                                        dwHashLen,
+                                        pbSig,
+                                        dwSigLen,
+                                        &pPbk,
+                                        0);
 	if (nRet)
 	{
 			printf("Failure at: DBchainRecoverPbkFromSignature \nError code: %d\n", nRet);
@@ -237,16 +233,16 @@ int main(int argc, char **argv)
 
 	// Double checking sinature validity
 	nRet = DBchainVerify(hSession,
-												DN_BCHAIN_SIG_RAW_ECDSA,
-												DN_BCHAIN_HASH_KECCAK256,
-												pbHash,
-												dwHashLen,
-												pbSig,
-												dwSigLen,
-												pPbk.bType,
-												pPbk.pbPbk,
-												pPbk.bLen,
-												0);
+                       DN_BCHAIN_SIG_RAW_ECDSA,
+                       DN_BCHAIN_HASH_KECCAK256,
+                       pbHash,
+                       dwHashLen,
+                       pbSig,
+                       dwSigLen,
+                       pPbk.bType,
+                       pPbk.pbPbk,
+                       pPbk.bLen,
+                       0);
 	if (nRet)
 	{
 			printf("Failure at: DBchainVerify \nError code: %d\n", nRet);
@@ -287,9 +283,22 @@ All other errors should be passed to the Node.js client as fatal errors, along w
 # Drawbacks
 [drawbacks]: #drawbacks
 
-The only drawback to this Bridge approach is that it will be implemented by the Hathor Labs team.
+### Implementation by third-party
+This Bridge approach will be implemented by the Hathor Labs team, not the Dinamo Networks one that is the actual code owner. That way, the possibility of having minor bugs or documentation misunderstandings exist.
 
 The Dinamo Networks team is also working on a Javascript implementation that could be imported as a library through _npm_ directly to the Headless Wallet application, avoiding many of the issues of this simpler approach proposed here. However, the ETA for this library is still undefined.
+
+### Multiple processes running on docker
+For applications running on Docker environments, such as the Hathor Headless Wallet, it would be necessary to invoke the C executables from the NodeJS main process. This is not a recommended best practice as mentioned on the [_Decouple Applications_ guideline](https://docs.docker.com/develop/develop-images/guidelines/#decouple-applications).
+
+This could be solved by compiling the C files as _shared object_ (`.so`) file and invoke it directly from the NodeJS through dependencies such as [`node-addon-api`](https://www.npmjs.com/package/node-addon-api) or [`node-ffi-napi`](https://www.npmjs.com/package/ffi-napi). ( Reference [article](https://medium.com/ai-innovation/a-guide-for-javascript-developers-to-build-c-add-ons-with-node-addon-api-28c84a0c0cb1)) ).
+
+By using this approach, it would only be necessary, in each Docker environment with access to the HSM:
+- Install the Dinamo libraries on the instance
+- Copy the C files provided by Hathor on a temporary folder
+- Compile them into shared objects
+- Move the compiled objects to a folder within the headless application one
+- Remove the temporary C files folder
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -302,6 +311,16 @@ This would mean this bridge would need to become a standalone daemon and webserv
 That would increase its maintainability at the cost of the added complexity both for code construction and process maintenance.
 
 Because of that, this solution was discarded as the first version of this client.
+
+### NodeJs to Shared Object communication
+By compiling the C files as _shared object_ (`.so`) file and invoking it directly from the NodeJS, the client applications would use a more reliable pattern, used by NodeJS itself, to communicate with a low level C program. This could be implemented through dependencies such as [`node-addon-api`](https://www.npmjs.com/package/node-addon-api) or [`node-ffi-napi`](https://www.npmjs.com/package/ffi-napi). ( Reference [article](https://medium.com/ai-innovation/a-guide-for-javascript-developers-to-build-c-add-ons-with-node-addon-api-28c84a0c0cb1)) ).
+
+By using this approach, it would only be necessary, in each Docker environment with access to the HSM:
+- Install the Dinamo libraries on the instance
+- Copy the C source files provided by Hathor on a specific folder within the docker instance, accessible by the application
+- Interact with the source file directly from the javascript application
+
+It would also be possible to have a single C file acting as a facade, and offering all the APIs as methods to be called instead of separate applications. Another benefit of this approach is to have the bridge application in memory at all times, with no need for firing up/dismantling a whole process within the operating system for each client call.
 
 ### Connection and credentials through `stdin`
 To increase the flexibility of this bridge while retaining its current architecture, all credentials and connection information could be passed at runtime on each call. That would allow a single Headless Wallet application to connect to many HSM devices.
@@ -317,7 +336,6 @@ This approach has not been taken by other applications on Hathor Labs at the tim
 [unresolved-questions]: #unresolved-questions
 
 As indicated above, the following questions remain to be answered by the proof of concepts:
-- Is our code correctly decoding HSM data to initialize a wallet locally?
 - Is our code correctly encoding and decoding input data to sign a transaction successfully?
 
 # Future possibilities
