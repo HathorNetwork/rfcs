@@ -79,89 +79,89 @@ Sample code for signing a transaction:
 
 int main(int argc, char **argv)
 {
-	// Return value of the latest operation
-	int nRet = 0;
-	struct AUTH_PWD authPwd;
-	HSESSIONCTX hSession = NULL;
+  // Return value of the latest operation
+  int nRet = 0;
+  struct AUTH_PWD authPwd;
+  HSESSIONCTX hSession = NULL;
 
-	// XPriv Key name
-	char szId[] = HTR_TEST_XPRIV_KEYNAME;
+  // XPriv Key name
+  char szId[] = HTR_TEST_XPRIV_KEYNAME;
 
-	BYTE ver = DN_BCHAIN_VER_WIF_TEST_NET;
+  BYTE ver = DN_BCHAIN_VER_WIF_TEST_NET;
 
-	// Address to derive child priv key from
-	int nChild = 0;
+  // Address to derive child priv key from
+  int nChild = 0;
 
-	// Child Priv Key Name
-	char szDest[MAX_OBJ_ID_FQN_LEN] = "HTR_CHILD_KEY";
-	DN_BCHAIN_KEY_INFO pbKeyInfo;
+  // Child Priv Key Name
+  char szDest[MAX_OBJ_ID_FQN_LEN] = "HTR_CHILD_KEY";
+  DN_BCHAIN_KEY_INFO pbKeyInfo;
 
-	// Message buffer
-	BYTE pbMsg[1024] = {0};
+  // Message buffer
+  BYTE pbMsg[1024] = {0};
 
-	// Output encoding buffer
-	char pbOutputEncode[1024 * 2 + 1];
-	DWORD dwOutputLength = sizeof(pbOutputEncode);
+  // Output encoding buffer
+  char pbOutputEncode[1024 * 2 + 1];
+  DWORD dwOutputLength = sizeof(pbOutputEncode);
 
-	// Hash buffer
-	BYTE pbHash[DN_BCHAIN_HASH_KECCAK256_LEN] = {0};
-	DWORD dwHashLen = sizeof(pbHash);
+  // Hash buffer
+  BYTE pbHash[DN_BCHAIN_HASH_KECCAK256_LEN] = {0};
+  DWORD dwHashLen = sizeof(pbHash);
 
- 	// Signature buffer
-	BYTE pbSig[DN_BCHAIN_MAX_SIG_LEN] = {0};
-	DWORD dwSigLen = sizeof(pbSig);
+   // Signature buffer
+  BYTE pbSig[DN_BCHAIN_MAX_SIG_LEN] = {0};
+  DWORD dwSigLen = sizeof(pbSig);
 
-	// Public Key retrieval
-	DN_BCHAIN_PBK pPbk = {0};
+  // Public Key retrieval
+  DN_BCHAIN_PBK pPbk = {0};
 
-	//=======================================================================
-	// Command Line Input Validation example, for alternative implementations
-	//=======================================================================
-	if (argc < 3) {
-		printf("Missing input parameters\n");
-		printf("Usage: signOnPath path {number}\n");
-		return 1;
-	}
-	nChild = atoi(argv[2]);
+  //=======================================================================
+  // Command Line Input Validation example, for alternative implementations
+  //=======================================================================
+  if (argc < 3) {
+    printf("Missing input parameters\n");
+    printf("Usage: signOnPath path {number}\n");
+    return 1;
+  }
+  nChild = atoi(argv[2]);
 
-	// Stdin input implementation, the main way to communicate with the bridge
-	printf("Insert the message to be signed on stdin: ");
-	if (fgets(pbMsg, sizeof(pbMsg), stdin) == NULL) {
-		perror("Error reading message input");
-		return 2;
-	}
-	printf("Received message: %s\n", pbMsg);
-	printf("Will sign this message with path %d\n", nChild);
+  // Stdin input implementation, the main way to communicate with the bridge
+  printf("Insert the message to be signed on stdin: ");
+  if (fgets(pbMsg, sizeof(pbMsg), stdin) == NULL) {
+    perror("Error reading message input");
+    return 2;
+  }
+  printf("Received message: %s\n", pbMsg);
+  printf("Will sign this message with path %d\n", nChild);
 
-	//=========================
-	// Initializing Dinamo libs
-	//=========================
-	nRet = DInitialize(0);
-	if (nRet)
-	{
-		printf("Failure at: DInitialize \nError code: %d\n", nRet);
-		exit(1);
-	}
+  //=========================
+  // Initializing Dinamo libs
+  //=========================
+  nRet = DInitialize(0);
+  if (nRet)
+  {
+    printf("Failure at: DInitialize \nError code: %d\n", nRet);
+    exit(1);
+  }
 
-	// Initializing data structure to establishing connection with the HSM
-	strncpy(authPwd.szAddr, HOST_ADDR, sizeof(authPwd.szAddr));
-	authPwd.nPort = DEFAULT_PORT;
-	strncpy(authPwd.szUserId, USER_ID, sizeof(authPwd.szUserId));
-	strncpy(authPwd.szPassword, USER_PWD, sizeof(authPwd.szPassword));
+  // Initializing data structure to establishing connection with the HSM
+  strncpy(authPwd.szAddr, HOST_ADDR, sizeof(authPwd.szAddr));
+  authPwd.nPort = DEFAULT_PORT;
+  strncpy(authPwd.szUserId, USER_ID, sizeof(authPwd.szUserId));
+  strncpy(authPwd.szPassword, USER_PWD, sizeof(authPwd.szPassword));
 
-	nRet = DOpenSession(&hSession, SS_USER_PWD, (BYTE *)&authPwd, sizeof(authPwd), ENCRYPTED_CONN);
-	if (nRet)
-	{
-		printf("Failure at: DOpenSession \nError code: %d\n", nRet);
-		goto clean;
-	}
+  nRet = DOpenSession(&hSession, SS_USER_PWD, (BYTE *)&authPwd, sizeof(authPwd), ENCRYPTED_CONN);
+  if (nRet)
+  {
+    printf("Failure at: DOpenSession \nError code: %d\n", nRet);
+    goto clean;
+  }
 
-	// ==============================================
-	// Session established. Initiating operations
-	// ==============================================
+  // ==============================================
+  // Session established. Initiating operations
+  // ==============================================
 
-	// Child Key Derivation operation (temporary data)
-	nRet = DBchainCreateBip32Ckd(hSession,
+  // Child Key Derivation operation (temporary data)
+  nRet = DBchainCreateBip32Ckd(hSession,
                                ver,
                                DN_BCHAIN_SECURE_BIP32_INDEX_BASE + nChild,
                                BCHAIN_KEY | TEMPORARY_KEY,
@@ -169,33 +169,33 @@ int main(int argc, char **argv)
                                szDest,
                                &pbKeyInfo,
                                0);
-	if(nRet){
-		printf("Failure at: DBchainCreateBip32Ckd \nError code: %d\n", nRet);
-		goto clean;
-	}
+  if(nRet){
+    printf("Failure at: DBchainCreateBip32Ckd \nError code: %d\n", nRet);
+    goto clean;
+  }
 
-	/*
-	 * Based on https://manual.dinamonetworks.io/c/sign_verify_bchain_8c-example.html
-	*/
-	nRet = DBchainHashData(hSession,
+  /*
+   * Based on https://manual.dinamonetworks.io/c/sign_verify_bchain_8c-example.html
+  */
+  nRet = DBchainHashData(hSession,
                          DN_BCHAIN_HASH_KECCAK256,
                          pbMsg,
                          sizeof(pbMsg),
                          pbHash,
                          &dwHashLen,
                          0);
-	if (nRet)
-	{
-			printf("Failure at: DBchainHashData \nError code: %d\n", nRet);
-			goto clean;
-	}
-	// Outputting in hex enconding for the NodeJS interpreter
-	buffer_to_hex(pbHash,
-								dwHashLen,
-								pbOutputEncode);
-	printf("Encoded hash: %s\n\n", pbOutputEncode);
+  if (nRet)
+  {
+      printf("Failure at: DBchainHashData \nError code: %d\n", nRet);
+      goto clean;
+  }
+  // Outputting in hex enconding for the NodeJS interpreter
+  buffer_to_hex(pbHash,
+                dwHashLen,
+                pbOutputEncode);
+  printf("Encoded hash: %s\n\n", pbOutputEncode);
 
-	nRet = DBchainSignHash(hSession,
+  nRet = DBchainSignHash(hSession,
                          DN_BCHAIN_SIG_RAW_ECDSA,
                          DN_BCHAIN_HASH_KECCAK256,
                          pbHash,
@@ -204,19 +204,19 @@ int main(int argc, char **argv)
                          pbSig,
                          &dwSigLen,
                          0);
-	if(nRet){
-			printf("Failure at: DBchainSignHash \nError code: %d\n", nRet);
-			goto clean;
-	}
-	// Outputting in hex encoding for the NodeJS interpreter
-	buffer_to_hex(pbSig,
-								dwSigLen,
-								pbOutputEncode);
-	printf("Encoded signature: %s\n\n", pbOutputEncode);
-	/*
-	 * Retrieves the public key from the signature for double-checking
-	 */
-	nRet = DBchainRecoverPbkFromSignature(hSession,
+  if(nRet){
+      printf("Failure at: DBchainSignHash \nError code: %d\n", nRet);
+      goto clean;
+  }
+  // Outputting in hex encoding for the NodeJS interpreter
+  buffer_to_hex(pbSig,
+                dwSigLen,
+                pbOutputEncode);
+  printf("Encoded signature: %s\n\n", pbOutputEncode);
+  /*
+   * Retrieves the public key from the signature for double-checking
+   */
+  nRet = DBchainRecoverPbkFromSignature(hSession,
                                         DN_BCHAIN_SIG_RAW_ECDSA,
                                         DN_BCHAIN_HASH_KECCAK256,
                                         pbHash,
@@ -225,14 +225,14 @@ int main(int argc, char **argv)
                                         dwSigLen,
                                         &pPbk,
                                         0);
-	if (nRet)
-	{
-			printf("Failure at: DBchainRecoverPbkFromSignature \nError code: %d\n", nRet);
-			goto clean;
-	}
+  if (nRet)
+  {
+      printf("Failure at: DBchainRecoverPbkFromSignature \nError code: %d\n", nRet);
+      goto clean;
+  }
 
-	// Double checking sinature validity
-	nRet = DBchainVerify(hSession,
+  // Double checking sinature validity
+  nRet = DBchainVerify(hSession,
                        DN_BCHAIN_SIG_RAW_ECDSA,
                        DN_BCHAIN_HASH_KECCAK256,
                        pbHash,
@@ -243,24 +243,24 @@ int main(int argc, char **argv)
                        pPbk.pbPbk,
                        pPbk.bLen,
                        0);
-	if (nRet)
-	{
-			printf("Failure at: DBchainVerify \nError code: %d\n", nRet);
-			goto clean;
-	}
-	// By reaching here, the signature is completely valid
+  if (nRet)
+  {
+      printf("Failure at: DBchainVerify \nError code: %d\n", nRet);
+      goto clean;
+  }
+  // By reaching here, the signature is completely valid
 
-	// =====
-	// Clean
-	// =====
-	clean:
+  // =====
+  // Clean
+  // =====
+  clean:
 
-	// No persistent key was built. Just closing the session
-	if (hSession) {
-			DCloseSession(&hSession, 0);
-	}
+  // No persistent key was built. Just closing the session
+  if (hSession) {
+      DCloseSession(&hSession, 0);
+  }
 
-	DFinalize();
+  DFinalize();
 }
 ```
 
