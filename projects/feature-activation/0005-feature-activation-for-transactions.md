@@ -55,8 +55,8 @@ In this section, technical details are expanded for what was described above. Be
 
 Using the premises above, we must define a function that returns a state, given a transaction (note: we actually return multiple states for multiple features). That function must satisfy the following requirements:
 
-1. All transactions that are received after (time-wise) an `ACTIVE` block in the best chain, must also be `ACTIVE`.
-2. When all transactions are ordered by timestamp, there must not be an `INACTIVE` transaction after an `ACTIVE` transaction. In other words, as soon as one transaction becomes `ACTIVE`, every future transaction will also be `ACTIVE`.
+1. After one `ACTIVE` block in the best chain, all transaction that have a timestamp greater than that block's timestamp plus some constant must also be `ACTIVE`.
+2. When all transactions are sorted by timestamp (which also guarantees topological sorting), there must not be an `INACTIVE` transaction after an `ACTIVE` transaction. In other words, as soon as one transaction becomes `ACTIVE`, every future transaction will also be `ACTIVE`.
 
 ### Definitions
 
@@ -103,7 +103,7 @@ class FeatureService:
 
 ## Dealing with reorgs
 
-Considering the definition above, a function must be called in the `ConsensusAlgorithm.update()` method that determines whether a reorg is invalid. If it is, the full node will **halt execution**.
+Considering the definition above, a function must be called in the `ConsensusAlgorithm.update()` method that determines whether a reorg is invalid. If it is, the full node will **halt execution**, which means its main process will exit with a non-zero code.
 
 We can consider a reorg invalid if the current time is greater than the common block's timestamp plus one Evaluation Interval. This is a superset of reorgs that include the definition and simplifies implementation, and is also extremely unlikely. A pseudo reference-implementation is also provided:
 
@@ -115,7 +115,7 @@ def reorg_is_invalid(common_block: Block) -> bool:
     # We also use the MAX_FUTURE_TIMESTAMP_ALLOWED to take into account that we can receive a tx from the future.
     # This is redundant considering we also use it in is_feature_active_for_transaction(), but we do it here too to restrict reorgs even further.
     is_invalid = now >= common_block.timestamp + avg_time_between_boundaries - settings.MAX_FUTURE_TIMESTAMP_ALLOWED
-    
+
     return is_invalid
 ```
 
@@ -247,7 +247,7 @@ before:
    ac         ac
 
 after:
-   E0   tE1   tx1   tx2    E1' 
+   E0   tE1   tx1   tx2    E1'
 ---|-----•-----|-----|-----|---> time
    ac          ac    ac    ac    ac
 ```
@@ -291,7 +291,7 @@ As `N` decreases, the probability of a reorg increases, but the `avg` also incre
 
 Then the only real situation where such a reorg would be more or less likely is if we were without miners for most of the two-week interval. At this point, this would be a full-fledged critical incident and maybe it would even be a good thing that full nodes would halt execution and require manual intervention. In practice, given all that, I expect that a full node halting will never actually happen.
 
-## Example - Releasing new Nano Contracts 
+## Example - Releasing new Nano Contracts
 
 To illustrate the usage of Feature Activation for Transactions, we'll demonstrate how it would be used to release a new Nano Contract.
 
@@ -306,7 +306,7 @@ This demonstrates that there are two possible known use cases for Feature Activa
 
 ## Mutability of transaction timestamps
 
-One complication factor that we haven't considered yet is the fact that the timestamp of a transaction can be tempered with, as it's not part of the transaction signature. This means that after a transaction is pushed to the network, a third-party can re-push a copy of that transaction, only changing its timestamp and weight. Then, a third party could manipulate a transaction in such a way that the transaction's feature state is toggled (to/from `ACTIVE` from/to `INACTIVE`), if the third-party transaction has a higher weight than the original transaction.
+One complication factor that we haven't considered yet is the fact that the timestamp of a transaction can be tempered with, as it's not part of the transaction signature. This means that after a transaction is pushed to the network, a third-party can re-push a copy of that transaction, only changing its timestamp and weight. Then, a third party could manipulate a transaction in such a way that the transaction's feature state is toggled (to/from `ACTIVE` from/to `INACTIVE`) if the third-party transaction has a higher weight than the original transaction.
 
 Let's consider an example. A feature is created to activate a new Nano Contract, that is, a new `TxVersion` will become allowed during deserialization. At timestamp `t`, that feature becomes active for transactions, and a transaction using the new Nano contract is pushed to the network, with timestamp `t+1`. It's perfectly valid, and is accepted by the network. Then, a third-party copies this transaction, increasing its weight and changing its timestamp to `t-1`, and pushes it to the network. That copy would win over the original transaction, voiding it (for its weight), but since from the perspective of the copy the new Nano Contract is not activated yet, that transaction would not even be accepted in the first place. Therefore, the original transaction would remain valid and accepted. An analogous example can be created for the opposite situation (an original `INACTIVE` transaction being shifted by a third-party to become `ACTIVE`).
 
@@ -322,6 +322,14 @@ Therefore, the mutability of transaction timestamps is not an issue for the solu
 A drawback is that feature states for transactions will always have a two-week delay when compared to feature states for blocks, making the transaction process a bit longer. The tradeoff is worth it as this makes for a very simple implementation that naturally doesn't need to account for reorgs.
 
 Special care should be taken when designing new features that will affect both blocks and transactions together, as the feature may become `ACTIVE` for blocks before it does for transactions. It's not clear at this point if this will ever be a possibility for a new feature and whether it would be a problem. For the foreseen use cases (Merkle Path length, SIGHASH, and Nano Contracts) this is not an issue.
+
+### Relaying transaction from the past
+
+Currently, it is possible to relay new transactions with any timestamp in the past. This means that even after a feature becomes active, enabling new rules, it's possible to create a new transaction that is inactive, that is, still uses the old rules. The restriction is that the new transaction must only spend and confirm older transactions, so they will also be inactive. Therefore, the Feature Activation requirements are respected (the new inactive transaction will not be topologically after an active transaction).
+
+For the known use cases, this is not an issue. The only impact is in Burying of Feature Activations, which is described in the original RFC for blocks. Considering this, code performing the conditional branching on feature activation for transactions must not be removed, contrary to what was previously described. This will be updated in the original RFC.
+
+Moreover, when Sync-v2 is completed, we may impose rules on the validity of transactions with past timestamps. After that is done, we can update this so it's impossible to relay new transactions using old rules.
 
 # Rationale and alternatives
 [Rationale and alternatives]: #rationale-and-alternatives
