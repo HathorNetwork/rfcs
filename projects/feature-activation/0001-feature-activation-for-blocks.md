@@ -114,9 +114,13 @@ With that being said, it is possible that a feature may or may not be activated 
 #### Burying feature activations
 [Burying feature activations]: #burying-feature-activations
 
-Burying a feature activation means changing code so "history is erased", and it's not clear that a feature was activated using the activation process.
+Burying a feature activation means changing code so "history is erased", making it unclear that a feature was activated using the activation process.
 
-It is allowed to change code that is conditional on feature activation, but **NOT** to remove a feature from the definition, as described in the [Feature and Criteria definition] section.
+Considering the implementation of Feature Activation for Transactions, burying features is **NOT** allowed. This means that the code that performs a conditional check on feature activation cannot be removed. The reason for this is that feature activation for transactions depend on their timestamp, and it's not possible to differentiate between an old transaction that was just received now, or a new transaction that was created with an old timestamp. Read the Transactions RFC for more information.
+
+We should also **NOT** remove a feature from the definition, as described in the [Feature and Criteria definition] section.
+
+What _can_ be done is substituting the Feature Activation call for a constant, when a new checkpoint is created after a reasonable amount of blocks and time has passed since activation.
 
 ## Feature and Criteria definition
 [Feature and Criteria definition]: #feature-and-criteria-definition
