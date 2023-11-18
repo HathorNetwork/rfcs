@@ -72,39 +72,50 @@ erDiagram
     }
 ```
 ### Wallet workflow overview
-- A new wallet is instantiated on the Wallet Lib, and inside its configuration there is a reference to an HSM key identifier.
-- The lib identifies if this key contains an `xPriv` content on the HSM environment.
-  - By default, an error will be thrown by the lib if the key is not found
-- The `xPub` is obtained from the HSM for this wallet
-  - An error will be thrown if the results are invalid, indicating that the `xPriv` contents of the key are also invalid
-- All internal processes for generating the wallet are executed by the lib in a similar fashion to what already happens with the _Ledger Hardware Wallet_ on the Desktop Wallet app
-- Any request to sign a transaction will have the cryptographic operations delegated to the HSM and consolidated by the Wallet Lib
+This workflow involves three parties:
+- The end user
+- The Headless application
+- The HSM itself, interfaced by the HSM Dinamo library.
+
+- The user request to start a new wallet on the Headless application passing a `wallet-id` and `hsm-key` parameters
+- The headless checks with the HSM if this `key` contains an `xPriv` content.
+- The headless obtains the `xPub` from the HSM for this wallet `key`
+  - A friendly error will be thrown if the results are invalid, indicating that the `xPriv` contents of the `key` are also invalid
+- A read-only wallet is created on the Wallet Lib, with the `xPub` obtained from the HSM
+- The Headless holds a reference between this wallet and an HSM `key` identifier ( a `hardwareWalletMap` ).
+- On phase 2, any request to sign a transaction will have the cryptographic operations delegated to the HSM and consolidated by the Wallet Lib
 
 ```mermaid
 sequenceDiagram
-Headless->>Lib: Instantiate wallet<br/>(with HSM key)
-Lib->>HSM: Ensure key exists
-HSM-->>Lib: Confirm Key exists
-Lib->>HSM: Generate the `xPub`
-HSM->>Lib: Return the `xPub`
-Note right of Lib: Initialize hardware wallet
-Lib->>Headless: Wallet initialized
-Note right of Headless: Regular wallet usage
-Headless->>Lib: Request to sign an input for<br/>Tx Y, address X
-Lib->>HSM: Sign string with<br/>Child Key derivation on path X
-HSM->>Lib: Signed string
-Lib->>Lib: Assemble Tx
-Lib->>Headless: Tx Y with signed input
+alt Phase 1: Read-only wallet
+User->>Headless: Request a<br/>new HSM Wallet
+Headless->>+HSM: Ensure key exists
+HSM->>Headless: Confirm Key exists
+Headless->>HSM: Generate the `xPub`
+HSM->>-Headless: Return the `xPub`
+Headless->>User: Read-Only Wallet initialized
+Note over User,Headless: Regular wallet usage
+end
+alt Phase 2: Integrated signatures
+User->>+Headless: Request to sign a proposal via<br/>`tx-proposal/get-my-signatures`
+loop For each input from this wallet
+Headless->>Headless: Isolate a single input data
+Headless->>+HSM: Sign data with<br/>Child Key derivation<br/>on correct path
+HSM->>-Headless: Signed string
+end
+Headless->>User: Return the Proposal with all signatures
+Note right of User: Proceed with proposal flow
+end
 ```
 
-Eventual network failures when trying to communicate with the HSM are retried and only interrupt the flow if the amount of retries reach a configurable threshold. Logic errors like not finding an `xPriv` key are treated and returned to the end user in an informative way.
+Eventual logic errors like not finding a valid `xPriv` key are treated and returned to the end user in an informative way.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
 This project has two main phases that need implementing:
 1. Starting a `read only wallet` that fetches all relevant data from the HSM but can not sign a transaction.
-2. Implementing a signature integration with the HSM.
+2. Implementing a signature integration with the HSM through the Atomic Swap Proposal module.
 
 ## Read Only implementation - Phase 1
 [headless-implementation]: #headless-implementation
@@ -135,7 +146,7 @@ Once the wallet is started successfully, all other operations are executed in a 
 ## Signature integration - Phase 2
 The signature of HSM inputs will be made through a `Tx Proposal`, using the Atomic Swap API. The `wallet/atomic-swap/get-my-signatures` route will be modified to identify that the wallet is related to an HSM and will send the data to be signed to the *HSM Client*. This can be based on the desktop hardware wallet [`ledger/sendTx()` function](https://github.com/HathorNetwork/hathor-wallet/blob/ef57015015375a477cffd72baf62f4e14baf541a/src/utils/ledger.js#L126-L166).
 
-Only this route will be adapted for using the hardware wallet on an initial step, since it's the only one that has an implementation close enough to the Desktop Ledger. The other endpoints, such as `wallet/simple_send_tx` will require more complex refactorings and will be discussed on the _Future Possibilites_ section.
+Only this route will be adapted for using the hardware wallet, since it's the only one that has an implementation close enough to the Desktop Ledger. The other signature endpoints, such as `wallet/simple_send_tx` would require more complex refactorings and will be discussed on the _Future Possibilites_ section.
 
 ### Creating a BIP32 on the HSM
 This operation should be done via script, as it is the most critical operation on the HSM within this scope.
