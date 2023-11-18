@@ -77,13 +77,15 @@ This workflow involves three parties:
 - The Headless application
 - The HSM itself, interfaced by the HSM Dinamo library.
 
-- The user request to start a new wallet on the Headless application passing a `wallet-id` and `hsm-key` parameters
+The workflow is divided into two phases. On Phase 1:
+- The user requests to start a new wallet on the Headless application passing a `wallet-id` and `hsm-key` parameters
 - The headless checks with the HSM if this `key` contains an `xPriv` content.
 - The headless obtains the `xPub` from the HSM for this wallet `key`
   - A friendly error will be thrown if the results are invalid, indicating that the `xPriv` contents of the `key` are also invalid
 - A read-only wallet is created on the Wallet Lib, with the `xPub` obtained from the HSM
 - The Headless holds a reference between this wallet and an HSM `key` identifier ( a `hardwareWalletMap` ).
-- On phase 2, any request to sign a transaction will have the cryptographic operations delegated to the HSM and consolidated by the Wallet Lib
+
+On phase 2, requests to sign a Proposal will have the cryptographic operations delegated to the HSM and consolidated by the Wallet Lib
 
 ```mermaid
 sequenceDiagram
@@ -103,6 +105,7 @@ Headless->>Headless: Isolate a single input data
 Headless->>+HSM: Sign data with<br/>Child Key derivation<br/>on correct path
 HSM->>-Headless: Signed string
 end
+Headless->>Headless: Consolidate all signatures
 Headless->>User: Return the Proposal with all signatures
 Note right of User: Proceed with proposal flow
 end
@@ -148,7 +151,7 @@ The signature of HSM inputs will be made through a `Tx Proposal`, using the Atom
 
 Only this route will be adapted for using the hardware wallet, since it's the only one that has an implementation close enough to the Desktop Ledger. The other signature endpoints, such as `wallet/simple_send_tx` would require more complex refactorings and will be discussed on the _Future Possibilites_ section.
 
-### Creating a BIP32 on the HSM
+## Creating a BIP32 on the HSM
 This operation should be done via script, as it is the most critical operation on the HSM within this scope.
 
 As such, a new `scripts/createHSMKey.js` file will be created, offering a way to quickly generate a new BIP32 wallet on a developer machine. This created key name should be inserted on the `config.js` file along with a `walletId` for it. Other wallet generation possibilities are discussed on the _Alternatives_ section of this document.
@@ -178,7 +181,7 @@ The downside of this solution is that the security of these credentials would be
 
 A similar solution to this integration was implemented on the Desktop Wallet for interacting with the Ledger Hardware Wallet. This design uses many of the concepts and code implementations to achieve a similar objective.
 
-The main difference between the Ledger and the HSM is that here there is no need for human intervention on the steps. Also, there is no javascript SDK available for the HSM, requiring the headless implementation to also consider the _HSM Client_ in its scope.
+The main difference between the Ledger and the HSM is that here there is no need for human intervention on the steps.
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
