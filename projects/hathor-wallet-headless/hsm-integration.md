@@ -132,6 +132,8 @@ hsmUsername: "my_username"
 hsmPassword: "my_password"
 ```
 
+One note about this is that a connection may be open at the time the end user decides to reload the configuration settings. For now, this will not be allowed as it would increase the complexity of dealing with closing the current connections. Other connection setting approaches are discussed in the "Future Possibilities" section below.
+
 A dedicated `[POST] /hsm/start` endpoint will be available, receiving the expected `wallet-id` and `hsm-key` body parameters. The `hsm-key` indicates which key on the HSM contains the BIP32 information for this wallet. The headless considers this to be a _hardware wallet_ and realizes the first request to the HSM to validate the existence of the key name.
 
 > **Possibility 1: The key is available**<br>
@@ -156,7 +158,7 @@ This operation should be done via script, as it is the most critical operation o
 
 As such, a new `scripts/createHSMKey.js` file will be created, offering a way to quickly generate a new BIP32 wallet on a developer machine. This created key name should be inserted on the `config.js` file along with a `walletId` for it. Other wallet generation possibilities are discussed on the _Alternatives_ section of this document.
 
-### Error handling
+## Error handling
 Errors while communicating with the HSM are to be treated in such a way that it's clear to the end user that the scope of the problem is related to the HSM communication.
 
 ## Wallet Lib integration
