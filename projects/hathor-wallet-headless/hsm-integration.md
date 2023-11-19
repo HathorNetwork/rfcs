@@ -188,7 +188,7 @@ The main difference between the Ledger and the HSM is that here there is no need
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-The only question left is if our Wallet Lib is able to correctly sign a transaction with the HSM in its current state, or if changes will have to be made to it to allow this integration. The 2nd phase will be dependent on this answer.
+The only question left is if our application is able to correctly sign a transaction with the HSM in its current state, or if changes will have to be made to the Hathor Lib or the Dinamo-Hsm lib to allow this integration. The 2nd phase will be dependent on this answer, and it is being discussed on [internal issue 205](https://github.com/HathorNetwork/internal-issues/issues/205).
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
