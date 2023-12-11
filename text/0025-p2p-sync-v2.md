@@ -48,7 +48,7 @@ After a block is downloaded and verified, the fullnode starts to download its tr
 
 ![fig-phase1-tx-example](./0025-images/fig-phase1-tx-example.svg "Phase 1 Tx Download Example")
 
-## Phase 2: From the last checkpoint to the bestblock
+## Phase 2: From the Last Checkpoint to the Best Block
 
 The second phase syncs from the last checkpoint to the latest bestblock (and their transactions). The difference between Phase 2 and Phase 1 is that we do not know any checkpoints after the last one. So, we must download blocks from left (oldest) to right (newest), i.e., from the last checkpoint towards the bestblock.
 
@@ -102,31 +102,33 @@ The default criteria for the full-node is to enable relay after it has successfu
 
 ## Stateful Validation
 
-As we may happen to download blocks and transactions that does not reach the genesis, we cannot guarantee we will have all parents and inputs to fully validate the blocks and transactions. So, we split the validation in the following states:
+> As we may happen to download blocks and transactions that does not reach the genesis, we cannot guarantee we will have all parents and inputs to fully validate the blocks and transactions. So, we split the validation in the following states:
+>
+> 1. `not-validated`: initial state, no validation has been made yet.
+>
+> 2. `basic-validated`: all graph fields (except the parents and inputs) are valid, including the PoW, the weight field, the timestamp, etc. Funds fields have not been verified yet.
+>
+> 3. `full-validated`: the block/transaction has been fully validated and reaches the genesis.
+>
+> 4. `invalid`: this block/transaction is invalid and might be discarded (could be kept for quick hash detection or for banning the original peer that propagated it).
+>
+> Notice that `full-validated` requires the block/transaction to reach the genesis to get to this validation state. It is a critical part of this state because it guarantees that all blocks and transactions behind it are `full-validated` as well.
+>
+> The transitions between the states are shown in the figure below:
+>
+> ![fig-state-diagram](./0025-images/fig-state-diagram.svg "State Diagram")
+>
+> A block/transaction can go from `not-validated` to `invalid` for different reasons (e.g. invalid PoW, invalid timestamp, no outputs, no inputs). These blocks/transactions might be immediately discarded.
+>
+> The common reasons that moves a block/transaction from `basic-validated` to `invalid` are (i) the funds are unbalanced and fails, and (ii) any of their parents or inputs are invalid. The invalid block/transactions can be discarded any time. **XXX Should we do it during the node initialization?**
+>
+> Notice that the validation state is not related to the status (executed/voided) of the transaction. For clarity, orphan blocks and voided transactions are `full-validated` transactions.
+>
+> All transactions of the mempool must be `full-validated`. If they can't be fully validated, they can be safely discarded.
+>
+> We will rarely have a `not-validated` block/transaction because they are basically verified as soon as they are received. No transaction/block saved in the storage might be `not-validated`.
 
-1. `not-validated`: initial state, no validation has been made yet.
-
-2. `basic-validated`: all graph fields (except the parents and inputs) are valid, including the PoW, the weight field, the timestamp, etc. Funds fields have not been verified yet.
-
-3. `full-validated`: the block/transaction has been fully validated and reaches the genesis.
-
-4. `invalid`: this block/transaction is invalid and might be discarded (could be kept for quick hash detection or for banning the original peer that propagated it).
-
-Notice that `full-validated` requires the block/transaction to reach the genesis to get to this validation state. It is a critical part of this state because it guarantees that all blocks and transactions behind it are `full-validated` as well.
-
-The transitions between the states are shown in the figure below:
-
-![fig-state-diagram](./0025-images/fig-state-diagram.svg "State Diagram")
-
-A block/transaction can go from `not-validated` to `invalid` for different reasons (e.g. invalid PoW, invalid timestamp, no outputs, no inputs). These blocks/transactions might be immediately discarded.
-
-The common reasons that moves a block/transaction from `basic-validated` to `invalid` are (i) the funds are unbalanced and fails, and (ii) any of their parents or inputs are invalid. The invalid block/transactions can be discarded any time. **XXX Should we do it during the node initialization?**
-
-Notice that the validation state is not related to the status (executed/voided) of the transaction. For clarity, orphan blocks and voided transactions are `full-validated` transactions.
-
-All transactions of the mempool must be `full-validated`. If they can't be fully validated, they can be safely discarded.
-
-We will rarely have a `not-validated` block/transaction because they are basically verified as soon as they are received. No transaction/block saved in the storage might be `not-validated`.
+As of v0.58.0 the phases 2 through 4 have been implemented without using the stateful validation, instead the protocol instance holds the transactions/blocks temporarily until the portion that is being downloaded reaches verified vertices, they are fed to HathorManager.on_new_tx in topological order.
 
 ## Optimizations & Sources of blocks and transactions
 
@@ -188,7 +190,7 @@ These are the message used by the Sync-v2 Protocol:
 
 1. `GET_NEXT_BLOCKS`: It requests to start a streaming of blocks between two checkpoints.
 
-2. `BLOCKS`: It carries a new block inside the message.
+2. `BLOCKS`: It carries one block inside the message.
 
 3. `BLOCKS_END`: It indicates that the current streaming of blocks has finished.
 
@@ -196,69 +198,60 @@ These are the message used by the Sync-v2 Protocol:
 
 5. `BEST_BLOCK`: It is a response to a `GET_BEST_BLOCK` message.
 
-6. `GET_BLOCK_TXS`: It starts a streaming of transaction from a given hash. XXX TODO Change the name?
+6. `GET_TRANSACTIONS_BFS`: It starts a streaming of transaction from a list of given hashes, a "first block" hash which has to match the first block of the given transactions, and a "last block" which marks when to stop because the requester already has that block (and everything before it).
 
-7. `TRANSACTION`: It carries a transaction inside the message.
+7. `TRANSACTION`: It carries one transaction inside the message.
 
-8. `GET_PEER_BLOCK_HASHES`: It requests the hashes of the blocks in the bestchain associated with a list of heights.
+8. `TRANSACTIONS_END`: It indicates that the current streaming of transactions has finished.
 
-9. `PEER_BLOCK_HASHES`: It is a response to a `GET_PEER_BLOCK_HASHES` message.
+9. `GET_PEER_BLOCK_HASHES`: It requests the hashes of the blocks in the bestchain associated with a list of heights.
 
-10. `STOP_BLOCK_STREAMING`: It requests the other peer to stop the streaming.
+10. `PEER_BLOCK_HASHES`: It is a response to a `GET_PEER_BLOCK_HASHES` message.
 
-11. `GET_MEMPOOL`: It requests the peer to send its mempool. XXX TODO Change protocol?
+11. `STOP_BLOCK_STREAMING`: It requests the other peer to stop the streaming.
 
-12. `MEMPOOL_END`: It indicates that the sync of the mempool has ended.
+12. `GET_TIPS`: It requests the peer to send its unconfirmed transaction tips so we can start to build the mempool from those.
 
-13. `ERROR`: It indicates an error has occured. Usually the connection is closed right after the error.
+13. `TIPS`: It carries one transaction inside the message in response to `GET_TIPS`.
 
-14. `DATA`: It is used to propagate a block or transaction in real-time.
+14. `TIPS_END`: It indicates that the streaming of tips has finished.
 
-## Initialization
+15. `RELAY`: It carries a boolean flag to indicate that the remote peer should relay (or stop relaying) vertices (blocks or transactions) in real-time.
 
-During the initialization, the following steps must be executed:
+16. `DATA`: It is used to relay (propagate) vertices in real-time.
 
-XXX
+17. `ERROR`: It indicates an error has occured. Usually the connection is closed right after the error.
 
 ## Phase 1: From genesis to the last checkpoint
 
 The sync happens between two consecutive checkpoints, i.e., let `[cp0, cp1, cp2, ..., cpN]` be the list of checkpoints, the sync will run between the intervals `[cp0, cp1]`, `[cp1, cp2]`, `[cp2, cp3]`, ..., `[cp{N-1}, cpN]`. In each case, the fullnode requests a peer to send a streaming of blocks starting at the end of the interval towards the beginning (e.g., if `cp2 = b200` and `cp3 = b300`, we will receive the block `b300`, followed by `b299`, followed by `b298`, and so on until we receive `b200`).
 
-As the fullnode's bestblock is always full validated and reaches the genesis, the fullnode can safely decide whether it has already synced until the last checkpoint just comparing the height of the bestblock with the height of the bestblock. For clarity, if `bestblock.height >= last_checkpoint.height`, Phase 1 has already been finished.
+The fullnode's best block, always fully validated and reaching back to the genesis, allows the fullnode to determine if syncing up to the last checkpoint is complete. This is done by comparing the height of the best block with that of the last checkpoint. Specifically, if `bestblock.height >= last_checkpoint.height`, then Phase 1 is considered complete.
 
-Applying the same idea above, the fullnode can safely check which checkpoints are still pending to be downloaded. The downloads are centrally managed by an instance of `SyncCheckpoint`. This instance is shared by all peer connections, so we can optimize and distribute the download task among the peers.
+Similarly, the fullnode can identify which checkpoints are yet to be downloaded. Download management is centralized through a `SyncCheckpoint` instance, shared across all peer connections. This approach optimizes and distributes the downloading task among peers.
 
-
-
+XXX: as of hathor-core v0.58.0, which published the first generally available sync-v2 implementation, this phase is skipped and the syncing from checkpoints is not available. It will be available in a future version possibly enabled through a "capability" or a different sync version marker (i.e. sync-v2.1).
 
 ## Phase 2: From the last checkpoint to the bestblock
 
-## Phase 3: Sync the mempool
+- Send `GET_PEER_BEST_BLOCK` to ascertain the peer's best block.
+- If it matches our best block, we are "block synced," and Phase 3 begins. Concurrently, we enter a sleep state and later restart Phase 2.
+- If the peer's best block is already known to us, indicating the peer is lagging, we enter a sleep state and later restart Phase 2, as there is nothing to gain from this peer.
+- If the peer has a best block unknown to us, we are out of sync. Send `RELAY false` to stop them from sending real-time transactions, in case this was previously enabled.
+- Conduct a n-ary search to find the best common block, from which we'll start requesting blocks.
+- After finding the best common block, request a stream of blocks starting from that block and ending at the peer's best block, using `GET_NEXT_BLOCKS.` Expect many `BLOCKS` and finally a `BLOCKS_END`, or send `STOP_BLOCK_STREAMING` in case of errors in processing these blocks.
+- Request the necessary transactions for validating those blocks, starting from the transactions we don't have and ending at the highest block in this chain that we have processed. We also send the block expected to be the first block of the starting transactions, using `GET_TRANSACTIONS_BFS`. Expect many `TRANSACTION` messages and finally a `TRANSACTIONS_END`, or send `STOP_TRANSACTIONS_STREAMING` in case of errors in processing these transactions.
+- This phase does not guarantee reaching the remote peer's best block, but it ensures advancement. Restart Phase 2 until "block synced" status is achieved.
 
-## Phase 4: Real-time propagation
+## Phase 3: Sync the Mempool
 
-Node-sync is split into 3 processes:
+For each peer, start when we’re in sync and our best chain ends in a `full-validated` block. Continually poll unconfirmed transactions from each peer. The command has a limit on the number of transactions returned, but this is acceptable because once they’re confirmed by a block, `sync-transactions` will eventually retrieve them.
 
-`sync-blocks`:
-Start from checkpoints;
-Loop: check best chain, get block range
-Ask peers for a range of blocks (new p2p command), which will be sent in ascending (height) order (note that once a block reaches a checkpoint, it’s state transitions from `not-validated` to `checkpoint-validated`, and this propagates back to all parents, tx included), new blocks are only asked starting from checkpoints, `checkpoint-validated` blocks, or `full-validated` blocks, if there are no blocks on this conditions, we skip this call (and revert to out-of-sync in case we were in-sync);
-TODO: best chain negotiation (if our tips diverge we might have to download the remote’s best chain, we have to negotiate what’s our highest common block to use for asking the block range.
-Continually poll each peer for the continuation of our best chain, from the peer response we can know whether they don’t have the block, that’s their best block, or they have more blocks. In case they have that block and no more blocks on that chain, we consider to be in sync with that peer.
-`sync-transactions`:
-Start as soon as we have a block or transaction at the `basic-validated` or `checkpoint-validated` state and it continually asks peers for the parent DAG (BFS right-to-left walk), that is, all the tx parents that we don’t have;
-Continually poll each peer for the transactions we’re missing (that meet the criteria above);
-`sync-mempool` (aka, unconfirmed transactions):
-For each peer start when we’re in sync and our best chain ends in a `full-validated` block;
-Continually poll unconfirmed transactions that each peer has, the command has a limit on how many transactions to return, but this is OK because once they’re confirmed by a block, `sync-transactions` will eventually retrieve them.
+Note: In theory, syncing the mempool is not necessary for the convergence of syncing peers. However, it should speed up the process, particularly in ensuring that unconfirmed transactions reach the nodes of miners.
 
-TODO: sync process diagram
+## Phase 4: Real-time Propagation
 
-The sync algorithm runs on each protocol (representing a connection to a peer) and starts by firing up a ticker for `sync-blocks`, which is called periodically until the connection is closed. As the validation state of blocks change from `not-validated` to either `basic-validated` or `checkpoint-validated`, the sync algorithm will fire up `sync-transactions` complete the “parent-chain”. Eventually all dependencies will be downloaded and the validation state of blocks will transition to `full-validated`. When `sync-blocks` retrieves the continuation chain for our best block tip (that is `full-validated`) and the remote peer already has that block tip and no new blocks, the protocol will enter a `in-sync` state, and `sync-mempool` is started, in case we receive 2 or more new blocks (why 2: timing might make the next best block come from `sync-blocks` instead of the remote using `push-data`) from `sync-blocks`, the protocol will revert to `out-of-sync` and `sync-mempool` is stopped. Peers `in-sync` will be sent new blocks/transactions via `push-data`.
-
-In theory `sync-mempool` is not necessary for the syncing of peers to converge, however it should speed-up the process, in particular it helps spread unconfirmed transactions.
-
-
+This phase can, in theory, be enabled and disabled at any moment. When a peer sends `RELAY true`, it signals the remote peer that it wants to receive relayed transactions/blocks. Conversely, `RELAY false` indicates the desire to stop receiving them. The only downside of receiving relayed vertices too early is the potential waste of resources in attempting to verify them. In practice, this phase is enabled as soon as Phase 3 is reached, as it is a good indicator that the relayed vertices will be successfully processed. There isn't really any advantage in enabling it sooner.
 
 ------------------------------------------------
 [yan]
@@ -283,7 +276,7 @@ I think we could try to run phase 2 only after downloading all blocks in phase1 
 
 > Technically phase-2 can start as early as we have the first block that reaches “basic-validated”. There is no harm (just efficiency loss) in having the phases separate. I’d say we try to implement them together and if there’s any complication we leave them separate.
 
-If we continue to run phase 1 even after phase 2 has started, I think phase 3 would have to deal only with txs that are still not confirmed by any blocks, right? And are we going to receive new blocks while on phase 3 as well? 
+If we continue to run phase 1 even after phase 2 has started, I think phase 3 would have to deal only with txs that are still not confirmed by any blocks, right? And are we going to receive new blocks while on phase 3 as well?
 
 > We should not start phase-3 while there are blocks/txs that are neither “full-validated” or “invalid” (that is, which we have had enough information to run a full validation on them). This also marks the end of phase-1/phase-2.
 
