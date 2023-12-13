@@ -153,3 +153,23 @@ Ideally the `auto` mode would decide to use either `FullnodePubSubConnection` or
 `FullnodeEventQueueConnection` based on the size of the wallet and other
 parameters, but until we have a better strategy it will simply use
 `FullnodePubSubConnection`.
+
+## FullnodeEventQueueWSConnection connection managementstate
+
+Now that the connection class is responsible for syncing the history, we can
+implement a special logic for the event queue.
+When we are reestablishing the connection we can start from the last
+acknowledged event.
+
+Usually when the connection is lost we will need to clean and sync the history
+of transactions from the beginning since we may have lost some events, but the
+event queue allows us to start streaming events from the moment we lost
+connection.
+This makes it so we don't have to clean the history and can just start the
+stream from where we left off.
+Although this is only applicable when we are connected to the same fullnode, so
+we need to check if the fullnode we are connected to is the same and if it isn't
+we will need to re-sync as usual.
+
+To make sure we are connected to the same fullnode we will use the peer-id, an
+unique 32 byte identifier.
