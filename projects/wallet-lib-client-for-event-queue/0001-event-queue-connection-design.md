@@ -1,10 +1,15 @@
 # Summary
+[summary]: #summary
 
 A new connection class that streams events from the fullnode event queue.
+
 # Motivation
+[motivation]: #motivation
 
 The event queue is a way to sequentially stream events, making sure we do not miss any transaction or transaction update, we can also continue where we left in case of any connection issues, currently any connection issue makes it so we have to sync the entire wallet history from the beggining.
+
 # Guide-level explanation
+[guide-level-explanation]: #guide-level-explanation
 
 The fullnode's event queue (a.k.a. reliable integration) has 2 ways to stream events, a websocket and a http api (not server-side events (SSE), just polling events with an event id based pagination).
 We will focus on the websocket implementation but we can later create another class that uses the http api.
@@ -164,7 +169,6 @@ interface EventQueueSpentOutput {
   tx_ids: string[];
 }
 ```
-
 
 ### Data conversion process
 
