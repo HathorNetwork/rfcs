@@ -1,6 +1,6 @@
 - Feature Name: nano-contract-integration
-- Start Date:
-- RFC PR:
+- Start Date: 2023-12-13
+- RFC PR: https://github.com/HathorNetwork/rfcs/pull/72
 - Hathor Issue:
 - Author: Alex Ruzenhack alex@hathor.network
 
@@ -265,6 +265,7 @@ graph LR
 ```
 
 ### Modal: Nano Contract Transaction Request
+[modal-nano-contract-transaction-request](#modal-nano-contract-transaction-request)
 
 This modal presents detailed information for a *Nano Contract Transaction Request* from dapp, allowing the user to approve or reject the transaction. It activates when a dapp makes a `htr_createNcTx` request to the wallet's RPC.
 
@@ -328,7 +329,123 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-TBD.
+## Load Nano Contract History
+
+##### When execute
+- It should happen everytime a new *Nano Contract Transaction* containing a caller from user's wallet is processed on `sagas/wallet.js@handleTx`.
+- It should happen when the *Nano Contract Transaction List* component is mounted, for the selected *Nano Contract*, for the first time and there isn't a history registered.
+
+##### Where to execute
+- On `sagas/nanoContract.js@fetchNanoContractHistory`:
+	- It should use `ncApi.getNanoContracHistory` from wallet-lib.
+
+##### Where to store
+- On redux state `nanoContractsHistory`:
+	- It must be a map of `<TxHash, NcTxHistory>`.
+	- The `NcTxHistory` must contain a set of balance per token.
+	- The `NcTxHistory` must contain relevante information such as:
+	 	- *Transaction ID*
+		- *Nano Contract ID*
+		- *Blueprint Method*
+		- *Argument List*
+		- *Timestamp*
+
+## Register Nano Contract
+
+##### When execute
+- It should happen when a *Nano Contract* is registered using the *Nano Contract Registration* flow.
+
+##### Where to execute
+- On `sagas/nanoContract.js@registerNanoContract`.
+
+##### Where to store
+- On redux state `registeredNanoContracts`.
+- On AsyncStore using a key `nanoContract:registered` for persistence, once the lib doesn't have an interface on the `store`.
+
+## Wallet Connect
+
+### RPC Protocol
+
+#### `htr_createNcTx`
+[htr_createnctx]: #htr_createnctx
+
+The `htr_createNcTx` method creates a new *Nano Contract* transaction based on parameters. It will select the utxos automatically, mine and send the transaction.
+
+##### Parameters
+
+- `blueprintId`: unique identification of the *Blueprint*
+- `method`: *Blueprint*'s method name
+- `caller`: wallet address representing method's *Caller*
+- `ncId`: unique identification of *Nano Contract*, it is not required when method is equal `initialize`
+- `ncActions`: a list of *Actions* the *Nano Contract* must process
+	- `type`: type of action, either `deposit` or `withdrawal`
+	- `token`: unique identification of the *Token*
+	- `data`: detailed information for the action
+		- `amount`: token's amount
+		- `address`: wallet's address, it is required only for `withdrawal` and ignored for `deposit`
+- `ncArgs`: a positional list of method's *Arguments*
+	- `type`: a supported type, like `boolean`, `number`, `binary`, etc.
+	- `value`: type's literal value
+
+##### Example Request
+
+```json
+{
+  "id": 3,
+  "jsonrpc": "2.0",
+  "method": "htr_createNcTx",
+  "params": {
+	"bluprintId": "494d0ac59a6918b771b122395206fef3f349f84f20dc430188a319d4ead24a3b",
+	"method": "swap",
+	"caller": "WRqBSi5jc74P8tRo7CmgiGByA1eTzfMh7B",
+	"ncId": "000001e43dda7348c53c6252d98799c9e2a0b4ea3b5f10b1182578d643c9641d",
+	"ncActions": [
+		{
+			"type": "deposit",
+			"token": "000001a176aa72b84f3486b3fcea327b023a70d1b6461c1b6a9073785b5775d8",
+			"data": {
+				"amount": "100",
+			},
+		},
+		{
+			"type": "withdrawal",
+			"token": "000001a176aa72b84f3486b3fcea327b023a70d1b6461c1b6a9073785b5775d8",
+			"data": {
+				"amount": "200",
+				"address": "WRqBSi5jc74P8tRo7CmgiGByA1eTzfMh7B",
+			},
+		},
+	],
+	"ncArgs": [],
+}
+```
+
+### Nano Contract Transaction Request
+
+##### When execute
+- Every time the a connected dapp send the request `htr_createNcTx`.
+
+##### Where to execute
+- It must be handled on `sagas/walletConnect.js@onSessionRequest` and dispatched to `onCreateNcTxRequest`.
+- It must be processed on `sagas/walletConnect.js@onCreateNcTxRequest`.
+
+##### How to execute `onCreateNcTxRequest`
+1. Validate the transaction request
+2. Ask user for `Approval` or `Rejection`
+3. If rejected, return to dapp an error message
+4. If approved, ask user's Pin Code
+5. Create and send transaction
+6. Return to dapp a success message 
+
+##### What render
+- On user's `Approval` or `Rejection` a modal must shows up over any screen to presents all the request details specified on [`htr_createNcTx`](#htr_createnctx) driven by design of [Modal: Nano Contract Transaction Request](modal-nano-contract-transaction-request).
+- The modal component must be registered on `src/components/WalletConnect`.
+
+# Draw backs
+
+## Nano Contract Balance
+
+We shouldn't load Nano Contract Balance because Nano Contracts can be much different from each other and the meaning of balance depends on the Nano Contract purpose. For instance, what means a balance on a *Bet* Nano Contract? Nothing, because each bet is tyied up to a single address; and what say about Swap? Also nothing, because it doens't hold user's assets.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -346,7 +463,9 @@ A request from Wallet Connect dapp triggers a modal to show up over any screen n
 # Prior art
 [prior-art]: #prior-art
 
+- [PoC to integrate Nano Contracts, PR #389](https://github.com/HathorNetwork/hathor-wallet-mobile/pull/389)
 - [Web Wallet: RPC Protocol](https://github.com/HathorNetwork/rfcs/blob/88431566bca2658ee851a47a0d116251c9845b94/projects/web-wallet/rpc-protocol.md) | [PR #54](https://github.com/HathorNetwork/rfcs/pull/54)
+- [Web Wallet: Integrating WalletConnect on our wallets](https://github.com/HathorNetwork/rfcs/blob/22655b8ab6795e99305c604343633776ac433c25/projects/web-wallet/wallet-connect/0001-design.md#api-format-parameters-and-response)
 - [Wallet Connect Security Issue #2230](https://github.com/orgs/WalletConnect/discussions/2230)
 - [Wallet Connect on Wallet Mobile implementation, PR #245](https://github.com/HathorNetwork/hathor-wallet-mobile/pull/245)
 - [Wallet Connect fix over Hermes compatibility, PR #355](https://github.com/HathorNetwork/hathor-wallet-mobile/pull/355)
