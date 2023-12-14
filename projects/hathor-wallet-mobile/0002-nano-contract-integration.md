@@ -17,6 +17,10 @@ The user gains the ability to consult and interact with Nano Contract in a porta
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
+## UI Design Guidance
+
+In this document, you will find sections titled **Design Bill** that outline requirements for UI screens and components. These sections provide guidelines while allowing designers room for creativity. A key principle to guide your work is **Clear Sign.** This principle emphasizes that information presented to users should be crafted with clear and knowledgeable intent. For more details, please refer to the article ["Clear-Sign Your Worries Away."](https://www.ledger.com/blog/clear-sign-your-worries-away)
+
 ## Unleash
 [unleash]: #unleash
 
@@ -463,6 +467,7 @@ A request from Wallet Connect dapp triggers a modal to show up over any screen n
 # Prior art
 [prior-art]: #prior-art
 
+- [Clear-Sign: presenting knowledge base information](https://www.ledger.com/blog/clear-sign-your-worries-away)
 - [PoC to integrate Nano Contracts, PR #389](https://github.com/HathorNetwork/hathor-wallet-mobile/pull/389)
 - [Web Wallet: RPC Protocol](https://github.com/HathorNetwork/rfcs/blob/88431566bca2658ee851a47a0d116251c9845b94/projects/web-wallet/rpc-protocol.md) | [PR #54](https://github.com/HathorNetwork/rfcs/pull/54)
 - [Web Wallet: Integrating WalletConnect on our wallets](https://github.com/HathorNetwork/rfcs/blob/22655b8ab6795e99305c604343633776ac433c25/projects/web-wallet/wallet-connect/0001-design.md#api-format-parameters-and-response)
