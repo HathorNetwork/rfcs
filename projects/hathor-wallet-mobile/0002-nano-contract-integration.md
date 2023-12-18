@@ -63,29 +63,37 @@ Selecting the *Nano Contract* option initiates navigation to the *Nano Contract 
 ### Screen: Nano Contract Settings
 [screen-nano-contract-settings]: #screen-nano-contract-settings
 
-The *Nano Contract Settings* screen features a "Nano Contract" toggle button. Users can tap this button to activate the nano-contract feature.
+The *Nano Contract Settings* screen features a "Nano Contract" toggle button. Users can tap this button to activate the nano-contract feature. The toggle button should have a context description for what it actually does "Enables the view of a Nano Contract list, a list of transactions per Nano Contract and the possibility to register and unregister a Nano Contract".
 
 Upon activation, the wallet initiates a restart process, during which Nano Contract transactions for the current wallet are loaded. Users are visually informed of this process through a progress indicator and are returned to the *Nano Contract Settings* screen upon completion.
+
+In addition to the activation, we can show a [Feature Onboarding](#feature-onboarding).
 
 >[!NOTE]
 In addition to enabling the *Nano Contract* feature, basic usage data such as feature activation frequency and duration of use may be collected for monitoring purposes. For more details on data collection and push notification support, see [Basic Data Gathering and Push Notification Support](#basic-data-gathering-push-notification-support).
 
 ##### Design Bill
 - **Placement**:
-	- Position the toggle button on top of *Nano Contract Settings* screen.
+	- Position the toggle button on the top of *Nano Contract Settings* screen.
+    - Position the feature context text bellow the toggle button.
 
 - **Functionality**:
 	- The toggle button enables or disables the nano-contract feature.
 	- When toggled on or off, initiate a wallet restart and load Nano Contract transactions.
 	- Provide a visual progress indicator during the loading process.
+	- Provide a visual success feedback with dismiss action.
+	- Provide a visual failure feedback with dismiss action.
 
 - **Visibility Conditions**:
 	- The toggle button is always visible on the *Nano Contract Settings* screen.
 	- However, its functionality is active only when the user’s wallet is eligible for nano contracts.
 	- In case of success, display a success message.
+	- In case of failure, display an error feedback.
 
 - **Error Management**:
-	- In case of failure, display an error feedback.
+	- An internal error can happen during the wallet loading process. In this situation a user has no option other than try again later.
+    - [Suggestion] After 3 failing attempts the error feedback can ask the user to send the
+      error to the team.
 
 ## Reading Nano Contract Transactions
 
@@ -99,9 +107,6 @@ graph LR
 [screen-main]: #screen-main
 
 After a user ops-in the *Nano Contract* feature and the wallet loading completes, the Main screen displays the **Token List** component. Additionally, a user can choose to view the **Nano Contract List** component through a clearly marked option.
-
->[!NOTE]
->The title for the *Token List* is "Tokens". For the *Nano Contract List*, to efficiently use screen space, the title can be either "Nano Contracts" or "Nanos".
 
 Each list component offers a registration option:
 - "Register Token"
@@ -122,9 +127,12 @@ Selecting "Register Nano Contract" option navigates the user to the **Nano Contr
 - **Visibility Conditions**:
 	- The *Nano Contract List* display option should only be visible and active for users who have opted into the nano-contract feature.
 	- The "Register Nano Contract" button should be visible only when the *Nano Contract List* is being displayed.
-  
+
 - **Error Management**:
-  - Ensure that error messages are clear and provide guidance on how to resolve the issue or contact support.
+	- An internal error can happen during the wallet loading process. In this
+      situation a user has no other option than try again later.
+    - [:pushpin: Suggestion] After 3 failing attempts the error feedback can ask the user to send the
+      error to the team.
 
 ### Component: Nano Contract List
 [component-nano-contract-list]: #component-nano-contract-list
@@ -154,13 +162,14 @@ Tapping on a list item navigates the user to the **Nano Contract Transactions** 
 
 This screen is dedicated to displaying a list of *Nano Contract Transaction* items associated with a selected *Nano Contract*. After a user selects a *Nano Contract* from the *Nano Contract List* component, they are directed to this screen, where all transactions involving the chosen contract are listed.
 
-The header section of this screen provides essential state information about the selected *Nano Contract*, including the full *Nano Contract ID*, *Blueprint Name*, and a breakdown of each *Token Balance*. This header is designed to be both expandable and collapsible: in its expanded form, it reveals all state details, while in its collapsed form, it displays only the *Nano Contract ID* for a more streamlined view.
+The header section of this screen provides essential state information about the selected *Nano Contract*, including the full *Nano Contract ID*, *Blueprint Name*, and a breakdown of each *Token Balance*. This header is designed to be both expandable and collapsible: in its expanded form, it reveals all state details, while in its collapsed form, it displays only the *Nano Contract ID* and an icon linking the Nano Contract to its explorer page for a more streamlined view.
 
 The list is encapsulated by the *Nano Contract Transaction List* component.
 
 ##### Design Bill
 - **Placement**:
 	- Position the header with state information at the top of the screen.
+    - Position the Nano Contract link to the explorer near the Nano Contract ID.
 	- Place the *Nano Contract Transaction List* component below the header.
 
 - **Functionality**:
@@ -235,6 +244,8 @@ graph LR
 
 ### Screen: Nano Contract Registration
 
+A Nano Contract must be registered to have its transactions loaded into the wallet.
+
 Users arrive at this screen from the *Main* screen to register a new Nano Contract. The screen features a form with an input field for *Nano Contract ID* and a *Register* button.
 
 Upon entering a valid *Nano Contract ID* and tapping *Register*, users receive immediate feedback based on the action's outcome: loading, success, or failure.
@@ -275,11 +286,18 @@ This modal presents detailed information for a *Nano Contract Transaction Reques
 
 The modal presents detailed information containing *Blueprint ID*, *Blueprint Method*, *Caller*, *Nano Contract ID* (if applicable), *Action List*, and *Argument List*. An *Action List* can be either types *deposit* or *withdrawal*. Both the lists can be empty.
 
+>[!WARNING]
+>We may need warning the user about the risk to sign any request from a dapp and orient the user to reject the transaction if it is not expected or incomprehensible.
+
+>[!WARNING]
+>Another security measure we may need for the modal is a confirmation for action before show up the "Approve" and "Reject" buttons, for instance a tap on a text "Tap to take action". This way we avoid an action by mistake. We may also want to apply other strategies to improve security such as: set the "Reject" button as primary button; change the order of the buttons.
+
 ##### Design Bill
 - **Placement**:
 	- The modal must render centrally on top of the current screen, ensuring clear visibility and focus.
 	
 - **Functionality**:
+	- [Suggestion] Include a message warning the user about the operation riks, like "You may at risk signing dapp transaction requests, reject if it is unexpected or you can't understand the transaction details."
 	- Include detailed transaction information for user review:
 		- *Blueprint ID*, *Blueprint Method*, *Caller*, *Nano Contract ID* (if applicable), *Action List*, and *Argument List*.
 	- Include detailed information for each *Action List* item:
@@ -289,10 +307,13 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 	- Include detailed information for each *Argument List* item:
 		- *Type* and *Value*
 	- Provide clear options for user approval or rejection of the transaction.
+	- [Suggestion] Upon tapping the text "Tap for action", enable the action buttons to show up
 	- Upon tapping *Approve*, initiate the processing with appropriate loading feedback.
 
 - **Visibility Conditions**:
+	- [Suggestion] The warning message is always visible.
 	- Ensure the modal is visible whenever a *Nano Contract Transaction Request* is made.
+	- Show action buttons "Approve" and "Reject" only after a tap on "Tap for action"
 	- Make sure to always display *Action List* and *Argument List* when they are empty.
 	- In case of processing success, display a success feedback.
 	- Must not display the *Nano Contract ID* when the *Blueprint Method* value is `initialize`.
@@ -453,6 +474,12 @@ We shouldn't load Nano Contract Balance because Nano Contracts can be much diffe
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
+
+## Feature onboarding
+[feature-onboarding]: #feature-onboarding
+
+Presents an onboarding with 3 or 4 views explaining the Nano Contract feature, its functionalities and how to use. The onboard can appears after the toggle button activation and in the end ask the user to proceed with wallet reloading.
+
 
 ## Basic data gathering and push notification suport
 [basic-data-gathering-push-notification-support]: #basic-data-gathering-push-notification-support
