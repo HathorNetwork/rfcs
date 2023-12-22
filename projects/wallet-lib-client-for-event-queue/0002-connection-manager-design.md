@@ -1,8 +1,7 @@
 # Summary
 [summary]: #summary
 
-Create a connection manager class to organize connection classes and make the
-wallet facade manage its connection to the source of transactions.
+Organize the connection manager classes and move responsabilities from the wallet facade to the connection manager.
 
 # Motivation
 [motivation]: #motivation
