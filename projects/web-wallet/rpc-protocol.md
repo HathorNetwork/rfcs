@@ -6,6 +6,8 @@ The design is currently a minimum viable product (MVP), addressing only known ne
 
 The idea here is to partially replicate the headless wallet API as it is already being used by many partners and has been validated to work on their use cases
 
+These methods are going to be implemented in the wallet, and exposed to dApps using wallet-connect, the design of the integration can be read [here](https://github.com/HathorNetwork/rfcs/blob/master/projects/web-wallet/wallet-connect/0001-design.md) and the wallet-connect design docs can be read [here](https://docs.walletconnect.com/web3wallet/about).
+
 # 2. Reference-level explanation
 
 ## 2.1 RPC Methods
