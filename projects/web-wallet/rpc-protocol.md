@@ -24,11 +24,19 @@ The `htr_createTx` method creates a new transaction based on parameters. It will
 	3. `token` - (Defaults to `HTR`) Token id of the output.
 	4. `type` - (Required if data script output) Type of output script.
 	5. `data` - (Required if data script output) Data string of the data script output.
-2. `inputs` - (Optional) Inputs to create the transaction
+2. `inputs` - (Optional) An array of inputs to create the transaction
+  1. `type` - Type of input object. Can be either 'query' which is the default or 'specific'
+  1. `hash` - Hash of the transaction being spent in this input. Used if not type query
+  1. `index` - Index of the transction being spent in this input. Used if not type query
+  1. `max_utxos` - Maximum number of utxos to filter in the query. Optional query parameter when using type query
+  1. `token` - Token uid to filter utxos in the query. Optional query parameter when using type query 
+  1. `filter_address` - Address to filter utxos in the query. Optional query parameter when using type query 
+  1. `amount_smaller_than` - Filter only utxos with values smaller than this. Optional query parameter when using type query 
+  1. `amount_bigger_than` - Filter only utxos with value bigger than this. Optional query parameter when using type query.
 3. `changeAddress` - (Optional) Address to send the change
 
 
-**Example Request:**
+**Example Requests:**
 
 ```json
 {
@@ -44,6 +52,27 @@ The `htr_createTx` method creates a new transaction based on parameters. It will
     "inputs": [{
       "hash": "00004788e55b9b3fb90aaad2065e99ccf36ccd2fac5ed40ae62eeefd2486e96c",
       "index": 1
+    }]
+	}
+}
+```
+
+```json
+{
+  "id": 3,
+  "jsonrpc": "2.0",
+  "method": "htr_createTx",
+  "params": {
+  	"outputs": [{
+  	  "address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
+  	  "value": 100,
+  	  "token": "00"
+  	}],
+    "inputs": [{
+      "filter_address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
+      "token": "00",
+      "max_utxos": 10,
+      "amount_bigger_than": 100
     }]
 	}
 }
