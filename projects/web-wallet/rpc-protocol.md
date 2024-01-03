@@ -403,7 +403,7 @@ If the validation fails, we will respond with a `INVALID_PARAMETERS` error code
 
 At this point, we will display the `message` and the `address` to the user, asking for his confirmation. If he rejects the modal, we will respond with an `INVALID_PARAMETERS` error code.
 
-If he accepts, we will call the `signMessageWithAddress` and answer
+If he accepts, we will call the `signMessageWithAddress` method from the lib and answer the request
 
 ## 3.5 `htr_getBalance`
 
@@ -413,4 +413,16 @@ If the validation fails, we will respond with a `INVALID_PARAMETERS` error code
 
 At this point, we will display the `message` and the `address` to the user, asking for his confirmation. If he rejects the modal, we will respond with an `INVALID_PARAMETERS` error code.
 
-If he accepts, we will call the `signMessageWithAddress` and answer the request
+If he accepts, we will call the `getBalance` method from the lib and answer the request
+
+## 3.6 `htr_getConnectedNetwork`
+
+This method should not require explicit approval of the wallet given that the wallet and the dApp are already connected.
+
+It will return the wallet's current connected network, as defined in the reference-level section
+
+## 3.7 `htr_getAddress`
+
+This method is used to request an address from the wallet.
+
+The wallet should display a paginated list of addresses, starting with the latest unused address, as we do in the desktop wallet, allowing the user to pick one to be returned
