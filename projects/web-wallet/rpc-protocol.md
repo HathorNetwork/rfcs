@@ -12,9 +12,9 @@ These methods are going to be implemented in the wallet, and exposed to dApps us
 
 ## 2.1 RPC Methods
 
-### 2.1.1 `htr_createTx`
+### 2.1.1 `htr_sendTx`
 
-The `htr_createTx` method creates a new transaction based on parameters. It will select the `utxos` automatically, mine and send the transaction
+The `htr_sendTx` method creates a new transaction based on parameters. It will select the `utxos` automatically, mine and send the transaction
 
 **Parameters**
 
@@ -42,7 +42,7 @@ The `htr_createTx` method creates a new transaction based on parameters. It will
 {
   "id": 3,
   "jsonrpc": "2.0",
-  "method": "htr_createTx",
+  "method": "htr_sendTx",
   "params": {
   	"outputs": [{
   	  "address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
@@ -61,7 +61,7 @@ The `htr_createTx` method creates a new transaction based on parameters. It will
 {
   "id": 3,
   "jsonrpc": "2.0",
-  "method": "htr_createTx",
+  "method": "htr_sendTx",
   "params": {
   	"outputs": [{
   	  "address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
@@ -357,7 +357,7 @@ We should follow the [JSON-RPC](https://www.jsonrpc.org/specification#error_obje
 
 # 3. Guide-level Explanation
 
-### 3.1 `htr_createTx`
+### 3.1 `htr_sendTx`
 
 When the request is received, we will validate if the parameters are valid, enforcing the data types and rules described in the Reference-Level explanation
 
@@ -377,7 +377,7 @@ If the validation fails, we will respond with a `INVALID_PARAMETERS` error code
 
 At this point, we will call `prepareCreateNewToken` and display the assembled transaction for user validation (UX is yet to be discussed).
 
-If the user accepts the transaction, we will, just like the `htr_createTx` method, create a `SendTransaction` model and execute the send transaction. Otherwise, we will answer with a `REQUEST_REJECTED` error
+If the user accepts the transaction, we will, just like the `htr_sendTx` method, create a `SendTransaction` model and execute the send transaction. Otherwise, we will answer with a `REQUEST_REJECTED` error
 
 ## 3.3 `htr_getUtxos`
 
