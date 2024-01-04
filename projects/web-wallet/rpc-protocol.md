@@ -426,3 +426,7 @@ It will return the wallet's current connected network, as defined in the referen
 This method is used to request an address from the wallet.
 
 The wallet should display a paginated list of addresses, starting with the latest unused address, as we do in the desktop wallet, allowing the user to pick one to be returned
+
+An example from metamask we can take inspiration from:
+
+<img width="336" alt="image" src="https://github.com/HathorNetwork/rfcs/assets/3586068/617d95b3-43ea-4db2-9698-2b517c9d0f5d">
