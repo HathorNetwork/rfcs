@@ -66,7 +66,7 @@ opposite changes (balances will be removed, etc).
 When unvoiding a transaction we can treat it as a new transaction since its
 effect on the wallet was already removed when it was voided.
 
-If the `voided_by` field is the same we can iterate on the outputs and calculate
+If the `voided_by` field is `null` we can iterate on the outputs and calculate
 the changes the update will have on the wallet.
 This is different from the new transaction because we will need to compare the
 output from the transaction to the output from the storage.

@@ -170,5 +170,4 @@ Although this is only applicable when we are connected to the same fullnode, so
 we need to check if the fullnode we are connected to is the same and if it isn't
 we will need to re-sync as usual.
 
-To make sure we are connected to the same fullnode we will use the peer-id, an
-unique 32 byte identifier.
+To make sure we are connected to the same fullnode we will use the peer-id (32 byte identifier) and the `stream_id` (uuid4).

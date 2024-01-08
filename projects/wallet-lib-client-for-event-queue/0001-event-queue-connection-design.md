@@ -194,6 +194,5 @@ Process to convert inputs:
 1. Try to find the transaction with the input's `tx_id` in storage
 	1. If not found we must fetch the tx from the fullnode api
 2. Assign `value`, `token_data`, `script` and `token` from the spent output
-3. Derive `decoded` from the script.
 
 Now that the data matches the current websocket transaction we can emit the data and all processes to manage history from the facade will work as intended.
