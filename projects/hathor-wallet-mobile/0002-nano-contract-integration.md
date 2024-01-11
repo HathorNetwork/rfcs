@@ -134,6 +134,68 @@ Selecting "Register Nano Contract" option navigates the user to the **Nano Contr
     - [:pushpin: Suggestion] After 3 failing attempts the error feedback can ask the user to send the
       error to the team.
 
+### Component: Token List
+[component-token-list]: #component-token-list
+
+This component displays a list of registered *Tokens* on the *Dashboard* screen, allowing users to select and interact with each token. By clicking on a token item the user is navigated to the *Token Transactions* component.
+
+>[!NOTE]
+>The actual implementation name for the "Token List" component is `TokenSelect`, which is found in the *Dashboard Screen*. It is more convenient to call "Token List" in this design because the component presents a list of tokens, which can be selected, but the selection is just a possible action, and doesn't convey the shape of component when rendered.
+
+### Component: Token Transactions
+[component-token-transactions]: #component-token-transactions
+
+This component displays a list of transactions made on the selected token. By clicking on a transaction item, a modal of "Token Transaction Details" component open.
+
+>[!NOTE]
+>The actual implementation name for the "Token Transactions" component is `TxHistoryView`, which is found in the *Main Screen*. It is more convenient to call "Token Transactions" in this design because the component presents a list of transactions for the selected token.
+
+##### Design Bill
+- **Visibility Conditions**:
+	- [Suggestion] Differentiate transaction items of type "Nano Contract". 
+
+### Component: Token Transaction Details
+[component-token-transactions]: #component-token-transactions
+
+This component displays the transaction's details. It provides information for each transaction type: *regular*, *NFT*, and *Nano Contract*.
+
+For transactions of type *regular* and *NFT* we keep the information already presented.
+
+For *Nano Contract* transaction type, the header displays *Token Balance* and *Token Symbol*, with a label *Amount* underneath them.
+
+The body section includes:
+- *Token*
+- *Description*
+- *Date and Time*
+- *ID* - representing the transaction ID
+- *Public Explorer*
+- *Blueprint Method Name*
+- *Nano Contract ID*
+- *Nano Contract*
+
+Taping on *Public Explorer* navigates the user to the transaction page in the explorer website.
+
+Taping on *Nano Contract* navigates the user to the "Nano Contract Transaction Details" component.
+
+>[!NOTE]
+>The actual implementation name for the "Token Transaction Details" component is `TxDetailsModal`, which is found in the *Main Screen*. It is more convenient to call "Token Transaction Details" in this design to keep naming consistency.
+
+##### Design Bill
+- **Placement**:
+	- Position the header at the top of the component with clear visual separation from the body.
+	- The body should follow immediately after the header, occupying the main portion of the component.
+
+- **Functionality**:
+	- The *Public Explorer* action must be visually distinct and recognizable as an actionable item.
+	- The *Nano Contract* action must be visually distinct and recognizable as an actionable item.
+	- It should be easy for the user to dismiss the details component and focus back in the list view.
+
+- **Visibility Conditions**:
+	- Display header information of *Token Amount* and *Token Symbol* for all transaction types.
+    - Display body information of *Blueprint Method Name*, *Nano Contract ID* and *Nano Contract* only for *Nano Contract* transaction type.
+	- Differentiate item *Public Explorer* using distinct visual indicators.
+	- Differentiate item *Nano Contract* using distinct visual indicators.
+
 ### Component: Nano Contract List
 [component-nano-contract-list]: #component-nano-contract-list
 
@@ -181,7 +243,7 @@ The list is encapsulated by the *Nano Contract Transaction List* component.
 ### Component: Nano Contract Transaction List
 [component-nano-contract-transaction-list]: #component-nano-contract-transaction-list
 
-This component displays a list of *Nano Contract Transaction* items. Each item represents a transaction as either an input (sent), an output (received), or a method execution (called). The list is designed to provide essential transaction information in a clear and concise manner.
+This component displays a list of *Nano Contract Transaction* items. Each item represents a token balance, either a positive token balance (sent) or a negative token balance (received), or the item represents a method execution (called). Therefore there are three types of item: *sent*, *received* and *called*. The list is designed to provide essential transaction information in a clear and concise manner.
 
 Tapping on an item opens the *Nano Contract Transaction Details* component, providing further information on the selected transaction item.
 
@@ -490,6 +552,11 @@ We shouldn't load Nano Contract Balance because Nano Contracts can be much diffe
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
+## [Alternative] Component: Nano Contract Transaction List
+[alternative-component-nano-contract-transaction-list]: #alternative-component-nano-contract-transaction-list
+
+This alternative displays a list of transaction items in which each item represents the transaction as whole, not only part of it segregated by type. By clicking on the item the user is presented with all the transaction details, including each token balance involved.
+
 ## Feature onboarding
 [feature-onboarding]: #feature-onboarding
 
@@ -505,6 +572,12 @@ By enabling the Nano Contract we can also register the wallet in the wallet-serv
 [push-notification-wallet-connect-requests]: #push-notification-wallet-connect-requests
 
 A request from Wallet Connect dapp triggers a modal to show up over any screen no matter what. Sometimes this behavior is not possible, for instance when wallet is locked, other times this behavior is not convenient because it interrupts the user, or the wallet is not execution at all. The push notification detaches the Wallet Connect request from the immediate interaction and frees the user to choose when to interact with the dapp, in addition it allows the user to know when a dapp has an update even when the app is quit.
+
+## Specialized blueprint interface
+
+We can provide blueprint calls for known blueprints in the wallet. This way we can provide a better interface for users and avoid reliance on third-party providers through wallet-connect.
+
+We already mapped the necessity to build a general interface to interact with Blueprints and Nano Contracts, however, this general interface will require more knowledge from the user.
 
 # Prior art
 [prior-art]: #prior-art
