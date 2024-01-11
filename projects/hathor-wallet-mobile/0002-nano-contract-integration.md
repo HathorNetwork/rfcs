@@ -218,7 +218,18 @@ The body section includes:
 - *Transaction ID*
 - *Public Explorer*
 
-Taping on *Public Explorer* manigates the user to the transaction page in the explorer website.
+For *called* transaction items, the header displays *Blueprint Method Name*.
+
+The body section includes:
+- *Blueprint Method Arguments*
+- *Date and Time*
+- *Transaction ID*
+- *Public Explorer*
+
+Taping on *Public Explorer* navigates the user to the transaction page in the explorer website.
+
+###### Blueprint Method Arguments
+Consist in an ordered list of arguments. An argument is a pair of argument type and value.
 
 ##### Design Bill
 - **Placement**:
@@ -231,7 +242,8 @@ Taping on *Public Explorer* manigates the user to the transaction page in the ex
 
 - **Visibility Conditions**:
 	- Display header information of *Token Amount* and *Token Symbol* only for *sent* and *received* transaction items.
-	- For *called* transaction items, only the body section should be visible.
+    - Display header information of *Blueprint Method Name* only for *called* transaction items.
+    - Display each argument of *Blueprint Method Arguments* as an item in the body section.
 	- Differentiate item *Public Explorer* using distinct visual indicators.
   
 ## Registering Nano Contract
@@ -244,7 +256,7 @@ graph LR
 
 ### Screen: Nano Contract Registration
 
-A Nano Contract must be registered to have its transactions loaded into the wallet.
+A Nano Contract must be registered to have its transactions properly mapped. Transactions belonging to the wallet are already processed for balance purpose, however, they are not assigned to a specific nano contract by default, which may difficult query. By registering a Nano Contract we can mount a map of its transactions for easy access and also to process its balances.
 
 Users arrive at this screen from the *Main* screen to register a new Nano Contract. The screen features a form with an input field for *Nano Contract ID* and a *Register* button.
 
@@ -280,7 +292,7 @@ graph LR
 ```
 
 ### Modal: Nano Contract Transaction Request
-[modal-nano-contract-transaction-request](#modal-nano-contract-transaction-request)
+[modal-nano-contract-transaction-request]: #modal-nano-contract-transaction-request
 
 This modal presents detailed information for a *Nano Contract Transaction Request* from dapp, allowing the user to approve or reject the transaction. It activates when a dapp makes a `htr_createNcTx` request to the wallet's RPC.
 
@@ -302,12 +314,12 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 		- *Blueprint ID*, *Blueprint Method*, *Caller*, *Nano Contract ID* (if applicable), *Action List*, and *Argument List*.
 	- Include detailed information for each *Action List* item:
 		- *Type*, *Token* and *Data*.
-	- Include detailed information for *Data*:
-		- *Amount*, *Address*
+        - Include detailed information for *Data*:
+            - *Amount*, *Address*
 	- Include detailed information for each *Argument List* item:
 		- *Type* and *Value*
 	- Provide clear options for user approval or rejection of the transaction.
-	- [Suggestion] Upon tapping the text "Tap for action", enable the action buttons to show up
+	- [Suggestion] Upon tapping the text "Tap for action", enable the action buttons to show up.
 	- Upon tapping *Approve*, initiate the processing with appropriate loading feedback.
 
 - **Visibility Conditions**:
@@ -324,6 +336,9 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 
 >[!NOTE]
 >The *Caller* represents the wallet address calling the Blueprint method.
+
+>[!NOTE]
+>An *Action* is an abstraction for UTXO. It can either be a `deposit` or a `withdrawal`, and further it will be mapped to an input or output in the transaction, respectively.
 
 >[!TIP]
 >Use the following value examples:
