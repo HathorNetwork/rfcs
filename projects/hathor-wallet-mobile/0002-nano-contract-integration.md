@@ -152,7 +152,12 @@ This component displays a list of transactions made on the selected token. By cl
 
 ##### Design Bill
 - **Visibility Conditions**:
-	- [Suggestion] Differentiate transaction items of type "Nano Contract". 
+	- [Suggestion] Differentiate transaction items by type
+      - Block
+      - Merged Mined Block
+      - Transaction
+      - Create Token Transaction
+      - Nano Contract Transaction
 
 ### Component: Token Transaction Details
 [component-token-transactions]: #component-token-transactions
@@ -164,14 +169,15 @@ For transactions of type *regular* and *NFT* we keep the information already pre
 For *Nano Contract* transaction type, the header displays *Token Balance* and *Token Symbol*, with a label *Amount* underneath them.
 
 The body section includes:
-- *Token*
-- *Description*
+- *Token*: full token name
+- *Description*: a text describing the operation, like "Sent HTR" or "Received HTR"
 - *Date and Time*
-- *ID* - representing the transaction ID
-- *Public Explorer*
+- *ID*: transaction ID
+- *Public Explorer*: action item that navigates the user to the explorer
 - *Blueprint Method Name*
 - *Nano Contract ID*
-- *Nano Contract*
+- *Nano Contract Caller*: the address used to sign the transaction
+- *Nano Contract*: action item that navigates the user to the Nano Contract Details component
 
 Taping on *Public Explorer* navigates the user to the transaction page in the explorer website.
 
@@ -210,7 +216,7 @@ Tapping on a list item navigates the user to the **Nano Contract Transactions** 
 - **Functionality**:
 	- Implement an infinite scrolling view to display a potentially large number of nano contracts.
 	- Make each list item actionable, leading to the **Nano Contract Transactions** screen upon selection.
-	- Each item list item must contain *Nano Contract ID* and *Blueprint Name* information.
+	- Each list item must contain *Nano Contract ID* and *Blueprint Name* information.
 
 - **Visibility Conditions**:
 	- The list should only display *Nano Contracts* that the user has registered.
@@ -224,7 +230,7 @@ Tapping on a list item navigates the user to the **Nano Contract Transactions** 
 
 This screen is dedicated to displaying a list of *Nano Contract Transaction* items associated with a selected *Nano Contract*. After a user selects a *Nano Contract* from the *Nano Contract List* component, they are directed to this screen, where all transactions involving the chosen contract are listed.
 
-The header section of this screen provides essential state information about the selected *Nano Contract*, including the full *Nano Contract ID*, *Blueprint Name*, and a breakdown of each *Token Balance*. This header is designed to be both expandable and collapsible: in its expanded form, it reveals all state details, while in its collapsed form, it displays only the *Nano Contract ID* and an icon linking the Nano Contract to its explorer page for a more streamlined view.
+The header section of this screen provides essential state information about the selected *Nano Contract*, including the full *Nano Contract ID*, *Blueprint Name*, and a breakdown of each *Token Balance*. In addition, the header also shows an action to unregister the contract. This header is designed to be both expandable and collapsible: in its expanded form, it reveals all state details, while in its collapsed form, it displays only the *Nano Contract ID* and an icon linking the Nano Contract to its explorer page for a more streamlined view.
 
 The list is encapsulated by the *Nano Contract Transaction List* component.
 
@@ -235,10 +241,12 @@ The list is encapsulated by the *Nano Contract Transaction List* component.
 	- Place the *Nano Contract Transaction List* component below the header.
 
 - **Functionality**:
-	- The header should display the full *Nano Contract ID*, *Blueprint Name*, and *Token Balances*.
+    - The unregister action must navigate the user back to the "Nano Contract List" component.
 
 - **Visibility Conditions**:
-	- Include a toggle in the header for expanding and collapsing to show/hide detailed state information.
+	- The header must display the full *Nano Contract ID*, *Blueprint Name*, *Token Balances* and the unregister action when expanded.
+	- The header must display the full *Nano Contract ID* and an incon linking to the corresponding explorer page.
+	- The toggle action in the header to show or hide detailed state information must always be visible.
 
 ### Component: Nano Contract Transaction List
 [component-nano-contract-transaction-list]: #component-nano-contract-transaction-list
@@ -273,9 +281,9 @@ This component provides detailed information for each transaction item type: *se
 For *sent* and *received* transaction items, the header displays *Token Amount* and *Token Symbol*, with an optional label *Amount* underneath them.
 
 The body section includes:
-- *Token ID*
-- *Description*
-- *Blueprint Method Name*
+- *Token*: full token name
+- *Description*: a text describing the operation balance, like "Sent 10 HTR"
+- *Blueprint Method Name*: blueprint full name
 - *Date and Time*
 - *Transaction ID*
 - *Public Explorer*
@@ -346,7 +354,7 @@ Upon successful registration, users are redirected to the *Main* screen  the wit
 
 The Wallet Connect has a different *modus operandi*, it requires the user to interact with the dapp by modals.
 
-We may want to make the Wallet Connect requests from dapps assynchronous with push notification, for this read the alternative [Push notification for wallet connect requests](#push-notification-wallet-connect-requests).
+We may want to make the Wallet Connect requests from dapps asynchronous with push notification, for this read the alternative [Push notification for wallet connect requests](#push-notification-wallet-connect-requests).
 
 ```mermaid
 graph LR
@@ -371,7 +379,8 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 	- The modal must render centrally on top of the current screen, ensuring clear visibility and focus.
 	
 - **Functionality**:
-	- [Suggestion] Include a message warning the user about the operation riks, like "You may at risk signing dapp transaction requests, reject if it is unexpected or you can't understand the transaction details."
+	- [Suggestion] Include a message warning the user about the operation risks, like "You may at risk signing dapp transaction requests, reject if it is unexpected or you can't understand the transaction details."
+    - [Suggestion] Include a "Read more" link that link to a document explaining the operation risks with more details.
 	- Include detailed transaction information for user review:
 		- *Blueprint ID*, *Blueprint Method*, *Caller*, *Nano Contract ID* (if applicable), *Action List*, and *Argument List*.
 	- Include detailed information for each *Action List* item:
@@ -400,14 +409,14 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 >The *Caller* represents the wallet address calling the Blueprint method.
 
 >[!NOTE]
->An *Action* is an abstraction for UTXO. It can either be a `deposit` or a `withdrawal`, and further it will be mapped to an input or output in the transaction, respectively.
+>An *Action* is an abstraction for UTXO. It can either be a `deposit` or a `withdrawal`, and further it will be mapped to one or more inputs or outputs in the transaction, respectively.
 
 >[!TIP]
 >Use the following value examples:
 >- *Blueprint ID*
 >	- eg: `494d0ac59a6918b771b122395206fef3f349f84f20dc430188a319d4ead24a3b`
 >- *Blueprint Method*
->	- eg: `initiale`, `swap`, `bet`
+>	- eg: `initialize`, `swap`, `bet`
 >- *Caller*
 >	- eg: `WRqBSi5jc74P8tRo7CmgiGByA1eTzfMh7B`
 >- *Nano Contract ID*
@@ -448,7 +457,9 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 	- The `NcTxHistory` must contain relevante information such as:
 	 	- *Transaction ID*
 		- *Nano Contract ID*
+		- *Blueprint ID*
 		- *Blueprint Method*
+		- *Caller*
 		- *Argument List*
 		- *Timestamp*
 
@@ -482,11 +493,9 @@ The `htr_createNcTx` method creates a new *Nano Contract* transaction based on p
 - `ncActions`: a list of *Actions* the *Nano Contract* must process
 	- `type`: type of action, either `deposit` or `withdrawal`
 	- `token`: unique identification of the *Token*
-	- `data`: detailed information for the action
-		- `amount`: token's amount
-		- `address`: wallet's address, it is required only for `withdrawal` and ignored for `deposit`
+    - `amount`: token's amount
+    - `address`: wallet's address, it is required only for `withdrawal` and ignored for `deposit`
 - `ncArgs`: a positional list of method's *Arguments*
-	- `type`: a supported type, like `boolean`, `number`, `binary`, etc.
 	- `value`: type's literal value
 
 ##### Example Request
@@ -505,9 +514,7 @@ The `htr_createNcTx` method creates a new *Nano Contract* transaction based on p
 		{
 			"type": "deposit",
 			"token": "000001a176aa72b84f3486b3fcea327b023a70d1b6461c1b6a9073785b5775d8",
-			"data": {
-				"amount": "100",
-			},
+            "amount": "100",
 		},
 		{
 			"type": "withdrawal",
