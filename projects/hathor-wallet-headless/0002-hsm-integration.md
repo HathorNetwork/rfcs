@@ -124,6 +124,7 @@ This project has two main phases that need implementing:
 [headless-implementation]: #headless-implementation
 The headless application will be responsible for calling the HSM directly through [the `hsm-dinamo` library](https://www.npmjs.com/package/@dinamonetworks/hsm-dinamo) from Dinamo Networks.
 
+### Connection to the HSM
 The HSM connection authentication credentials will be stored on the config file along with all other settings for the wallet. This will also allow for configuration through docker parameters. ( See the `config.js.docker` file for more information. )
 ```js
 // On the config.js file
@@ -132,8 +133,13 @@ hsmUsername: "my_username"
 hsmPassword: "my_password"
 ```
 
-One note about this is that a connection may be open at the time the end user decides to reload the configuration settings. For now, this will not be allowed as it would increase the complexity of dealing with closing the current connections. Other connection setting approaches are discussed in the "Future Possibilities" section below.
+1. The `hsm-dinamo` implementation establishes that the connection instance is a _singleton_: that way, only one HSM connection can be open at any given time. To ensure this does not cause racing conditions, a _lock mechanism_ will be implemented using [the existing `Lock` class](https://github.com/HathorNetwork/hathor-wallet-headless/blob/4fc71df7a0f9bba0714a81585fcbed77e84cf45d/src/lock.js#L12-L14) on the headless wallet.
 
+2. Each endpoint request opens a connection, executes all needed commands and immediately closes it again. It is desirable to keep HSM sessions as short as possible, so that other requests may be executed sooner.
+
+3. A connection may be open at the time the end user decides to reload the configuration settings. For now, this will not be allowed as it would increase the complexity of dealing with closing the current connections. Other connection setting approaches are discussed in the "Future Possibilities" section below.
+
+### Wallet initialization
 A dedicated `[POST] /hsm/start` endpoint will be available, receiving the expected `wallet-id` and `hsm-key` body parameters. The `hsm-key` indicates which key on the HSM contains the BIP32 information for this wallet. The headless considers this to be a _hardware wallet_ and realizes the first request to the HSM to validate the existence of the key name.
 
 > **Possibility 1: The key is available**<br>
