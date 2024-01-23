@@ -162,7 +162,7 @@ Only this route will be adapted for using the hardware wallet, since it's the on
 ## Creating a BIP32 on the HSM
 This operation should be done via script, as it is the most critical operation on the HSM within this scope.
 
-As such, a new `scripts/createHSMKey.js` file will be created, offering a way to quickly generate a new BIP32 wallet on a developer machine. This created key name should be inserted on the `config.js` file along with a `walletId` for it. Other wallet generation possibilities are discussed on the _Alternatives_ section of this document.
+As such, a new `scripts/createHSMKey.js` file will be created, offering a way to quickly generate a new BIP32 wallet on a developer machine. This created key name should be inserted on the initialization endpoint parameters along with a `walletId` for it, creating a map between both on the application. Other wallet generation possibilities are discussed on the _Alternatives_ section of this document.
 
 ## Error handling
 Errors while communicating with the HSM are to be treated in such a way that it's clear to the end user that the scope of the problem is related to the HSM communication.
