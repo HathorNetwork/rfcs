@@ -202,29 +202,7 @@ The only question left is if our application is able to correctly sign a transac
 ## Full integration on all headless endpoints
 As explained in the [headless implementation section](#headless-implementation), only the atomic swap `get-my-signatures` endpoint was adapted to interact with the HSM.
 
-Adapting all endpoints to use the HSM would require more profound refactorings, more specifically the [utils/transaction#prepareTransaction()](https://github.com/HathorNetwork/hathor-wallet-lib/blob/d3dbe159ac121eb67986ed8561cdacead8fc9fe8/src/utils/transaction.ts#L485-L502) method. From the perspective of the headless wallet, all signatures are executed through this method.
-
-Below are the endpoints that would need to be integrated with the HSM ( [link to the router file](https://github.com/HathorNetwork/hathor-wallet-headless/blob/1fc34b6f12a349478d9656b14933e6db45115a90/src/routes/wallet/wallet.routes.js) for conference ):
-- /wallet/simple-send-tx
-- /wallet/send-tx
-- /wallet/utxo-consolidation
-- /wallet/create-token
-- /wallet/mint-tokens
-- /wallet/melt-tokens
-- /wallet/create-nft
-
-Comparing these with the direct usage of the `prepareTransaction` method, we can see that this method is called by all of the routes above:
-- [prepareCreateNewToken](https://github.com/HathorNetwork/hathor-wallet-lib/blob/a0e20f6aa9c07461d7784e3133a6fedc4b72fabf/src/new/wallet.js#L1487-L1494)
-- [prepareDelegateAuthorityData](https://github.com/HathorNetwork/hathor-wallet-lib/blob/a0e20f6aa9c07461d7784e3133a6fedc4b72fabf/src/new/wallet.js#L1878)
-- [prepareDestroyAuthorityData](https://github.com/HathorNetwork/hathor-wallet-lib/blob/a0e20f6aa9c07461d7784e3133a6fedc4b72fabf/src/new/wallet.js#L1957)
-- [prepareMeltTokensData](https://github.com/HathorNetwork/hathor-wallet-lib/blob/a0e20f6aa9c07461d7784e3133a6fedc4b72fabf/src/new/wallet.js#L1791-L1798)
-- [prepareMintTokensData](https://github.com/HathorNetwork/hathor-wallet-lib/blob/a0e20f6aa9c07461d7784e3133a6fedc4b72fabf/src/new/wallet.js#L1683-L1690)
-- [new/transaction.js/prepareTx](https://github.com/HathorNetwork/hathor-wallet-lib/blob/f211d0167748e5aa5bb674e65c1e927aeb1838e2/src/new/sendTransaction.ts#L253)
-  - called by [SendTransaction.run](https://github.com/HathorNetwork/hathor-wallet-lib/blob/f211d0167748e5aa5bb674e65c1e927aeb1838e2/src/new/sendTransaction.ts#L479)
-  - called by [sendManyOutputsTransaction](https://github.com/HathorNetwork/hathor-wallet-lib/blob/a0e20f6aa9c07461d7784e3133a6fedc4b72fabf/src/new/wallet.js#L1235)
-  - called by:
-    - [consolidateUtxos](https://github.com/HathorNetwork/hathor-wallet-lib/blob/a0e20f6aa9c07461d7784e3133a6fedc4b72fabf/src/new/wallet.js#L1045)
-    - [sendTransaction](https://github.com/HathorNetwork/hathor-wallet-lib/blob/a0e20f6aa9c07461d7784e3133a6fedc4b72fabf/src/new/wallet.js#L1185)
+Adapting all endpoints to use the HSM would require more profound refactorings, more specifically the [utils/transaction#prepareTransaction()](https://github.com/HathorNetwork/hathor-wallet-lib/blob/d3dbe159ac121eb67986ed8561cdacead8fc9fe8/src/utils/transaction.ts#L485-L502) method.
 
 A new function could be added to the wallet storage, allowing the `prepareTransaction` to identify the wallet is linked to an HSM device. From this point, the function itself could retrieve the connection credentials from the config file and call the HSM lib directly, executing the signature.
 
