@@ -118,7 +118,7 @@ Eventual logic errors like not finding a valid `xPriv` key are treated and retur
 
 This project has two main phases that need implementing:
 1. Starting a `read only wallet` that fetches all relevant data from the HSM but can not sign a transaction.
-2. Implementing a signature integration with the HSM through the Atomic Swap Proposal module.
+2. Implementing an endpoint for signature integration with the HSM.
 
 ## Read Only implementation - Phase 1
 [headless-implementation]: #headless-implementation
@@ -155,9 +155,9 @@ If the generated `xPub` is not valid, an error is thrown to the user indicating 
 Once the wallet is started successfully, all other operations are executed in a similar fashion to the current headless implementation of a read-only wallet.
 
 ## Signature integration - Phase 2
-The signature of HSM inputs will be made through a `Tx Proposal`, using the Atomic Swap API. The `wallet/atomic-swap/get-my-signatures` route will be modified to identify that the wallet is related to an HSM and will send the data to be signed to the *HSM Client*. This can be based on the desktop hardware wallet [`ledger/sendTx()` function](https://github.com/HathorNetwork/hathor-wallet/blob/ef57015015375a477cffd72baf62f4e14baf541a/src/utils/ledger.js#L126-L166).
+The signature of HSM inputs will be made using the new HSM routes module. The `hsm/get-my-signatures` route will be created to receive the `TxHex` of a transaction, identify its inputs and send the data to be signed to the *HSM Client*. This signing procedure can be based on the desktop hardware wallet [`ledger/sendTx()` function](https://github.com/HathorNetwork/hathor-wallet/blob/ef57015015375a477cffd72baf62f4e14baf541a/src/utils/ledger.js#L126-L166), and the handling of `TxHex` parsing/rebuilding can be based on the existing `tx-proposal` controllers.
 
-Only this route will be adapted for using the hardware wallet, since it's the only one that has an implementation close enough to the Desktop Ledger. The other signature endpoints, such as `wallet/simple_send_tx` would require more complex refactorings and will be discussed on the _Future Possibilites_ section.
+Only this route will be used for handling signatures with the HSM. The other signature endpoints, such as `wallet/simple_send_tx` would require more complex refactorings and will be discussed on the _Future Possibilites_ section.
 
 ## Creating a BIP32 on the HSM
 This operation should be done via script, as it is the most critical operation on the HSM within this scope.
@@ -200,7 +200,7 @@ The only question left is if our application is able to correctly sign a transac
 [future-possibilities]: #future-possibilities
 
 ## Full integration on all headless endpoints
-As explained in the [headless implementation section](#headless-implementation), only the atomic swap `get-my-signatures` endpoint was adapted to interact with the HSM.
+As explained in the [headless implementation section](#headless-implementation), only the dedicated `get-my-signatures` endpoint was created to interact with the HSM.
 
 Adapting all endpoints to use the HSM would require more profound refactorings, more specifically the [utils/transaction#prepareTransaction()](https://github.com/HathorNetwork/hathor-wallet-lib/blob/d3dbe159ac121eb67986ed8561cdacead8fc9fe8/src/utils/transaction.ts#L485-L502) method.
 
