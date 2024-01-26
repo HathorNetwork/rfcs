@@ -211,7 +211,7 @@ Extra attention would be needed to ensure that thrown exceptions from the HSM li
 ## Avoiding the use of the `xPub`
 There is the possibility of some partner needing a wallet with a higher level of security, avoiding even the export of the `xPub` data.
 
-Should this become a requirement, another path to implement this integration would be to adapt the headless application, allowing the user to start a read-only wallet from a list of addresses only.
+This feature could be built upon the [393](https://github.com/HathorNetwork/hathor-wallet-headless/issues/393) issue, adding a new route for the HSM address calculation to the strict address list suggested by the proposal.
 
 #### Approach 1: Requesting addresses directly
 The functions `deriveAddressP2PKH` ([link](https://github.com/HathorNetwork/hathor-wallet-lib/blob/91118d5335c2b63afb559e5deddc7a81f73cbc13/src/utils/address.ts#L38-L48)) and `deriveAddressP2SH` ([link](https://github.com/HathorNetwork/hathor-wallet-lib/blob/91118d5335c2b63afb559e5deddc7a81f73cbc13/src/utils/address.ts#L69-L79)) should be modified to access the `storage` and retrieve the HSM authentication credentials, and instead of calculating locally the address data, retrieve it from the HSM through use of the [getKeyInfo](https://manual.dinamonetworks.io/nodejs/pages/examples/blockchain_get_key_info.html) lib method.
