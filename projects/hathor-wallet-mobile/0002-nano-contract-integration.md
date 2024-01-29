@@ -36,65 +36,6 @@ Each strategy [must](https://www.rfc-editor.org/rfc/rfc2119) support the followi
 
 Second, we should enable the user's device in the `wallet-connect-mobile.rollout` feature flag on Unleash.
 
-## Opt-in
-
-```mermaid
-graph LR
-    A[Settings] --> B[Nano Contract Settings]
-```
-
-### Screen: Settings
-[screen-settings]: #screen-settings
-
-The "Settings" screen is divided into two sections: "General Settings" and "Dev Settings." Within "General Settings", the *Nano Contract* option is included.
-
-This option is visible only when the device is registered with Unleash. For registration and feature flag activation, see [Unleash](#unleash).
-
-Selecting the *Nano Contract* option initiates navigation to the *Nano Contract Settings* screen. This action allows users to modify their nano-contract preferences.
-
-##### Design Bill
-- *Nano Contract* option:
-	- **Placement**: Insert this option in the "General Settings" section, positioned before "Reset wallet" item.
-	
-	- **Functionality**: The option responds to touch input. A tap triggers a transition to the *Nano Contract Settings* screen.
-	
-	- **Visibility Conditions**: Display this option based on the device's registration status with Unleash.
-
-### Screen: Nano Contract Settings
-[screen-nano-contract-settings]: #screen-nano-contract-settings
-
-The *Nano Contract Settings* screen features a "Nano Contract" toggle button. Users can tap this button to activate the nano-contract feature. The toggle button should have a context description for what it actually does "Enables the view of a Nano Contract list, a list of transactions per Nano Contract and the possibility to register and unregister a Nano Contract".
-
-Upon activation, the wallet initiates a restart process, during which Nano Contract transactions for the current wallet are loaded. Users are visually informed of this process through a progress indicator and are returned to the *Nano Contract Settings* screen upon completion.
-
-In addition to the activation, we can show a [Feature Onboarding](#feature-onboarding).
-
->[!NOTE]
-In addition to enabling the *Nano Contract* feature, basic usage data such as feature activation frequency and duration of use may be collected for monitoring purposes. For more details on data collection and push notification support, see [Basic Data Gathering and Push Notification Support](#basic-data-gathering-push-notification-support).
-
-##### Design Bill
-- **Placement**:
-	- Position the toggle button on the top of *Nano Contract Settings* screen.
-    - Position the feature context text bellow the toggle button.
-
-- **Functionality**:
-	- The toggle button enables or disables the nano-contract feature.
-	- When toggled on or off, initiate a wallet restart and load Nano Contract transactions.
-	- Provide a visual progress indicator during the loading process.
-	- Provide a visual success feedback with dismiss action.
-	- Provide a visual failure feedback with dismiss action.
-
-- **Visibility Conditions**:
-	- The toggle button is always visible on the *Nano Contract Settings* screen.
-	- However, its functionality is active only when the user’s wallet is eligible for nano contracts.
-	- In case of success, display a success message.
-	- In case of failure, display an error feedback.
-
-- **Error Management**:
-	- An internal error can happen during the wallet loading process. In this situation a user has no option other than try again later.
-    - [Suggestion] After 3 failing attempts the error feedback can ask the user to send the
-      error to the team.
-
 ## Reading Nano Contract Transactions
 
 ```mermaid
@@ -106,13 +47,13 @@ graph LR
 ### Screen: Main
 [screen-main]: #screen-main
 
-After a user ops-in the *Nano Contract* feature and the wallet loading completes, the Main screen displays the **Token List** component. Additionally, a user can choose to view the **Nano Contract List** component through a clearly marked option.
+After a user be allowed to use the *Nano Contract* feature and the wallet loading completes, the Main screen displays the **Token List** component. Additionally, a user can choose to view the **Nano Contract List** component through a clearly marked option.
 
 Each list component offers a registration option:
 - "Register Token"
 - "Register Nano Contract"
 
-Selecting "Register Nano Contract" option navigates the user to the **Nano Contract Registration** screen.
+Selecting "Register Nano Contract" option navigates the user to the **[Nano Contract Registration](#screen-nano-contract-registration)** screen.
 
 ##### Design Bill
 - **Placement**:
@@ -122,10 +63,10 @@ Selecting "Register Nano Contract" option navigates the user to the **Nano Contr
 - **Functionality**:
 	- The *Nano Contract List* display option should reveal all registered nano contracts in the wallet when selected.
 	- The "Register Token" button navigates the user to the Token Registration screen.
-	- The "Register Nano Contract" button navigates the user to the **Nano Contract Registration** screen for adding a new Nano Contract.
+	- The "Register Nano Contract" button navigates the user to the **[Nano Contract Registration](#screen-nano-contract-registration)** screen for adding a new Nano Contract.
   
 - **Visibility Conditions**:
-	- The *Nano Contract List* display option should only be visible and active for users who have opted into the nano-contract feature.
+	- The *Nano Contract List* display option should only be visible and active for users allowed to use the nano-contract feature.
 	- The "Register Nano Contract" button should be visible only when the *Nano Contract List* is being displayed.
 
 - **Error Management**:
