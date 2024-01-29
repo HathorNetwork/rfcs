@@ -266,30 +266,54 @@ graph LR
 ```
 
 ### Screen: Nano Contract Registration
+[screen-nano-contract-registration]: #screen-nano-contract-registration
 
-A Nano Contract must be registered to have its transactions properly mapped. Transactions belonging to the wallet are already processed for balance purpose, however, they are not assigned to a specific nano contract by default, which may difficult query. By registering a Nano Contract we can mount a map of its transactions for easy access and also to process its balances.
+A Nano Contract must be registered refering to an specific user's wallet address. One user may register the same Nano Contract using different wallet addresses. By registering a Nano Contract, all of its transactions are donwloaded, including the ones not belonging to user's wallet. By registering a Nano Contract we can mount a map of its transactions and do the proper processing as painting the transactions belonging to user's wallet and registration's address, among other things like calculate the balance per token per transaction.
 
-Users arrive at this screen from the *Main* screen to register a new Nano Contract. The screen features a form with an input field for *Nano Contract ID* and a *Register* button.
+Users arrive at this screen from the *Main* screen to register a new Nano Contract associated with a wallet's address. The screen features a form with an input field for *Nano Contract ID* and another input field for *Wallet's Address* and a *Register* button.
 
-Upon entering a valid *Nano Contract ID* and tapping *Register*, users receive immediate feedback based on the action's outcome: loading, success, or failure.
+By taping over *Wallet's Address* field the [*Wallet's Address List*](#modal-wallets-address-list) modal opens, containing a list of wallet's address with index and hash information, sorted by index in ascending order.
+
+Upon entering a valid *Nano Contract ID*, selecting an available *Wallet's Address* and tapping *Register*, users receive immediate feedback based on the action's outcome: loading, success, or failure.
 
 Upon successful registration, users are redirected to the *Main* screen  the with *Nano Contract List* active.
 
 ##### Design Bill
 - **Placement**:
-	- Place the form input on the top of the screen.
+	- Place the form inputs on the top of the screen.
 	- Place the action button on the bottom of the screen.
 
 - **Functionality**:
 	- Upon tapping *Register*, initiate the registration process with appropriate loading feedback.
 
 - **Visibility Conditions**:
-	- The *Register* button remains inactive until a valid Nano Contract ID is entered into the input field.
+	- The *Register* button remains inactive until a valid Nano Contract ID is entered and a Wallet's Address is selected.
 	- In case of processing success, display a success feedback and navigate back to the *Main* screen with the *Nano Contract List* active.
 
 - **Error Management**:
 	- In case of validation error, display an error message near the input field *Nano Contract ID*.
 	- In case of processing failure, display an error feedback.
+
+### Modal: Wallet's Address List
+[modal-wallets-address-list]: #modal-wallets-address-list
+
+This modal presents a basic list of available wallet's addresses, containing the following information: index and address. The list is made of all used transactions plus the next unused one, and the items are sorted by index in ascending order.
+
+The modal is activated by taping over *Wallet's Address* field on [*Nano Contract Registration*](#screen-nano-contract-registration) form.
+
+By typing on an item a user is selecting the address to register with the Nano Contract and updating the form's field.
+
+##### Design Bill
+- **Placement**:
+	- The modal must render centrally on top of the current screen, ensuring clear visibility and focus.
+	
+- **Functionality**:
+	- Select the address for *Wallet's Address* field
+	- Inform the address's index alongside the address
+
+- **Visibility Conditions**:
+	- Ensure the modal is visible whenever the user taps on *Wallet's Address* field on [*Nano Contract Registration*](#screen-nano-contract-registration) form.
+	- Show a visual sign for the selected address if a user opens the modal again after a previous selection
 
 ## Wallet Connect Interaction
 
