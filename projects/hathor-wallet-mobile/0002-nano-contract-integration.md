@@ -408,7 +408,7 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 ## Load Nano Contract History
 
 ##### When execute
-- It should happen everytime a new *Nano Contract Transaction* containing a caller from user's wallet is processed on `sagas/wallet.js@handleTx`.
+- It should happen everytime a new *Nano Contract Transaction* is processed on `sagas/wallet.js@handleTx`
 - It should happen when the *Nano Contract Transaction List* component is mounted, for the selected *Nano Contract*, for the first time and there isn't a history registered.
 
 ##### Where to execute
@@ -419,7 +419,7 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 - On redux state `nanoContractsHistory`:
 	- It must be a map of `<TxHash, NcTxHistory>`.
 	- The `NcTxHistory` must contain a set of balance per token.
-	- The `NcTxHistory` must contain relevante information such as:
+	- The `NcTxHistory` must contain relevant information such as:
 	 	- *Transaction ID*
 		- *Nano Contract ID*
 		- *Blueprint ID*
@@ -427,6 +427,11 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 		- *Caller*
 		- *Argument List*
 		- *Timestamp*
+
+##### How to download all Nano Contract History
+Either:
+- Call for `nano@getNanoContractHistory` on Nano API from wallet-lib; or
+- Implement a `wallet@getNanoContractHistory` method in the wallet-lib.
 
 ## Register Nano Contract
 
