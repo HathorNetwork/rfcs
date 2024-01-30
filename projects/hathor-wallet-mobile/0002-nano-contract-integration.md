@@ -118,11 +118,11 @@ The body section includes:
 - *Blueprint Method Name*
 - *Nano Contract ID*
 - *Nano Contract Caller*: the address used to sign the transaction
-- *Nano Contract*: action item that navigates the user to the Nano Contract Details component
+- *Nano Contract*: action item that navigates the user to the [Nano Contract Transactions](#screen-nano-contract-transactions) screen.
 
-Taping on *Public Explorer* navigates the user to the transaction page in the explorer website.
+Tapping on *Public Explorer* navigates the user to the transaction page in the explorer website.
 
-Taping on *Nano Contract* navigates the user to the "Nano Contract Transaction Details" component.
+Tapping on *Nano Contract* navigates the user to the [Nano Contract Transactions](#screen-nano-contract-transactions) screen.
 
 >[!NOTE]
 >The actual implementation name for the "Token Transaction Details" component is `TxDetailsModal`, which is found in the *Main Screen*. It is more convenient to call "Token Transaction Details" in this design to keep naming consistency.
@@ -148,19 +148,19 @@ Taping on *Nano Contract* navigates the user to the "Nano Contract Transaction D
 
 This component displays a list of registered *Nano Contracts* on the *Main* screen, allowing users to select and interact with each contract. Each list item is designed to be actionable and includes two key pieces of information: the *Nano Contract ID* and the *Blueprint Name*.
 
-Tapping on a list item navigates the user to the **Nano Contract Transactions** screen.
+Tapping on a list item navigates a user to **Nano Contract Transactions** screen.
 
 ##### Design Bill
 - **Placement**:
 	- The *Nano Contract List* should be prominently displayed within the upper section of the *Main* screen for easy access.
 
 - **Functionality**:
-	- Implement an infinite scrolling view to display a potentially large number of nano contracts.
-	- Make each list item actionable, leading to the **Nano Contract Transactions** screen upon selection.
+	- Implement an infinite scrolling view to displaa potentially large number of nano contracts.
+	- Make each list item actionable, leading to the **[Nano Contract Transactions](#screen-nano-contract-transactions)** screen upon selection.
 	- Each list item must contain *Nano Contract ID* and *Blueprint Name* information.
 
 - **Visibility Conditions**:
-	- The list should only display *Nano Contracts* that the user has registered.
+	- The list should only display *Nano Contracts* registered.
 	- The *Nano Contract ID* can be shortened to fit in the screen
   
 >[!NOTE]
@@ -169,94 +169,94 @@ Tapping on a list item navigates the user to the **Nano Contract Transactions** 
 ### Screen: Nano Contract Transactions
 [screen-nano-contract-transactions]: #screen-nano-contract-transactions
 
-This screen is dedicated to displaying a list of *Nano Contract Transaction* items associated with a selected *Nano Contract*. After a user selects a *Nano Contract* from the *Nano Contract List* component, they are directed to this screen, where all transactions involving the chosen contract are listed.
+This screen is dedicated to displaying a list of transactions associated with the selected *Nano Contract*. After a user selects a *Nano Contract* from the *[Nano Contract List](#component-nano-contract-list)* component, it is directed to this screen. From this screen a user can also inspect Nano Contract's **state** and **unregister** it.
 
-The header section of this screen provides essential state information about the selected *Nano Contract*, including the full *Nano Contract ID*, *Blueprint Name*, and a breakdown of each *Token Balance*. In addition, the header also shows an action to unregister the contract. This header is designed to be both expandable and collapsible: in its expanded form, it reveals all state details, while in its collapsed form, it displays only the *Nano Contract ID* and an icon linking the Nano Contract to its explorer page for a more streamlined view.
+The header section of this screen provides basic information about the selected *Nano Contract* such as *Nano Contract ID*, *Blueprint Name* and *Registered Address*. In addition, the header also shows an action to **unregister** the Nano Contract and an action to see Nano Contract' **state** on explorer website.
 
-The list is encapsulated by the *Nano Contract Transaction List* component.
+The body is encompassed by the *[Nano Contract Transaction List](#component-nano-contract-transaction-list)* component.
+
+Tapping on the **state action** navigates a user to Nano Contract's page on explorer website.
+
+Tapping on the **unregister action** navigates a user back to *[Nano Contract List](#component-nano-contract-list)* component.
 
 ##### Design Bill
 - **Placement**:
-	- Position the header with state information at the top of the screen.
-    - Position the Nano Contract link to the explorer near the Nano Contract ID.
-	- Place the *Nano Contract Transaction List* component below the header.
+	- Position the header with basic information at the top of the screen.
+    - Position the **state action** in the header.
+    - Position the **unregister action** in the header.
+	- Place the *[Nano Contract Transaction List](#component-nano-contract-transaction-list)* component below the header.
 
 - **Functionality**:
-    - The unregister action must navigate the user back to the "Nano Contract List" component.
+    - The **state action** must navigate a user to the Nano Contract's page on explorer website.
+    - The **unregister action** must navigate a user back to the [Nano Contract List](#component-nano-contract-list) component.
 
 - **Visibility Conditions**:
-	- The header must display the full *Nano Contract ID*, *Blueprint Name*, *Token Balances* and the unregister action when expanded.
-	- The header must display the full *Nano Contract ID* and an incon linking to the corresponding explorer page.
-	- The toggle action in the header to show or hide detailed state information must always be visible.
+	- [Suggestion] Use an expandable/collapsable section in the header to present unregister and state actions.
+	- The header must display the full *Nano Contract ID*, *Blueprint Name* and *Registered Address*, and they must be always visible.
 
 ### Component: Nano Contract Transaction List
 [component-nano-contract-transaction-list]: #component-nano-contract-transaction-list
 
-This component displays a list of *Nano Contract Transaction* items. Each item represents a token balance, either a positive token balance (sent) or a negative token balance (received), or the item represents a method execution (called). Therefore there are three types of item: *sent*, *received* and *called*. The list is designed to provide essential transaction information in a clear and concise manner.
+This component displays a list of *Nano Contract Transaction* items. Each item represents a Nano Contract call. Basic informations of the call are presented for each item.
 
-Tapping on an item opens the *Nano Contract Transaction Details* component, providing further information on the selected transaction item.
+Tapping on an item navigates a user to **[Nano Contract Transaction](#screen-nano-contract-transaction)** screen.
 
 ##### Design Bill
 - **Placement**:
-	- The *Nano Contract Transaction List* should be displayed within the body section of the *Nano Contract Transactions* screen.
+	- The *Nano Contract Transaction List* should be displayed within the body section of the *[Nano Contract Transactions](#screen-nano-contract-transactions)* screen.
 
 - **Functionality**:
-	- Each item in the list is actionable, leading to detailed transaction information upon selection.
+	- Each item in the list is actionable and must navigates a user to [Nano Contract Transaction](#screen-nano-contract-transaction) screen.
 	- Implement an infinite scrolling view to display a potentially large number of transactions.
-	- Each transaction item must contain *Description*, *Token Amount*, *Token Symbol*, *Blueprint Method Name* and *Date and Time* information for the item list view.
+	- Each transaction item must contain basic information such as *Transaction ID*, *Blueprint Method Name*, *Date and Time*, and a *Caller Flag*.
+	- A *Caller Flag* can be either a: *Mine Address Caller Flag*, *Registered Address Caller Flag* or *Nano Contract's Oracle Caller Flag*.
 
 - **Visibility Conditions**:
-	- Differentiate item types *sent*, *received*, and *called* using distinct visual indicators.
-	- A *called* item type must not contain *Token Amount* and *Token Symbol* information. 
+	- Differentiate an item with value `initialize` for *Blueprint Method Name*.
+	- Add visual sign for a *Caller Flag*.
 
->[!NOTE]
->Example of item description per type:
->- "You *received* `<Token Symbol>` from `<Blueprint Method Name>`"
->- "You *sent* `<Token Symbol>` to `<Blueprint Method Name>`"
->- "You *called* `<Blueprint Method Name>`"
+### Screen: Nano Contract Transaction
+[screen-nano-contract-transaction]: #screen-nano-contract-transaction
 
-### Component: Nano Contract Transaction Details
+This screen is dedicated to displaying a list of token balance. After a user selects a transaction item from the *[Nano Contract Transaction List](#component-nano-contract-transaction-list)* component, it is redirected to this screen. From this screen a user can also inspect the **transaction details**.
 
-This component provides detailed information for each transaction item type: *sent*, *received*, and *called*.
+The header section of this screen provides basic information about the select transaction such as *Transaction ID*, *Blueprint Method Name*, *Date and Time* and *Caller Address*. In addition, the header also shows an action to see **transaction details** in the explorer website.
 
-For *sent* and *received* transaction items, the header displays *Token Amount* and *Token Symbol*, with an optional label *Amount* underneath them.
+The body is encompassed by the *[Nano Contract Transaction Balance List](#component-nano-contract-transaction-balance-list)* component.
 
-The body section includes:
-- *Token*: full token name
-- *Description*: a text describing the operation balance, like "Sent 10 HTR"
-- *Blueprint Method Name*: blueprint full name
-- *Date and Time*
-- *Transaction ID*
-- *Public Explorer*
-
-For *called* transaction items, the header displays *Blueprint Method Name*.
-
-The body section includes:
-- *Blueprint Method Arguments*
-- *Date and Time*
-- *Transaction ID*
-- *Public Explorer*
-
-Taping on *Public Explorer* navigates the user to the transaction page in the explorer website.
-
-###### Blueprint Method Arguments
-Consist in an ordered list of arguments. An argument is a pair of argument type and value.
+Tapping on the **transaction details action** navigates a user to Nano Contract Transaction's page on explorer website.
 
 ##### Design Bill
 - **Placement**:
-	- Position the header at the top of the component with clear visual separation from the body.
-	- The body should follow immediately after the header, occupying the main portion of the component.
+	- Position the header with basic information at the top of the screen.
+    - Position the **transaction details action** in the header.
+	- Place the *[Nano Contract Transaction Balance List](#component-nano-contract-transaction-balance-list)* component below the header.
 
 - **Functionality**:
-	- The *Public Explorer* action must be visually distinct and recognizable as an actionable item.
-	- It should be easy for the user to dismiss the details component and focus back in the list view.
+    - The **transaction details action** must navigate a user to the Nano Contract Transaction's page on explorer website.
 
 - **Visibility Conditions**:
-	- Display header information of *Token Amount* and *Token Symbol* only for *sent* and *received* transaction items.
-    - Display header information of *Blueprint Method Name* only for *called* transaction items.
-    - Display each argument of *Blueprint Method Arguments* as an item in the body section.
-	- Differentiate item *Public Explorer* using distinct visual indicators.
-  
+	- [Suggestion] Use an expandable/collapsable section in the header to present the **transaction details actions**.
+	- The header must display the full *Transaction ID*, *Blueprint Method Name*, *Date and Time* and *Caller Address*, and they must be always visible.
+
+### Component: Nano Contract Transaction Balance List
+[component-nano-contract-transaction-balance-list]: #component-nano-contract-transaction-balance-list
+
+This component displays a list of token balance items. Each item represents a token balance, either a positive token balance (sent) or a negative token balance (received). Therefore there are two types of items: *sent* and *received*. Basic information of the call are presented for each item.
+
+##### Design Bill
+- **Placement**:
+	- The *Nano Contract Transaction Balance List* should be displayed within the body section of the *[Nano Contract Transaction](#screen-nano-contract-transaction)* screen.
+
+- **Functionality**:
+	- Each item in the list is read only, not actionable.
+	- Implement an infinite scrolling view to display all the token balances.
+	- Each token balance item must contain basic information such as *Token Symbol*, *Token Amount* and *Balance Type Flag*.
+	- A *Balance Type Flag* can be either: *sent* or *received*; representing the balance type.
+
+- **Visibility Conditions**:
+	- Add visual sign for a *Balance Type Flag*.
+
 ## Registering Nano Contract
 
 ```mermaid
@@ -272,7 +272,7 @@ A Nano Contract must be registered refering to an specific user's wallet address
 
 Users arrive at this screen from the *Main* screen to register a new Nano Contract associated with a wallet's address. The screen features a form with an input field for *Nano Contract ID* and another input field for *Wallet's Address* and a *Register* button.
 
-By taping over *Wallet's Address* field the [*Wallet's Address List*](#modal-wallets-address-list) modal opens, containing a list of wallet's address with index and hash information, sorted by index in ascending order.
+Tapping over *Wallet's Address* field the [*Wallet's Address List*](#modal-wallets-address-list) modal opens, containing a list of wallet's address with index and hash information, sorted by index in ascending order.
 
 Upon entering a valid *Nano Contract ID*, selecting an available *Wallet's Address* and tapping *Register*, users receive immediate feedback based on the action's outcome: loading, success, or failure.
 
@@ -299,7 +299,7 @@ Upon successful registration, users are redirected to the *Main* screen  the wit
 
 This modal presents a basic list of available wallet's addresses, containing the following information: index and address. The list is made of all used transactions plus the next unused one, and the items are sorted by index in ascending order.
 
-The modal is activated by taping over *Wallet's Address* field on [*Nano Contract Registration*](#screen-nano-contract-registration) form.
+The modal is activated by tapping over *Wallet's Address* field on [*Nano Contract Registration*](#screen-nano-contract-registration) form.
 
 By typing on an item a user is selecting the address to register with the Nano Contract and updating the form's field.
 
