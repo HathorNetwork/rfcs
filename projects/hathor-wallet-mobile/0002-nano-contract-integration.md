@@ -12,7 +12,7 @@ This design aims to provides for users the ability to read Nano Contract transac
 # Motivation
 [motivation]: #motivation
 
-The user gains the ability to consult and interact with Nano Contract in a portable way, using the wallet-mobile, but also gains the ability to extend its usage by connecting to dapps using Wallet Connect.
+Users gains the ability to consult and interact with Nano Contract in a portable way, using the wallet-mobile, but also gains the ability to extend its usage by connecting to dapps using Wallet Connect.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -24,7 +24,7 @@ In this document, you will find sections titled **Design Bill** that outline req
 ## Unleash
 [unleash]: #unleash
 
-First, we should enable the user's device in the `nano-contract.rollout` feature flag on Unleash. For this feature flag we use the default variant with 3 strategies:
+First, we should enable user's device in the `nano-contract.rollout` feature flag on Unleash. For this feature flag we use the default variant with 3 strategies:
 1. UserIds: this first strategy is dedicated for internal testers
 2. UserIds: this second strategy is dedicated for external testers
 3. Gradual rollout: this third strategy is dedicated to the public
@@ -34,7 +34,7 @@ Each strategy [must](https://www.rfc-editor.org/rfc/rfc2119) support the followi
 - `network`: `mainnet`, `testnet`, `privatenet`
 - `stage`: `mainnet`, `testnet`
 
-Second, we should enable the user's device in the `wallet-connect-mobile.rollout` feature flag on Unleash.
+Second, we should enable user's device in the `wallet-connect-mobile.rollout` feature flag on Unleash.
 
 ## Reading Nano Contract Transactions
 
@@ -53,7 +53,7 @@ Each list component offers a registration option:
 - "Register Token"
 - "Register Nano Contract"
 
-Selecting "Register Nano Contract" option navigates the user to the **[Nano Contract Registration](#screen-nano-contract-registration)** screen.
+Selecting "Register Nano Contract" option navigates a user to the **[Nano Contract Registration](#screen-nano-contract-registration)** screen.
 
 ##### Design Bill
 - **Placement**:
@@ -62,8 +62,8 @@ Selecting "Register Nano Contract" option navigates the user to the **[Nano Cont
   
 - **Functionality**:
 	- The *Nano Contract List* display option should reveal all registered nano contracts in the wallet when selected.
-	- The "Register Token" button navigates the user to the Token Registration screen.
-	- The "Register Nano Contract" button navigates the user to the **[Nano Contract Registration](#screen-nano-contract-registration)** screen for adding a new Nano Contract.
+	- The "Register Token" button navigates a user to the Token Registration screen.
+	- The "Register Nano Contract" button navigates a user to the **[Nano Contract Registration](#screen-nano-contract-registration)** screen for adding a new Nano Contract.
   
 - **Visibility Conditions**:
 	- The *Nano Contract List* display option should only be visible and active for users allowed to use the nano-contract feature.
@@ -72,13 +72,13 @@ Selecting "Register Nano Contract" option navigates the user to the **[Nano Cont
 - **Error Management**:
 	- An internal error can happen during the wallet loading process. In this
       situation a user has no other option than try again later.
-    - [:pushpin: Suggestion] After 3 failing attempts the error feedback can ask the user to send the
+    - [:pushpin: Suggestion] After 3 failing attempts the error feedback can ask users to send the
       error to the team.
 
 ### Component: Token List
 [component-token-list]: #component-token-list
 
-This component displays a list of registered *Tokens* on the *Dashboard* screen, allowing users to select and interact with each token. By clicking on a token item the user is navigated to the *Token Transactions* component.
+This component displays a list of registered *Tokens* on the *Dashboard* screen, allowing users to select and interact with each token. By clicking on a token item a user is navigated to the *Token Transactions* component.
 
 >[!NOTE]
 >The actual implementation name for the "Token List" component is `TokenSelect`, which is found in the *Dashboard Screen*. It is more convenient to call "Token List" in this design because the component presents a list of tokens, which can be selected, but the selection is just a possible action, and doesn't convey the shape of component when rendered.
@@ -114,15 +114,15 @@ The body section includes:
 - *Description*: a text describing the operation, like "Sent HTR" or "Received HTR"
 - *Date and Time*
 - *ID*: transaction ID
-- *Public Explorer*: action item that navigates the user to the explorer
+- *Public Explorer*: action item that navigates a user to the explorer
 - *Blueprint Method Name*
 - *Nano Contract ID*
 - *Nano Contract Caller*: the address used to sign the transaction
-- *Nano Contract*: action item that navigates the user to the [Nano Contract Transactions](#screen-nano-contract-transactions) screen.
+- *Nano Contract*: action item that navigates a user to the [Nano Contract Transactions](#screen-nano-contract-transactions) screen.
 
-Tapping on *Public Explorer* navigates the user to the transaction page in the explorer website.
+Tapping on *Public Explorer* navigates a user to the transaction page in the explorer website.
 
-Tapping on *Nano Contract* navigates the user to the [Nano Contract Transactions](#screen-nano-contract-transactions) screen.
+Tapping on *Nano Contract* navigates a user to the [Nano Contract Transactions](#screen-nano-contract-transactions) screen.
 
 >[!NOTE]
 >The actual implementation name for the "Token Transaction Details" component is `TxDetailsModal`, which is found in the *Main Screen*. It is more convenient to call "Token Transaction Details" in this design to keep naming consistency.
@@ -135,7 +135,7 @@ Tapping on *Nano Contract* navigates the user to the [Nano Contract Transactions
 - **Functionality**:
 	- The *Public Explorer* action must be visually distinct and recognizable as an actionable item.
 	- The *Nano Contract* action must be visually distinct and recognizable as an actionable item.
-	- It should be easy for the user to dismiss the details component and focus back in the list view.
+	- It should be easy for users to dismiss the details component and focus back in the list view.
 
 - **Visibility Conditions**:
 	- Display header information of *Token Amount* and *Token Symbol* for all transaction types.
@@ -312,12 +312,12 @@ By typing on an item a user is selecting the address to register with the Nano C
 	- Inform the address's index alongside the address
 
 - **Visibility Conditions**:
-	- Ensure the modal is visible whenever the user taps on *Wallet's Address* field on [*Nano Contract Registration*](#screen-nano-contract-registration) form.
+	- Ensure the modal is visible whenever a user taps on *Wallet's Address* field on [*Nano Contract Registration*](#screen-nano-contract-registration) form.
 	- Show a visual sign for the selected address if a user opens the modal again after a previous selection
 
 ## Wallet Connect Interaction
 
-The Wallet Connect has a different *modus operandi*, it requires the user to interact with the dapp by modals.
+The Wallet Connect has a different *modus operandi*, it requires a user to interact with the dapp by modals.
 
 We may want to make the Wallet Connect requests from dapps asynchronous with push notification, for this read the alternative [Push notification for wallet connect requests](#push-notification-wallet-connect-requests).
 
@@ -329,12 +329,12 @@ graph LR
 ### Modal: Nano Contract Transaction Request
 [modal-nano-contract-transaction-request]: #modal-nano-contract-transaction-request
 
-This modal presents detailed information for a *Nano Contract Transaction Request* from dapp, allowing the user to approve or reject the transaction. It activates when a dapp makes a `htr_createNcTx` request to the wallet's RPC.
+This modal presents detailed information for a *Nano Contract Transaction Request* from dapp, allowing a user to approve or reject the transaction. It activates when a dapp makes a `htr_createNcTx` request to the wallet's RPC.
 
 The modal presents detailed information containing *Blueprint ID*, *Blueprint Method*, *Caller*, *Nano Contract ID* (if applicable), *Action List*, and *Argument List*. An *Action List* can be either types *deposit* or *withdrawal*. Both the lists can be empty.
 
 >[!WARNING]
->We may need warning the user about the risk to sign any request from a dapp and orient the user to reject the transaction if it is not expected or incomprehensible.
+>We may need warning users about the risk to sign any request from a dapp and orient users to reject the transaction if it is not expected or incomprehensible.
 
 >[!WARNING]
 >Another security measure we may need for the modal is a confirmation for action before show up the "Approve" and "Reject" buttons, for instance a tap on a text "Tap to take action". This way we avoid an action by mistake. We may also want to apply other strategies to improve security such as: set the "Reject" button as primary button; change the order of the buttons.
@@ -344,7 +344,7 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 	- The modal must render centrally on top of the current screen, ensuring clear visibility and focus.
 	
 - **Functionality**:
-	- [Suggestion] Include a message warning the user about the operation risks, like "You may at risk signing dapp transaction requests, reject if it is unexpected or you can't understand the transaction details."
+	- [Suggestion] Include a message warning users about the operation risks, like "You may at risk signing dapp transaction requests, reject if it is unexpected or you can't understand the transaction details."
     - [Suggestion] Include a "Read more" link that link to a document explaining the operation risks with more details.
 	- Include detailed transaction information for user review:
 		- *Blueprint ID*, *Blueprint Method*, *Caller*, *Nano Contract ID* (if applicable), *Action List*, and *Argument List*.
@@ -532,12 +532,12 @@ We shouldn't load Nano Contract Balance because Nano Contracts can be much diffe
 ## [Alternative] Component: Nano Contract Transaction List
 [alternative-component-nano-contract-transaction-list]: #alternative-component-nano-contract-transaction-list
 
-This alternative displays a list of transaction items in which each item represents the transaction as whole, not only part of it segregated by type. By clicking on the item the user is presented with all the transaction details, including each token balance involved.
+This alternative displays a list of transaction items in which each item represents the transaction as whole, not only part of it segregated by type. By clicking on the item a user is presented with all the transaction details, including each token balance involved.
 
 ## Feature onboarding
 [feature-onboarding]: #feature-onboarding
 
-Presents an onboarding with 3 or 4 views explaining the Nano Contract feature, its functionalities and how to use. The onboard can appears after the toggle button activation and in the end ask the user to proceed with wallet reloading.
+Presents an onboarding with 3 or 4 views explaining the Nano Contract feature, its functionalities and how to use. The onboard can appears after the toggle button activation and in the end asks user to proceed with wallet reloading.
 
 
 ## Basic data gathering and push notification suport
@@ -548,13 +548,13 @@ By enabling the Nano Contract we can also register the wallet in the wallet-serv
 ## Push notification for wallet connect requests
 [push-notification-wallet-connect-requests]: #push-notification-wallet-connect-requests
 
-A request from Wallet Connect dapp triggers a modal to show up over any screen no matter what. Sometimes this behavior is not possible, for instance when wallet is locked, other times this behavior is not convenient because it interrupts the user, or the wallet is not execution at all. The push notification detaches the Wallet Connect request from the immediate interaction and frees the user to choose when to interact with the dapp, in addition it allows the user to know when a dapp has an update even when the app is quit.
+A request from Wallet Connect dapp triggers a modal to show up over any screen no matter what. Sometimes this behavior is not possible, for instance when wallet is locked, other times this behavior is not convenient because it interrupts users, or the wallet is not execution at all. The push notification detaches the Wallet Connect request from the immediate interaction and frees users to choose when to interact with the dapp, in addition it allows users to know when a dapp has an update even when the app is quit.
 
 ## Specialized blueprint interface
 
 We can provide blueprint calls for known blueprints in the wallet. This way we can provide a better interface for users and avoid reliance on third-party providers through wallet-connect.
 
-We already mapped the necessity to build a general interface to interact with Blueprints and Nano Contracts, however, this general interface will require more knowledge from the user.
+We already mapped a necessity to build a general interface to interact with Blueprints and Nano Contracts, however, this general interface will require more knowledge from users.
 
 # Prior art
 [prior-art]: #prior-art
