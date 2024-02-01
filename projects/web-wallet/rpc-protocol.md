@@ -40,6 +40,8 @@ inputs
 3. `changeAddress` - (Optional) Address to send the change
 4. `push_tx` - (Defaults to `true`) Whether the client should push the transaction to a
    fullnode
+5. `network` - The network this dApp is expecting the client to be. The request
+   will fail if the client's network is different from this params value
 
 **Example Requests:**
 
@@ -49,6 +51,7 @@ inputs
   "jsonrpc": "2.0",
   "method": "htr_sendTx",
   "params": {
+    "network": "mainnet",
   	"outputs": [{
   	  "address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
   	  "value": 100,
@@ -144,6 +147,8 @@ create a new token in the blockchain
 10. `melt_authority_address` - (Optional) Address to send the melt authority output
 11. `allow_external_melt_authority_address` - (Defaults to false) Flag indicating if the melt authority address is allowed to be from another wallet.
 12. `push_tx` - (Defaults to `true`) Whether the client should push the transaction to the connected fullnode
+13. `network` - The network this dApp is expecting the client to be. The request
+   will fail if the client's network is different from this params value
 
 **Example Request:**
 
@@ -153,14 +158,15 @@ create a new token in the blockchain
   "jsonrpc": "2.0",
   "method": "htr_signWithAddress",
   "params": {
-	"name": "Bathor",
-	"symbol": "BTR",
-	"amount": 500,
-	"address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
-	"create_mint": false,
-	"mint_authority_address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
-	"create_melt": false,
-	"melt_authority_address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c"
+    "network": "mainnet",
+    "name": "Bathor",
+    "symbol": "BTR",
+    "amount": 500,
+    "address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
+    "create_mint": false,
+    "mint_authority_address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
+    "create_melt": false,
+    "melt_authority_address": "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c"
   }
 }
 ```
@@ -189,6 +195,8 @@ The `htr_getUtxos` method will search for `utxos`  given a set of filters
 5. `amountBiggerThan` - (Optional) Minimum limit of `utxo` amount to filter the list. We will only return `utxos` that have the `amount` higher than this value. Integer representation of decimals, i.e. 100 = 1.00.
 6. `maximumAmount` - (Optional) Limit the maximum total amount to return summing all utxos. Integer representation of decimals, i.e. 100 = 1.00.
 7. `onlyAvailableUtxos` - (Defaults to true) Get only available `utxos`, ignoring locked ones.
+8. `network` - The network this dApp is expecting the client to be. The request
+   will fail if the client's network is different from this params value
 
 **Example Request:**
 
@@ -198,9 +206,10 @@ The `htr_getUtxos` method will search for `utxos`  given a set of filters
   "jsonrpc": "2.0",
   "method": "htr_getUtxos",
   "params": {
-	"maxUtxos": 50,
-	"token": "BTR",
-	"amount": 1
+    "network": "mainnet",
+    "maxUtxos": 50,
+    "token": "BTR",
+    "amount": 1
   }
 }
 ```
@@ -236,6 +245,8 @@ This message will be prefixed with `Hathor Signed Message`
 
 1. `message` - String containing a message to be signed
 2. `addressIndex` - Address index to sign the message with
+3. `network` - The network this dApp is expecting the client to be. The request
+   will fail if the client's network is different from this params value
 
 **Request:**
 
@@ -245,6 +256,7 @@ This message will be prefixed with `Hathor Signed Message`
   "jsonrpc": "2.0",
   "method": "htr_signWithAddress",
   "params": {
+    "network": "mainnet",
     "message": "sign-me",
     "address": 5
   }
@@ -274,6 +286,8 @@ The `htr_getBalance` method fetches the balance for a given token.
    for. If this is specified, the response will filter the balances for only
    this subset of addresses and include an object containing the
    address as a key and the balance for it as the value
+3. `network` - The network this dApp is expecting the client to be. The request
+   will fail if the client's network is different from this params value
 
 **Request:**
 
@@ -283,6 +297,7 @@ The `htr_getBalance` method fetches the balance for a given token.
   "jsonrpc": "2.0",
   "method": "htr_getBalance",
   "params": {
+    "network": "mainnet",
     "tokens": ["000023a025d513c5c75410e771c297b23edc88b8fac7da1eff6fdc81e628c20d", "00"],
     "address_indexes": [0, 1]
   }
@@ -375,6 +390,8 @@ This method allows the dApps to request an address.
 2. `index` number (Optional if type is not `index`) - The address index
 3. `full_path` string (Optional if type is not `index`) - The full path of the
    requested address
+4. `network` - The network this dApp is expecting the client to be. The request
+   will fail if the client's network is different from this params value
 
 **Request:**
 
@@ -384,7 +401,8 @@ This method allows the dApps to request an address.
   "jsonrpc": "2.0",
   "method": "htr_getAddress",
   "params": {
-    "type": "client"
+    "type": "client",
+    "network": "mainnet"
   }
 }
 ```
@@ -409,6 +427,8 @@ This method allows the dApp to mine and push an already signed transaction hex
 **Parameters**
 
 1. `txHex` string - The transaction hex to push
+2. `network` - The network this dApp is expecting the client to be. The request
+   will fail if the client's network is different from this params value
 
 **Request:**
 
@@ -418,6 +438,7 @@ This method allows the dApp to mine and push an already signed transaction hex
   "jsonrpc": "2.0",
   "method": "htr_pushTxHex",
   "params": {
+    "network": "mainnet",
     "txHex": "0001000102000003bd13f7b4873cec5f802713ac648f0fe7b8fe0805f56b6c9a57ef9e35f301006a473045022100948a55e2...2085d82b64c6fdf188ac40351661c876849b65bbaf3b020000030fadee7270cb1d229e5f80ea9bb4bdd99d9bc2db065fde85816e3723f7000000013d3fdce1203c6a390fed683cbf98ee221eeaf4e5d2461002eb3df14d25562800"
   }
 }
@@ -473,6 +494,7 @@ We should follow the [JSON-RPC](https://www.jsonrpc.org/specification#error_obje
 | -32051     | REQUEST_REJECTED | Request rejected by the user |
 | -32052     | MISSING_FUNDS | Missing funds to fulfill transaction |
 | -32053     | INVALID_PARAMETERS | Invalid parameters |
+| -32054     | INVALID_NETWORK | The client's network is not the same as the dApp |
 | -32099     | UNEXPECTED_FAILURE | Unexpected failure |
 
 # 3. Guide-level Explanation
