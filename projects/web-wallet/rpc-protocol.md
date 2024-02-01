@@ -270,8 +270,9 @@ The `htr_getBalance` method fetches the balance for a given token.
 **Parameters**
 
 1. `token` - (Defaults to `HTR`) May be specified for a token other than `HTR`
-2. `address_indexes` - (Optional) A list of address indexes to get the balance
-   for. If this is specified, the response will include an object containing the
+2. `address_indexes` - (Optional, Max: 30) A list of address indexes to get the balance
+   for. If this is specified, the response will filter the balances for only
+   this subset of addresses and include an object containing the
    address as a key and the balance for it as the value
 
 **Request:**
@@ -282,7 +283,7 @@ The `htr_getBalance` method fetches the balance for a given token.
   "jsonrpc": "2.0",
   "method": "htr_getBalance",
   "params": {
-    "token": "000023a025d513c5c75410e771c297b23edc88b8fac7da1eff6fdc81e628c20d",
+    "tokens": ["000023a025d513c5c75410e771c297b23edc88b8fac7da1eff6fdc81e628c20d", "00"],
     "address_indexes": [0, 1]
   }
 }
@@ -294,16 +295,37 @@ The `htr_getBalance` method fetches the balance for a given token.
   "id": 4,
   "jsonrpc": "2.0",
   "result": {
-    "available": 500,
-    "locked": 0,
-    "address_balances": {
-      "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c": {
-        index: 0,
-        balance: 150,
-      },
-      "H1XLm1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c": {
-        index: 1,
-        balance: 350,
+    "00": {
+      "available": 500,
+      "locked": 0,
+      "address_balances": {
+        "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c": {
+          "index": 0,
+          "balances": {
+            "available": 150,
+            "locked": 0,
+          }
+        },
+        "H1XLm1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c": {
+          "index": 1,
+          "balances": {
+            "available": 350,
+            "locked": 0,
+          }
+        }
+      }
+    },
+    "000023a025d513c5c75410e771c297b23edc88b8fac7da1eff6fdc81e628c20d": {
+      "available": 15,
+      "locked": 0,
+      "address_balances": {
+        "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c": {
+          "index": 0,
+          "balances": {
+            "available": 350,
+            "locked": 0,
+          }
+        }
       }
     }
   }
