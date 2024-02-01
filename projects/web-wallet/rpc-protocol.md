@@ -29,9 +29,9 @@ The `htr_sendTx` method creates a new transaction based on parameters. It will s
   1. `hash` - Hash of the transaction being spent in this input. Used if not type query
   1. `index` - Index of the transction being spent in this input. Used if not type query
   1. `max_utxos` - Maximum number of utxos to filter in the query. Optional query parameter when using type query
-  1. `token` - Token uid to filter utxos in the query. Optional query parameter when using type query 
-  1. `filter_address` - Address to filter utxos in the query. Optional query parameter when using type query 
-  1. `amount_smaller_than` - Filter only utxos with values smaller than this. Optional query parameter when using type query 
+  1. `token` - Token uid to filter utxos in the query. Optional query parameter when using type query
+  1. `filter_address` - Address to filter utxos in the query. Optional query parameter when using type query
+  1. `amount_smaller_than` - Filter only utxos with values smaller than this. Optional query parameter when using type query
   1. `amount_bigger_than` - Filter only utxos with value bigger than this. Optional query parameter when using type query.
 3. `changeAddress` - (Optional) Address to send the change
 
@@ -122,7 +122,7 @@ The `htr_sendTx` method creates a new transaction based on parameters. It will s
 
 ### 2.1.2 `htr_createToken`
 
-The `htr_createToken` method creates a new token transaction based on parameters 
+The `htr_createToken` method creates a new token transaction based on parameters
 
 **Parameters**
 
@@ -133,7 +133,7 @@ The `htr_createToken` method creates a new token transaction based on parameters
 5. `change_address` - (Optional) Address to send the change amount
 6. `create_mint` - (Defaults to true) If the wallet should create a mint authority for the newly created token
 7. `mint_authority_address` - (Optional) Address to send the mint authority output
-8. `allow_external_mint_authority_address` - (Defaults to false) Flag indicating if the mint authority address is allowed to be from another wallet. 
+8. `allow_external_mint_authority_address` - (Defaults to false) Flag indicating if the mint authority address is allowed to be from another wallet.
 9. `create_melt` - (Defaults to true) If the wallet should create a melt authority for the newly created token
 10. `melt_authority_address` - (Optional) Address to send the melt authority output
 11. `allow_external_melt_authority_address` - (Defaults to false) Flag indicating if the melt authority address is allowed to be from another wallet.
@@ -352,8 +352,8 @@ We should follow the [JSON-RPC](https://www.jsonrpc.org/specification#error_obje
 | -32050     | WALLET_NOT_READY | Wallet is not ready yet              |
 | -32051     | REQUEST_REJECTED | Request rejected by the user |
 | -32052     | MISSING_FUNDS | Missing funds to fulfill transaction |
-| -32053 | INVALID_PARAMETERS | Invalid parameters |
-| -32099     | GENERIC_FAILURE | Generic failure |
+| -32053     | INVALID_PARAMETERS | Invalid parameters |
+| -32099     | UNEXPECTED_FAILURE | Unexpected failure |
 
 # 3. Guide-level Explanation
 
