@@ -14,7 +14,11 @@ These methods are going to be implemented in the wallet, and exposed to dApps us
 
 ### 2.1.1 `htr_sendTx`
 
-The `htr_sendTx` method creates a new transaction based on parameters. It will select the `utxos` automatically, mine and send the transaction
+The `htr_sendTx` method creates a new transaction based on parameters.
+
+If `push_tx` is enabled, it will select the `utxos` automatically, mine and send
+the transaction, otherwise, it will just return the transaction with signed
+inputs
 
 **Parameters**
 
@@ -34,7 +38,8 @@ The `htr_sendTx` method creates a new transaction based on parameters. It will s
     7. `amount_smaller_than` - Filter only utxos with values smaller than this. Optional query parameter when using type query
     8. `amount_bigger_than` - Filter only utxos with value bigger than this. Optional query parameter when using type query.
 3. `changeAddress` - (Optional) Address to send the change
-
+4. `push_tx` - (Defaults to `true`) Whether the client should push the transaction to a
+   fullnode
 
 **Example Requests:**
 
@@ -122,7 +127,8 @@ The `htr_sendTx` method creates a new transaction based on parameters. It will s
 
 ### 2.1.2 `htr_createToken`
 
-The `htr_createToken` method creates a new token transaction based on parameters
+The `htr_createToken` method creates a new TokenCreationTransaction which will
+create a new token in the blockchain
 
 **Parameters**
 
@@ -137,6 +143,7 @@ The `htr_createToken` method creates a new token transaction based on parameters
 9. `create_melt` - (Defaults to true) If the wallet should create a melt authority for the newly created token
 10. `melt_authority_address` - (Optional) Address to send the melt authority output
 11. `allow_external_melt_authority_address` - (Defaults to false) Flag indicating if the melt authority address is allowed to be from another wallet.
+12. `push_tx` - (Defaults to `true`) Whether the client should push the transaction to the connected fullnode
 
 **Example Request:**
 
@@ -168,7 +175,6 @@ The `htr_createToken` method creates a new token transaction based on parameters
   "amount": 500
 }
 ```
-
 
 ### 2.1.3 `htr_getUtxos`
 
@@ -354,6 +360,67 @@ This method allows the dApps to request an address.
     "index": 5,
     "full_path": "m/44'/280'/0'/0/5"
   }
+}
+```
+
+### 2.1.8 `htr_pushTxHex`
+
+This method allows the dApp to mine and push an already signed transaction hex
+
+**Parameters**
+
+1. `txHex` string - The transaction hex to push
+
+**Request:**
+
+```json
+{
+  "id": 4,
+  "jsonrpc": "2.0",
+  "method": "htr_pushTxHex",
+  "params": {
+    "txHex": "0001000102000003bd13f7b4873cec5f802713ac648f0fe7b8fe0805f56b6c9a57ef9e35f301006a473045022100948a55e2...2085d82b64c6fdf188ac40351661c876849b65bbaf3b020000030fadee7270cb1d229e5f80ea9bb4bdd99d9bc2db065fde85816e3723f7000000013d3fdce1203c6a390fed683cbf98ee221eeaf4e5d2461002eb3df14d25562800"
+  }
+}
+```
+**Response:**
+
+```json
+{
+  "hash": "00000000059dfb65633acacc402c881b128cc7f5c04b6cea537ea2136f1b97fb",
+  "nonce": 2455281664,
+  "timestamp": 1594955941,
+  "version": 1,
+  "weight": 18.11897634891149,
+  "parents": [
+    "00000000556bbfee6d37cc099a17747b06f48ca3d9bf4af85c707aa95ad04b3f",
+    "00000000e2e3e304e364edebff1c04c95cc9ef282463295f6e417b85fec361dd"
+  ],
+  "inputs": [
+    {
+      "tx_id": "00000000caaa37ab729805b91af2de8174e3ef24410f4effc4ffda3b610eae65",
+      "index": 1,
+      "data": "RjBEAiAYR8jc+zqY596QyMp+K3Eag3kQB5aXdfYja19Fa17u0wIgCdhBQpjlBiAawP/9WRAqAzW85CJlBpzq+YVhUALg8IUhAueFQuEkAo+s2m7nj/hnh0nyphcUuxa2LoRBjOsEOHRQ"
+    },
+    {
+      "tx_id": "00000000caaa37ab729805b91af2de8174e3ef24410f4effc4ffda3b610eae65",
+      "index": 2,
+      "data": "RzBFAiEAofVXnCKNCEu4GRk7j+wHpQM6qmezRcfxHCe/PcUdbegCIE2nip27ZQtkpkEgNEhycqHM4CkLYMLVUgskphYsd/M9IQLHG6YJxXifQ6eMxPHbINFEJAUvrzKWe9V7AXXW4iywjg=="
+    }
+  ],
+  "outputs": [
+    {
+      "value": 100,
+      "token_data": 0,
+      "script": "dqkUqdK8VisGSJuNItIBRYFfSHfHjPeIrA=="
+    },
+    {
+      "value": 200,
+      "token_data": 0,
+      "script": "dqkUISAnpOn9Vo269QBvOfBeWJTLx82IrA=="
+    }
+  ],
+  "tokens": []
 }
 ```
 
