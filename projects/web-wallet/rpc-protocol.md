@@ -266,7 +266,7 @@ This message will be prefixed with `Hathor Signed Message`
 
 ```json
 {
-  "message": "sign-me",
+  "message": "Hathor Signed Message:\nsign-me",
   "signature": "H2/QA48wJhvbKJH6hWXUJPHK5kUTwx4XAxuZGFzUeSPwLeFBv206lOs8ECHMTV/KilGbFP1p5e52mMGTUDFT7WM="
 }
 ```
