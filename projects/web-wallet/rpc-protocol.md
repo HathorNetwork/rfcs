@@ -230,6 +230,8 @@ The `htr_getUtxos` method will search for `utxos`  given a set of filters
 
 The `htr_signWithAddress` method requests a signed message using an address' private key that can be verified.
 
+This message will be prefixed with `Hathor Signed Message`
+
 **Parameters**
 
 1. `message` - String containing a message to be signed
