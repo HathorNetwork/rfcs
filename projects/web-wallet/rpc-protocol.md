@@ -254,7 +254,8 @@ This message will be prefixed with `Hathor Signed Message`
 
 ```json
 {
-  "message": "H2/QA48wJhvbKJH6hWXUJPHK5kUTwx4XAxuZGFzUeSPwLeFBv206lOs8ECHMTV/KilGbFP1p5e52mMGTUDFT7WM="
+  "message": "sign-me",
+  "signature": "H2/QA48wJhvbKJH6hWXUJPHK5kUTwx4XAxuZGFzUeSPwLeFBv206lOs8ECHMTV/KilGbFP1p5e52mMGTUDFT7WM="
 }
 ```
 
