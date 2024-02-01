@@ -19,20 +19,20 @@ The `htr_sendTx` method creates a new transaction based on parameters. It will s
 **Parameters**
 
 1. `outputs` - An array of outputs
-	1. `address` - Destination address of the output. Required if P2PKH or P2SH
-	2. `value` - (Required if P2PKH or P2SH) The value parameter must be an integer with the value in cents, i.e., 123 means 1.23 HTR.
-	3. `token` - (Defaults to `HTR`) Token id of the output.
-	4. `type` - (Required if data script output) Type of output script.
-	5. `data` - (Required if data script output) Data string of the data script output.
+    1. `address` - Destination address of the output. Required if P2PKH or P2SH
+    2. `value` - (Required if P2PKH or P2SH) The value parameter must be an integer with the value in cents, i.e., 123 means 1.23 HTR.
+    3. `token` - (Defaults to `HTR`) Token id of the output.
+    4. `type` - (Required if data script output) Type of output script.
+    5. `data` - (Required if data script output) Data string of the data script output.
 2. `inputs` - (Optional) An array of inputs to create the transaction
-  1. `type` - Type of input object. Can be either 'query' which is the default or 'specific'
-  2. `hash` - Hash of the transaction being spent in this input. Required if not type query
-  3. `index` - Index of the transction being spent in this input. Required if not type query
-  4. `max_utxos` - Maximum number of utxos to filter in the query. Optional query parameter when using type query
-  5. `token` - Token uid to filter utxos in the query. Optional query parameter when using type query
-  6. `filter_address` - Address to filter utxos in the query. Optional query parameter when using type query
-  7. `amount_smaller_than` - Filter only utxos with values smaller than this. Optional query parameter when using type query
-  8. `amount_bigger_than` - Filter only utxos with value bigger than this. Optional query parameter when using type query.
+    1. `type` - Type of input object. Can be either 'query' which is the default or 'specific'
+    2. `hash` - Hash of the transaction being spent in this input. Required if not type query
+    3. `index` - Index of the transction being spent in this input. Required if not type query
+    4. `max_utxos` - Maximum number of utxos to filter in the query. Optional query parameter when using type query
+    5. `token` - Token uid to filter utxos in the query. Optional query parameter when using type query
+    6. `filter_address` - Address to filter utxos in the query. Optional query parameter when using type query
+    7. `amount_smaller_than` - Filter only utxos with values smaller than this. Optional query parameter when using type query
+    8. `amount_bigger_than` - Filter only utxos with value bigger than this. Optional query parameter when using type query.
 3. `changeAddress` - (Optional) Address to send the change
 
 
