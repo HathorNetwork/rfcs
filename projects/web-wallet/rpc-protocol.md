@@ -317,10 +317,19 @@ This method is used to allow the dApp to validate that it's running in the same 
 
 ### 2.1.7 `htr_getAddress`
 
-This method allows the dApps to request an address. The wallet implementation
-should decide the address to return
-
+This method allows the dApps to request an address.
 **Parameters**
+
+1. `type` string (Defaults to `client`) - Can be one of:
+
+`first_empty` should return the first empty address
+`full_path` should return the address with the path sent as a parameter
+`index` should return the address at the requested index
+`client` should allow the client to decide which `address` to return
+
+2. `index` number (Optional if type is not `index`) - The address index
+3. `full_path` string (Optional if type is not `index`) - The full path of the
+   requested address
 
 **Request:**
 
@@ -328,7 +337,10 @@ should decide the address to return
 {
   "id": 4,
   "jsonrpc": "2.0",
-  "method": "htr_getAddress"
+  "method": "htr_getAddress",
+  "params": {
+    "type": "client"
+  }
 }
 ```
 **Response:**
@@ -338,7 +350,9 @@ should decide the address to return
   "id": 4,
   "jsonrpc": "2.0",
   "result": {
-    "address": "HNnK9wgUVL6Cjzs1K3jpoGgqQTXCqpAnW8"
+    "address": "HNnK9wgUVL6Cjzs1K3jpoGgqQTXCqpAnW8",
+    "index": 5,
+    "full_path": "m/44'/280'/0'/0/5"
   }
 }
 ```
