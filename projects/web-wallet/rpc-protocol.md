@@ -26,8 +26,8 @@ The `htr_sendTx` method creates a new transaction based on parameters. It will s
 	5. `data` - (Required if data script output) Data string of the data script output.
 2. `inputs` - (Optional) An array of inputs to create the transaction
   1. `type` - Type of input object. Can be either 'query' which is the default or 'specific'
-  2. `hash` - Hash of the transaction being spent in this input. Used if not type query
-  3. `index` - Index of the transction being spent in this input. Used if not type query
+  2. `hash` - Hash of the transaction being spent in this input. Required if not type query
+  3. `index` - Index of the transction being spent in this input. Required if not type query
   4. `max_utxos` - Maximum number of utxos to filter in the query. Optional query parameter when using type query
   5. `token` - Token uid to filter utxos in the query. Optional query parameter when using type query
   6. `filter_address` - Address to filter utxos in the query. Optional query parameter when using type query
