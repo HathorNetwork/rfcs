@@ -59,12 +59,12 @@ Selecting "Register Nano Contract" option navigates a user to the **[Nano Contra
 - **Placement**:
 	- Position the option to display the *Nano Contract List* in a prominent area of the Main screen for easy accessibility.
 	- Place the action buttons "Register Token" and "Register Nano Contract" at the same context of their respective lists for clear visibility and access.
-  
+
 - **Functionality**:
 	- The *Nano Contract List* display option should reveal all registered nano contracts in the wallet when selected.
 	- The "Register Token" button navigates a user to the Token Registration screen.
 	- The "Register Nano Contract" button navigates a user to the **[Nano Contract Registration](#screen-nano-contract-registration)** screen for adding a new Nano Contract.
-  
+
 - **Visibility Conditions**:
 	- The *Nano Contract List* display option should only be visible and active for users allowed to use the nano-contract feature.
 	- The "Register Nano Contract" button should be visible only when the *Nano Contract List* is being displayed.
@@ -162,7 +162,7 @@ Tapping on a list item navigates a user to **Nano Contract Transactions** screen
 - **Visibility Conditions**:
 	- The list should only display *Nano Contracts* registered.
 	- The *Nano Contract ID* can be shortened to fit in the screen
-  
+
 >[!NOTE]
 >To accommodate the *Nano Contract ID* on mobile screens, it is presented in a shortened format, displaying the first 7 and last 7 characters, e.g., `000001e...3c9641d`. The full ID can be viewed on tap or hover.
 
@@ -272,7 +272,7 @@ A Nano Contract must be registered refering to an specific user's wallet address
 
 Users arrive at this screen from the *Main* screen to register a new Nano Contract associated with a wallet's address. The screen features a form with an input field for *Nano Contract ID* and another input field for *Wallet's Address* and a *Register* button.
 
-Tapping over *Wallet's Address* field the [*Wallet's Address List*](#modal-wallets-address-list) modal opens, containing a list of wallet's address with index and hash information, sorted by index in ascending order.
+The first wallet's address fills the *Wallet's Address* field by default. A user can change the address by tapping over *Wallet's Address* field that opens [*Wallet's Address List*](#modal-wallets-address-list) modal, containing a list of wallet's address with index and hash information, sorted by index in ascending order.
 
 Upon entering a valid *Nano Contract ID*, selecting an available *Wallet's Address* and tapping *Register*, users receive immediate feedback based on the action's outcome: loading, success, or failure.
 
@@ -306,7 +306,7 @@ By typing on an item a user is selecting the address to register with the Nano C
 ##### Design Bill
 - **Placement**:
 	- The modal must render centrally on top of the current screen, ensuring clear visibility and focus.
-	
+
 - **Functionality**:
 	- Select the address for *Wallet's Address* field
 	- Inform the address's index alongside the address
@@ -342,7 +342,7 @@ The modal presents detailed information containing *Blueprint ID*, *Blueprint Me
 ##### Design Bill
 - **Placement**:
 	- The modal must render centrally on top of the current screen, ensuring clear visibility and focus.
-	
+
 - **Functionality**:
 	- [Suggestion] Include a message warning users about the operation risks, like "You may at risk signing dapp transaction requests, reject if it is unexpected or you can't understand the transaction details."
     - [Suggestion] Include a "Read more" link that link to a document explaining the operation risks with more details.
@@ -514,7 +514,7 @@ The `htr_createNcTx` method creates a new *Nano Contract* transaction based on p
 3. If rejected, return to dapp an error message
 4. If approved, ask user's Pin Code
 5. Create and send transaction
-6. Return to dapp a success message 
+6. Return to dapp a success message
 
 ##### What render
 - On user's `Approval` or `Rejection` a modal must shows up over any screen to presents all the request details specified on [`htr_createNcTx`](#htr_createnctx) driven by design of [Modal: Nano Contract Transaction Request](modal-nano-contract-transaction-request).
