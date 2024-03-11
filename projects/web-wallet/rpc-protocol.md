@@ -272,7 +272,12 @@ signed_message = "Hathor Signed Message:\nThis is my message"
 ```json
 {
   "message": "Hathor Signed Message:\nsign-me",
-  "signature": "H2/QA48wJhvbKJH6hWXUJPHK5kUTwx4XAxuZGFzUeSPwLeFBv206lOs8ECHMTV/KilGbFP1p5e52mMGTUDFT7WM="
+  "signature": "H2/QA48wJhvbKJH6hWXUJPHK5kUTwx4XAxuZGFzUeSPwLeFBv206lOs8ECHMTV/KilGbFP1p5e52mMGTUDFT7WM=",
+  "address": {
+    "base58": "H6a1BAzz62seqGseTGmuWNSuXVZMmM9TNF",
+    "index": 5,
+    "path": "m/44'/280'/0'/0/5"
+  }
 }
 ```
 
