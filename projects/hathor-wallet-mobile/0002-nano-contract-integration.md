@@ -171,7 +171,7 @@ Tapping on a list item navigates a user to **Nano Contract Transactions** screen
 
 This screen is dedicated to displaying a list of transactions associated with the selected *Nano Contract*. After a user selects a *Nano Contract* from the *[Nano Contract List](#component-nano-contract-list)* component, it is directed to this screen. From this screen a user can also inspect Nano Contract's **state** and **unregister** it.
 
-The header section of this screen provides basic information about the selected *Nano Contract* such as *Nano Contract ID*, *Blueprint Name* and *Registered Address*. In addition, the header also shows an action to **unregister** the Nano Contract and an action to see Nano Contract' **state** on explorer website.
+The header section of this screen provides basic information about the selected *Nano Contract* such as *Nano Contract ID*, *Blueprint Name* and *Registered Address*, which a user can change by tapping over the field that opens [*Wallet's Address List*](#modal-wallets-address-list) modal, containing a list of wallet's address with index and hash information, sorted by index in ascending order. In addition, the header also shows an action to **unregister** the Nano Contract and an action to see Nano Contract' **state** on explorer website.
 
 The body is encompassed by the *[Nano Contract Transaction List](#component-nano-contract-transaction-list)* component.
 
@@ -272,7 +272,7 @@ A Nano Contract must be registered refering to an specific user's wallet address
 
 Users arrive at this screen from the *Main* screen to register a new Nano Contract associated with a wallet's address. The screen features a form with an input field for *Nano Contract ID* and another input field for *Wallet's Address* and a *Register* button.
 
-The first wallet's address fills the *Wallet's Address* field by default. A user can change the address by tapping over *Wallet's Address* field that opens [*Wallet's Address List*](#modal-wallets-address-list) modal, containing a list of wallet's address with index and hash information, sorted by index in ascending order.
+The first wallet's address fills the *Wallet's Address* field by default. A user can change the address on [Nano Contract Transactions](#screen-nano-contract-transactions) screen.
 
 Upon entering a valid *Nano Contract ID*, selecting an available *Wallet's Address* and tapping *Register*, users receive immediate feedback based on the action's outcome: loading, success, or failure.
 
@@ -299,9 +299,9 @@ Upon successful registration, users are redirected to the *Main* screen  the wit
 
 This modal presents a basic list of available wallet's addresses, containing the following information: index and address. The list is made of all used transactions plus the next unused one, and the items are sorted by index in ascending order.
 
-The modal is activated by tapping over *Wallet's Address* field on [*Nano Contract Registration*](#screen-nano-contract-registration) form.
+The modal is activated by tapping over *Wallet's Address* field on [*Nano Contract Transactions*](#screen-nano-contract-transactions) screen.
 
-By typing on an item a user is selecting the address to register with the Nano Contract and updating the form's field.
+By typing on an item a user is selecting the address to register with the Nano Contract and updating it.
 
 ##### Design Bill
 - **Placement**:
@@ -502,7 +502,9 @@ The `htr_createNcTx` method creates a new *Nano Contract* transaction based on p
 ### Nano Contract Transaction Request
 
 ##### When execute
-- Every time the a connected dapp send the request `htr_createNcTx`.
+- Every time the connected dapp send the request `htr_createNcTx`. As a
+  condition, Nano Contract and Wallet Connect should be available, otherwise the
+  request should be ignored.
 
 ##### Where to execute
 - It must be handled on `sagas/walletConnect.js@onSessionRequest` and dispatched to `onCreateNcTxRequest`.
@@ -566,3 +568,14 @@ We already mapped a necessity to build a general interface to interact with Blue
 - [Wallet Connect Security Issue #2230](https://github.com/orgs/WalletConnect/discussions/2230)
 - [Wallet Connect on Wallet Mobile implementation, PR #245](https://github.com/HathorNetwork/hathor-wallet-mobile/pull/245)
 - [Wallet Connect fix over Hermes compatibility, PR #355](https://github.com/HathorNetwork/hathor-wallet-mobile/pull/355)
+
+# Future possibilities
+[future-possibilities]: #future-possibilities
+
+## Nano Contract State
+
+We need to show Nano Contract state on the wallet, for now we only have a link to explorer on Nano Contract Transactions component. By following the link to explorer, a user can inspect the Nano Contract state.
+
+The alternatives are (1) to porsuit two tabs on Nano Contract Trasactions component where the options are "Transactions" and "State"; or (2) to represent the state on the header.
+
+This is an open discusstion that requires more study, both in terms of Nano Contract state flexibility and user experience.
