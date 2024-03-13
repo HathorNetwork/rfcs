@@ -550,6 +550,100 @@ The `op_status` is a status specific to the operation being executed in this RPC
 call. In this document, I defined a `op_status` only in the `sendTx` RPC method
 call, as it is multi-stage and might be in different states
 
+### 2.1.9 `htr_sendNanoContractTx`
+
+The `htr_sendNanoContractTx` method creates a new nano contract transaction based on parameters.
+
+If `push_tx` is enabled, it will select the `utxos` automatically, mine and send
+the transaction, otherwise, it will just return the transaction with signed
+inputs
+
+**Parameters**
+
+1. `method` - The nano contract method to call
+2. `blueprint_id` - The blueprint id of the nano contract
+3. `nc_id` - The nano contract instance id to call
+4. `actions` - A list of actions to call the nano contract with
+5. `args` - A list of arguments to call the nano contract with
+6. `push_tx` - (Defaults to `true`) Whether the client should push the transaction its
+connected fullnode
+
+**Example Request:**
+
+```json
+{
+  "id": 3,
+  "jsonrpc": "2.0",
+  "method": "htr_sendNanoContractTx",
+  "params": {
+    "push_tx": false,
+    "network": "mainnet",
+    "method": "bet",
+    "blueprint_id": "00004788e55b9b3fb90aaad2065e99ccf36ccd2fac5ed40ae62eeefd2486e96c",
+    "nc_id": "00008988e55b9b3bb90aaad2065e99ccf36ccd2fac5ed40ae62eeefd2486e12e",
+    "actions": [{
+      "type": "deposit",
+      "token": "00",
+      "amount": 50
+    }],
+    "args": [{
+      "H8RmX1AMQKAhWkBvf8DaKoAU7ph3Yiqg3c",
+      "2x0"
+    }]
+	}
+}
+```
+
+**Example Response:**
+
+```json
+{
+  "hash": "00000000059dfb65633acacc402c881b128cc7f5c04b6cea537ea2136f1b97fb",
+  "nonce": 2455281664,
+  "timestamp": 1594955941,
+  "version": 1,
+  "weight": 18.11897634891149,
+  "parents": [
+    "00000000556bbfee6d37cc099a17747b06f48ca3d9bf4af85c707aa95ad04b3f",
+    "00000000e2e3e304e364edebff1c04c95cc9ef282463295f6e417b85fec361dd"
+  ],
+  "inputs": [
+    {
+      "tx_id": "00000000caaa37ab729805b91af2de8174e3ef24410f4effc4ffda3b610eae65",
+      "index": 1,
+      "data": "RjBEAiAYR8jc+zqY596QyMp+K3Eag3kQB5aXdfYja19Fa17u0wIgCdhBQpjlBiAawP/9WRAqAzW85CJlBpzq+YVhUALg8IUhAueFQuEkAo+s2m7nj/hnh0nyphcUuxa2LoRBjOsEOHRQ"
+    },
+    {
+      "tx_id": "00000000caaa37ab729805b91af2de8174e3ef24410f4effc4ffda3b610eae65",
+      "index": 2,
+      "data": "RzBFAiEAofVXnCKNCEu4GRk7j+wHpQM6qmezRcfxHCe/PcUdbegCIE2nip27ZQtkpkEgNEhycqHM4CkLYMLVUgskphYsd/M9IQLHG6YJxXifQ6eMxPHbINFEJAUvrzKWe9V7AXXW4iywjg=="
+    }
+  ],
+  "outputs": [
+    {
+      "value": 50,
+      "token_data": 0,
+      "script": "dqkUqdK8VisGSJuNItIBRYFfSHfHjPeIrA=="
+    }
+  ],
+  "tokens": []
+}
+```
+
+**`op_status`**
+
+This RPC method will yield different `op_status` when the `htr_getOperationStatus`
+is called depending on the current state. It might be one of:
+
+1. `WAITING_USER_INPUT` - The wallet is waiting for user confirmation
+2. `SELECTING_UTXOS` - The wallet is fetching for utxos that match the requested
+   transaction outputs
+3. `CREATING_TX_PROPOSAL` - **Specific to the wallet-service facade** The wallet
+   is creating the TxProposal on the wallet-service
+4. `MINING_TX` - The wallet is mining the transaction
+5. `PUSHING_TX` - The wallet is pushing the transaction to its connected
+   fullnode
+
 
 ## 2.2 Error codes
 
@@ -641,3 +735,25 @@ An example from metamask we can take inspiration from:
 <img width="336" alt="image" src="https://github.com/HathorNetwork/rfcs/assets/3586068/617d95b3-43ea-4db2-9698-2b517c9d0f5d">
 
 If the request is `first_empty`, `full_path` or `index`, the wallet should ask the user to accept the address being sent
+
+### 3.8 `htr_sendNanoContractTx`
+
+When the request is received, we will validate if the parameters are valid,
+enforcing the data types and rules described in the Reference-Level explanation
+
+If the validation fails, we will respond with a `INVALID_PARAMETERS` error code
+
+If the validation is successful, we will display a confirmation screen,
+with all outputs for manual user validation (UX is yet to be discussed). If the
+user rejects the transaction, we will respond with a `REQUEST_REJECTED` error
+
+The address will default to the address that is registered with the nano
+contract on the wallet or if it's not yet registered, it will default to the
+address with index 0.
+
+The user will be allowed to select any other address from his wallet or manually
+input any valid address he wishes.
+
+If the user accepts the transaction, we will create a `createAndSendNanoContractTransaction`
+model instance, execute and send the tx if the user chose to send it as a
+parameter.
