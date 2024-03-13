@@ -408,12 +408,10 @@ This method allows the dApps to request an address.
 **Parameters**
 
 1. `type` string (Defaults to `client`) - Can be one of:
-
-`first_empty` should return the first empty address
-`full_path` should return the address with the path sent as a parameter
-`index` should return the address at the requested index
-`client` should allow the client to decide which `address` to return
-
+  1.1. `first_empty` should return the first empty address
+  1.2. `full_path` should return the address with the path sent as a parameter
+  1.3. `index` should return the address at the requested index
+  1.4. `client` should allow the client to decide which `address` to return
 2. `index` number (Optional if type is not `index`) - The address index
 3. `full_path` string (Optional if type is not `index`) - The full path of the
    requested address
