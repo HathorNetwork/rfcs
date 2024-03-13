@@ -170,7 +170,7 @@ create a new token in the blockchain
 {
   "id": 3,
   "jsonrpc": "2.0",
-  "method": "htr_signWithAddress",
+  "method": "htr_createToken",
   "params": {
     "network": "mainnet",
     "name": "Bathor",
