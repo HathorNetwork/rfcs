@@ -302,7 +302,9 @@ Different from account-based blockchains where users are used to always using th
 So in order for a `dApp` to know the balance of a given token for the connected user's wallet, we must have a method to fetch it.
 
 The mobile wallet must display a modal allowing the user to change the balance
-before answering the request to the dApp if he wants to (defaulting to the actual balance)
+before answering the request to the dApp if he wants to (defaulting to the actual
+balance). It should not allow the user to input a balance greater than his max
+balance for a given token.
 
 The `htr_getBalance` method fetches the balance for a given token.
 
