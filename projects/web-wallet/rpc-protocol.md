@@ -562,7 +562,7 @@ inputs
 
 1. `method` - The nano contract method to call
 2. `blueprint_id` - The blueprint id of the nano contract
-3. `nc_id` - The nano contract instance id to call
+3. `nc_id` - (Required if method is not initialize, null if it's not) The nano contract instance id to call
 4. `actions` - A list of actions to call the nano contract with
 5. `args` - A list of arguments to call the nano contract with
 6. `push_tx` - (Defaults to `true`) Whether the client should push the transaction its
