@@ -747,12 +747,11 @@ If the validation is successful, we will display a confirmation screen,
 with all outputs for manual user validation (UX is yet to be discussed). If the
 user rejects the transaction, we will respond with a `REQUEST_REJECTED` error
 
-The address will default to the address that is registered with the nano
-contract on the wallet or if it's not yet registered, it will default to the
-address with index 0.
+The address that will be used to interact with the nano contract (callee) will
+default to the address that is registered with the nano contract on the wallet
+or if it's not yet registered, it will default to the address with index 0.
 
-The user will be allowed to select any other address from his wallet or manually
-input any valid address he wishes.
+The user will be allowed to select any other address from his wallet.
 
 If the user accepts the transaction, we will create a `createAndSendNanoContractTransaction`
 model instance, execute and send the tx if the user chose to send it as a
