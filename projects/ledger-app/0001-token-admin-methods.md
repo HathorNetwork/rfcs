@@ -99,6 +99,7 @@ We will use the existing `SEND_TOKEN_DATA` for instruction code `0x08` and use t
 | Send token data<br>for signing transactions | 0x00 | 0x00 | `version (1)` \|\|<br> `uid (32)` \|\|<br>`symbol_len (1)` \|\|<br>`symbol (symbol_len)` \|\|<br>`name_len (1)` \|\|<br>`name (name_len)` \|\|<br>`signature (32)`      |
 | Send token data<br>for creating a token     | 0x01 | 0x00 | `version (1)` \|\|<br> `symbol_len (1)` \|\|<br>`symbol (symbol_len)` \|\|<br>`name_len (1)` \|\|<br>`name (name_len)`                                                  |
 | Send token data<br>for creating an NFT      | 0x01 | 0x01 | `version (1)` \|\|<br> `symbol_len (1)` \|\|<br>`symbol (symbol_len)` \|\|<br>`name_len (1)` \|\|<br>`name (name_len)` \|\|<br>`data_len (1)` \|\|<br>`data (data_len)` |
+
 The new commands will require a new flow for user confirmation
 1. Screen showing the user this is a "Create token" data.
 2. Screen with the symbol
