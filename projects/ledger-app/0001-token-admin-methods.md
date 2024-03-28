@@ -54,7 +54,7 @@ When confirming an authority output we should show:
 - Approve step
 - Reject step
 
-Obs: With authority outputs we already have enough to enable mint, melt and delegate operations.
+Obs: With authority outputs we already have enough to enable mint, melt, delegate and destroy operations.
 
 ---
 
@@ -62,7 +62,7 @@ Currently we only allow P2PKH scripts (and addresses) but NFTs have a data outpu
 Data outputs are allowed on the protocol but we will only allow on NFT creation scripts because any other is just an HTR burn.
 Data outputs are allowed to use custom tokens on the protocol but we will only allow HTR (token index 0) since NFT creation requires HTR.
 
-The user will be required to confirm the data on the script, which means that only ascii characters will be allowed.
+The user will be required to confirm the data on the script, which means that only ascii characters will be allowed since Ledger does not support UTF-8.
 
 ---
 
@@ -74,14 +74,18 @@ When creating a custom token or NFT the transaction information also includes th
 > The version field of the transaction was 2 bytes (first byte was reserved for later use) and since Ledger app version 1.1.0 the version field has become a 1 byte field and the first byte became the `signalBits`
 
 Version byte needs to be refactored to a 1 byte field and support for `signalBits` will not be added in this design so we will only allow `0x00` as `signalBits` for now.
+
 ## Admin operations
 
-### Mint, Melt and Delegate
+### Mint, Melt, Delegate and Destroy
 
-Sending a mint, melt and delegate transactions should use the same protocol as sending normal transactions.
+Sending a mint, melt, delegate or destroy transactions should use the same protocol as sending normal transactions.
 Mint and Melt involve destroying/creating custom token outputs and since the Ledger app does not have access to the input data it can only see the outputs, which means that a mint operation is a transaction with custom tokens outputs (possibly HTR outputs for change) and authority outputs, same for melt operations.
 
-Delegate are simpler since they actually are just sending an authority output.
+Delegate is simpler since its actually just sending an authority output.
+
+Destroy operations usually do not even have authority outputs, so it actually is already supported.
+Granted that the token array will have the token uid of the authority being destroyed so the user still has to sign the token data even with no outputs of the token.
 
 ### Create token
 
