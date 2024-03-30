@@ -7,13 +7,13 @@ This includes:
 - Minting new tokens and NFTs.
 - Melting new tokens and NFTs.
 - Delegating authorities.
-- Destroy authorities
+- Destroying authorities.
 
 # Motivation
 [motivation]: #motivation
 
-Today Hathor's Ledger app only allow sending transactions with custom tokens, so users and use-cases can hold and send custom tokens, but to create and manage supply it is required to use the software wallet.
-This design is to allow uses who use Ledger, a hardware cold wallet, to fully manage custom tokens without using any software wallet.
+Today Hathor's Ledger app only allow sending transactions with custom tokens, so users and use-cases can hold and send custom tokens but to create and manage token supply it is required to use a software wallet.
+This design is to allow users who use Ledger, a hardware cold wallet, to fully manage custom tokens without using any software wallet.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -21,10 +21,11 @@ This design is to allow uses who use Ledger, a hardware cold wallet, to fully ma
 > [!WARNING] Request for comment
 > This whole paragraph below can change if we really want to, we just need to add an `isNFT` boolean in the token data for the user to confirm, so in all transactions the Ledger will be informed that the token is an NFT with the user express consent during token signing
 > This makes a breaking change in the wallet dekstop since we will change an existing command.
+> We can avoid this command change by using the P1-P2 to create a SEND_TOKEN_DATA v2 where we have the `isNFT` and keep the v1 unchamged.
 
 Before entering the operations, we should address the differences between custom tokens and NFTs.
 In Hathor, NFTs are custom tokens, where the creation transaction (which is the uid of the NFT) has the NFT data associated which is usually an IPFS link to the NFT document (image, pdf, video, etc.).
-After the creation the operations and transactions involving NFT are exactly the same regarding the protocol, but the balance is shown differently to the user, where the custom token unit is worth 0,01 the NFT is always integer, so it is 1. Both of these are the same on the transaction, it is just different on the user prompt.
+After the creation the operations and transactions involving NFT are exactly the same regarding the protocol, but the balance is shown differently to the user, where the custom token unit is worth 0,01 the NFT is always integer, so it is 1. Both of these are the same value on the transaction it is just shown different on the UI.
 Since the Ledger cannot check if a token is an NFT or not, we should disregard any changes and treat both as custom tokens (which is valid if we follow the protocol).
 
 ## Transaction parsing
