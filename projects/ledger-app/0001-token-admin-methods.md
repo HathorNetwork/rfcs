@@ -209,3 +209,11 @@ We currently only support P2PKH scripts and we are adding support for data scrip
 The difficulty with P2SH is the lack of the `redeemScript` which is required to derive addresses, since we would require the multisig configuration to be loaded in the app and we do not have support for this yet.
 Without address derivation we cannot check that any addresses are from our wallet (making change output checks fail).
 Also, we do not have permission to derive in the Hathor multisig path derivation (see [here](https://github.com/HathorNetwork/hathor-wallet-lib/blob/v1.4.0/src/constants.ts#L267)) so this would also need to change.
+
+# Task breakdown
+
+- Parse version separate from signalBits and verify signalBits is `0x00` (0.5 dev day)
+- Parse authorities from token_data when parsing outputs (1 dev day)
+- Create new screen for authority output confirmation (2 dev days)
+- Create new command to allow token and NFT creation (3 dev days)
+- New integration tests for new commands and outputs (2 dev days)
