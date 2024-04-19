@@ -35,7 +35,7 @@ To allow admin operations we will introduce new concepts into the app that were 
 ---
 
 The `token_data` of an output is a byte with the information:
-- Weather the token is a custom token or HTR
+- Whether the token is a custom token or HTR
 - Which custom token it is (index on the token array) 
 - If the output is an authority output (which authority will be encoded on the `value`)
 Currently on the app we ignore the last piece of information since we do not allow authority outputs.
@@ -81,7 +81,7 @@ Version byte needs to be refactored to a 1 byte field and support for `signalBit
 ### Mint, Melt, Delegate and Destroy
 
 Sending a mint, melt, delegate or destroy transactions should use the same protocol as sending normal transactions.
-Mint and Melt involve destroying/creating custom token outputs and since the Ledger app does not have access to the input data it can only see the outputs, which means that a mint operation is a transaction with custom tokens outputs (possibly HTR outputs for change) and authority outputs, same for melt operations.
+Mint and Melt involve destroying/creating custom token outputs and since the Ledger app does not have access to the input data it can only see the outputs, which means that a mint operation is a transaction with custom tokens outputs (possibly HTR outputs for change) and possibly authority outputs, same for melt operations.
 
 Delegate is simpler since its actually just sending an authority output.
 
@@ -206,7 +206,7 @@ This UX challenge should be addressed in its own design.
 ### P2SH
 
 We currently only support P2PKH scripts and we are adding support for data scripts (under strict conditions).
-The difficulty with P2SH is the lack of the `redeemScript` which is required to derive addresses, since we would require the multisig configuration to be loaded in the app and we do not have support for this yet.
+Identifying P2SH addresses in the transaction is possible but the difficulty of generating P2SH addresses has some is the lack of the `redeemScript` which is required to derive the address, since we would require the multisig configuration to be loaded in the app and we do not have support for this yet.
 Without address derivation we cannot check that any addresses are from our wallet (making change output checks fail).
 Also, we do not have permission to derive in the Hathor multisig path derivation (see [here](https://github.com/HathorNetwork/hathor-wallet-lib/blob/v1.4.0/src/constants.ts#L267)) so this would also need to change.
 
