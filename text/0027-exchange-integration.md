@@ -86,7 +86,7 @@ The detection of deposits can be implemented using a polling strategy.
 
 ## Running a full-node
 
-We recommend you to run the full-node from our [Docker Hub image](https://hub.docker.com/r/hathornetwork/hathor-core). Check out a `docker-compose.yml` example [here](https://github.com/HathorNetwork/hathor-core/issues/183).
+We recommend you to run the full-node from our [Docker Hub image](https://hub.docker.com/r/hathornetwork/hathor-core). For more details on how to run and operate a full node, check our [docs](https://docs.hathor.network/pathways/components/full-node).
 
 Each full-node has a peer-id that uniquily identifies it in the p2p network. The exchanges should always create fixed peer-ids for its full-nodes (and never use random peer-ids).
 
@@ -94,34 +94,10 @@ Full-nodes in production environments should always run with RocksDB storage and
 
 The exchange can easily integrate the full-node in its monitoring and alerting systems using the parameter `--prometheus`.
 
-### Full node custom configuration file
-
-There are two configuration parameters that should be changed in the full node to support the `GAP_LIMIT` increase. To create a custom mainnet configuration file you must create a new configuration file (e.g. `myconf.py`):
-
-```
-from hathor.conf import mainnet as base # if you are using the mainnet
-# from hathor.conf import testnet as base # if you are using the testnet
-SETTINGS = base.SETTINGS._replace(
-    # Maximum number of subscribed addresses per websocket connection
-    WS_MAX_SUBS_ADDRS_CONN=200000,
-    # Maximum number of subscribed addresses that do not have any outputs (also per websocket connection)
-    WS_MAX_SUBS_ADDRS_EMPTY=40000
-)
-```
-
-If this file is not in the path where python would search for modules, `PYTHONPATH` env var should be updated to include this path. Besides that, `HATHOR_CONFIG_FILE` environment variable must be set to load this configuration file.
-
-Here is the docker cmdline to use a custom configuration file, where `myconf.py` is stored in the container folder `/hathor/data`:
-
-```
-docker run --env PYTHONPATH=/hathor/data --env HATHOR_CONFIG_FILE=myconf …
-```
 
 ## Running a Hathor's headless wallet
 
-We recommend you to run the wallet service from our [Docker Hub image](https://hub.docker.com/r/hathornetwork/hathor-wallet-headless). Check out a `docker-compose.yml` example [here](https://github.com/HathorNetwork/hathor-wallet-headless/issues/66).
-
-You can also manually install it from its [GitHub repository](https://github.com/HathorNetwork/hathor-wallet-headless).
+We recommend you to run the wallet service from our [Docker Hub image](https://hub.docker.com/r/hathornetwork/hathor-wallet-headless). For more details on how to run and operate a headless wallet, check our [docs](https://docs.hathor.network/pathways/components/headless-wallet).
 
 The documentation of the wallet's API is available [here](https://wallet-headless.docs.hathor.network/).
 
@@ -172,13 +148,19 @@ This request returns a new address until the GAP limit is reached. After that, i
 
 The recommended process to generate new addresses is:
 
-a) Request a new address from the wallet using the query param `mark_as_used=True`.
-b) Confirm that this address has never been assigned to a user. The exchange's database is usually queried for this.
-c) Assign the address to a user.
+  a) Request a new address from the wallet using the query param `mark_as_used=True`.
+  b) Confirm that this address has never been assigned to a user. The exchange's database is usually queried for this.
+  c) Assign the address to a user.
 
-4. Polling to check new transactions on the deposit wallet
+4. Check for new deposits
 
-The transaction history has transactions that were sent to this wallet and from this wallet, thus to guarantee that a new transaction is a new deposit it's important to see the address in the outputs and check if it's from one of the users.
+  a) Use external notifications plugins
+
+The headless wallet has support for notification plugins that can notify when a new transaction arrives in the wallet (among other types of notifications). To read about all different plugin types and the different messages that may arrive, you can read our [docs](https://docs.hathor.network/explanations/features/external-notifications).
+
+  b) Polling for new transactions
+
+The wallet has a history API that has transactions that were sent to this wallet and from this wallet, thus to guarantee that a new transaction is a new deposit it's important to see the address in the outputs and check if it's from one of the users.
 
 This API used with the `limit` query parameter returns the last N transactions from this wallet, ordered by decreasing timestamp.
 
@@ -270,39 +252,15 @@ Exchanges usually requires a minimum number of confirmations before accepting de
 
 The recommended number of confirmation depends on the policy of each exchange. We recommend at minimum of 50 confirmation before accepting a deposit, which means it will take an average of 25 minutes to confirm deposits.
 
-#### Get `first_block` from the transaction
+To get the amount of blocks that are confirming a specific transaction you can use the API [tx-confirmation-blocks](https://wallet-headless.docs.hathor.network/#operation/getTxConfirmationBlocks).
 
 ```
-$ curl https://{full-node}/v1a/transaction/?id=0000000044a7a3b4c24e26a405fb052e0935945616d504bd4f412507971dab68 | jq .meta.first_block
-
-"0000000000000000acbe471376c06925e6f90585c7d3e205e14d140e44f3311b" -> This is the first block in the best blockchain that confirms the transction.
+$ curl -H "X-Wallet-Id: idDeposit" http://{headless-wallet}/wallet/tx-confirmation-blocks?id=<tx_id>
+{
+  "success": true,
+  "confirmationNumber": 15
+}
 ```
-
-#### Get the height of a block
-
-```
-$ curl https://{full-node}/v1a/transaction/?id=0000000000000000acbe471376c06925e6f90585c7d3e205e14d140e44f3311b | jq .meta.height
-
-1013585 -> This is the height of the block
-
-height_tx = 1013585
-```
-
-#### Get network current height
-
-The network current height is the height of the head of the blockchain, i.e., the latest block in the best blockchain.
-
-```
-$ curl https://{full-node}/v1a/get_block_template | jq .metadata.height
-
-1013608 -> This is the next height of the network, so the current height is always the return of this command minus one (1013608 - 1 = 1013607)
-
-height_network = 1013607
-```
-
-One can calculate the number of confirmations subtracting the height of the network and the height of a given block, as follows:
-
-`height_network - height_block = 22`
 
 6. Get an address for the withdrawal wallet
 
