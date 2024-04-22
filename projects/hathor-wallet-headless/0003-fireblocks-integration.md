@@ -23,6 +23,7 @@ This API will use the wallet's `setExternalTxSigningMethod` to register a method
 > | --- | --- | --- | --- | --- |
 > | xpub-id | required | string | The id of the xpub in the config | body | 
 > | wallet-id | required | string | create a wallet with this id | body |
+> | raw | required | boolean | use RAW signing | body |
 
 ##### Responses
 
@@ -109,6 +110,7 @@ DER encoded signature has the following structure:
 | sequence tag | len(sequence) in bytes | integer tag | len(r) in bytes |   r   | integer tag | len(s) in bytes |   s   |
 | :----------: | :--------------------: | :---------: | :-------------: | :---: | :---------: | :-------------: | :---: |
 |     0x30     |         1 byte         |    0x02     |     1 byte      | bytes |    0x02     |     1 byte      | bytes |
+
 Where `r` and `s` may be prefixed by 0x00 if they are negative (first bit is 1).
 
 The Fireblocks signing method will be registered with the wallet facade and all subsequent transactions from this facade will be signed with Fireblocks, giving full compatibility with the other APIs in the headless wallet.
