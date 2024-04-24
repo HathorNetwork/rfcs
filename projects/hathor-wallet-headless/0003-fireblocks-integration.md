@@ -65,7 +65,8 @@ The JWT token requires the claims:
 - `uri`: path with querystring.
 - `nonce`: UUID4 or any random generator.
 - `iat` and `exp`: "issued at time" and "expiration".
-	- SInce it's a per-call token the difference between them can be very short (e.g. 30s).
+	- Since it's a per-call token the difference between them can be very short (e.g. 30s).
+
 - `sub`: The api key used in the first header.
 - `bodyHash`: The sha256 hash of the JSON encoded body of the request
 	- Or sha256 hash of an empty string if the body is empty (e.g. GET requests).
@@ -103,7 +104,8 @@ To check that the credentials are valid we can use the [public_key_info API](htt
 ## External signing function
 
 Since Fireblocks API a new token is required for each request we can have a method that gathers the "signature requests" from a transaction and sends a single request for RAW signing.
-The resulting signatures will be fetched from the Transation API which we will need to encode to DER to use with the wallet-lib.
+The resulting signatures will be fetched from the Transaction API which we will need to encode to DER to use with the wallet-lib.
+
 
 DER encoded signature has the following structure:
 
