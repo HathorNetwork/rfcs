@@ -23,7 +23,6 @@ This API will use the wallet's `setExternalTxSigningMethod` to register a method
 > | --- | --- | --- | --- | --- |
 > | xpub-id | required | string | The id of the xpub in the config | body | 
 > | wallet-id | required | string | create a wallet with this id | body |
-> | raw | required | boolean | use RAW signing | body |
 
 ##### Responses
 
@@ -52,6 +51,10 @@ This is why we can use the root xPub from the console to generate the account le
 The usual account derivation path of `m/44'/280'/0'` will be replaced with `m/44/280/0`, we will need to create a script that derives the root xPub to the fireblocks account level path.
 
 From the account level the change and address derivation will work as usual.
+
+Fireblocks exporting the root xPub has some risk to the user privacy since it can be used to derive all coins xPubs, hardened derivation was meant to be used as a protection from this.
+The tokens are safe since Fireblocks does not export the xPriv but someone with the root xPub can derive all addresses and check their balance, on all coins.
+Since we save the Hathor "account path" only the Hathor addresses can be derived.
 
 ### Fireblocks API Authorization
 
