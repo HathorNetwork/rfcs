@@ -56,6 +56,11 @@ Fireblocks exporting the root xPub has some risk to the user privacy since it ca
 The tokens are safe since Fireblocks does not export the xPriv but someone with the root xPub can derive all addresses and check their balance, on all coins.
 Since we save the Hathor "account path" only the Hathor addresses can be derived.
 
+> #### Warning!
+> Since derivation is not done under usual BIP44 path one may not be able to find the tokens if using the seed or xPriv, this is not harmful (as of writing) because Fireblocks does not export the xPriv or seed but may cause confusion and users may think they lost their funds if Fireblocks allow xPriv exports in the future.
+>
+> Obs: During testing we tried using the correct BIP44 derivation path with the Fireblocks API but it is not allowed. If this is changed in the future we must handle any migration and updates carefully.
+
 ### Fireblocks API Authorization
 
 [reference](https://developers.fireblocks.com/reference/signing-a-request-jwt-structure)
