@@ -91,21 +91,20 @@ Granted that the token array will have the token uid of the authority being dest
 Token creation transactions are special for a number of reasons:
 
 1. Transaction version byte is `0x03`
-2. Extra fields at the end of the transaction, namely `token_info_version`, `name` and `symbol`
-3. There will be an output with the created token, the token uid will not be on the tokens array since it does not exist yet
+2. There is no token array on the transaction, since there can only be HTR and the token being created.
+3. Extra fields at the end of the transaction, namely `token_info_version`, `name` and `symbol`
+4. There will be an output with the created token, the token uid will not be on the tokens array since it does not exist yet
     1. Token uid is the transaction id of the created transaction, which is created during mining.
 
 To deal with these we will create a new command to load the token data of the token being created.
-We will use the existing `SEND_TOKEN_DATA` for instruction code `0x08` and use the `P1` field to indicate which data is being sent.
-The first command in the table below is the existing `SEND_TOKEN_DATA` command, we will use `P1` of the APDU protocol to switch to the correct handler.
+We will create the `SEND_CREATE_TOKEN_DATA` for instruction code `0x0B` and use the `P1` field to indicate which data is being sent.
 
 | Description                                 | P1   | P2   | CData                                                                                                                                                                   |
 | ------------------------------------------- | ---- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Send token data<br>for signing transactions | 0x00 | 0x00 | `version (1)` \|\|<br> `uid (32)` \|\|<br>`symbol_len (1)` \|\|<br>`symbol (symbol_len)` \|\|<br>`name_len (1)` \|\|<br>`name (name_len)` \|\|<br>`signature (32)`      |
-| Send token data<br>for creating a token     | 0x01 | 0x00 | `version (1)` \|\|<br> `symbol_len (1)` \|\|<br>`symbol (symbol_len)` \|\|<br>`name_len (1)` \|\|<br>`name (name_len)`                                                  |
-| Send token data<br>for creating an NFT      | 0x02 | 0x00 | `version (1)` \|\|<br> `symbol_len (1)` \|\|<br>`symbol (symbol_len)` \|\|<br>`name_len (1)` \|\|<br>`name (name_len)` \|\|<br>`data_len (1)` \|\|<br>`data (data_len)` |
+| Send token data<br>for creating a token     | 0x00 | 0x00 | `version (1)` \|\|<br> `symbol_len (1)` \|\|<br>`symbol (symbol_len)` \|\|<br>`name_len (1)` \|\|<br>`name (name_len)`                                                  |
+| Send token data<br>for creating an NFT      | 0x01 | 0x00 | `version (1)` \|\|<br>`name_len (1)` \|\|<br>`name (name_len)` \|\|<br> `symbol_len (1)` \|\|<br>`symbol (symbol_len)` \|\|<br>`data_len (1)` \|\|<br>`data (data_len)` |
 
-The new commands will require a new flow for user confirmation
+The new command will require a new flow for user confirmation.
 
 1. Screen showing the user this is a "Create token" data.
 2. Screen with the symbol
@@ -133,17 +132,35 @@ bool is_melt_authority(tx_output_t output) {
 }
 ```
 
-For data outputs we will introduce a new `data` field which will hold the actual data script.
-We should fail if the data script is not ascii.
+For data outputs, we will create an output type and the actual data will be saved on the global context, this is to be economic with in-memory data.
+Also, data extracted from a data script should be ascii encoded, if not we should fail signing the transaction.
 
 ```c
+// src/transaction/types.h
+
+/**
+ * Script types
+ */
+typedef enum {
+    SCRIPT_UNKNOWN = 0,
+    SCRIPT_P2PKH = 1,
+    SCRIPT_P2SH = 2,
+    SCRIPT_DATA = 3,
+} script_type_t;
+
+/**
+ * Output script info
+ */
+typedef struct {
+    script_type_t type;
+    uint8_t hash[PUBKEY_HASH_LEN];  // hash160 of pubkey
+} output_script_info_t;
+
 typedef struct {
     uint8_t index;
     uint64_t value;
     uint8_t token_data;
-    uint8_t pubkey_hash[PUBKEY_HASH_LEN];
-    // New data field
-    uint8_t data[MAX_DATA_SCRIPT_LEN]
+    output_script_info_t script;
 } tx_output_t;
 ```
 
@@ -158,26 +175,26 @@ To add support for our new transactions we require some changes on output confir
 The method `ui_display_tx_outputs` prepares the outputs (address base58 encoding, value formatting for UI, etc.) and shows the screens with the output information to the user (with `ux_display_tx_output_flow`).
 To adjust this we need to check if the output is a P2PKH output, a data output or an authority output, each output type have different data for the user to check so it makes sense that each has its own flow (i.e. screens that display information and ask confirmation or rejection).
 
-- normal P2PKH outputs
-  - `pubkey_hash` field of the output should not be empty.
+- normal P2PKH/P2SH outputs
+  - `output.script.hash` field of the output should not be empty.
   - `token_data` should indicate that this **IS NOT** an authority output.
   - This is the current supported format.
   - For a token creation, we can check if this is the token being created and use the loaded symbol for the amount.
-- authority P2PKH outputs
-  - `pubkey_hash` field of the output should not be empty.
+- authority P2PKH/P2SH outputs
+  - `output.script.hash` field of the output should not be empty.
   - `token_data` should indicate that this **IS** an authority output.
   - Should confirm the address and authority of the output.
-  - The authority step should have the title "Authority" and text either "Mint \<symbol\>" or "Melt \<symbol\>" depending on the type of authority.
+  - The authority step should have the title "Authority" and text either "\<symbol\> Mint" or "\<symbol\> Melt" depending on the type of authority.
 - Data outputs
   - Should only exist if the transaction version byte is `0x03`
   - `data` should be ascii safe
-  - `value` should always be 1
+  - `value` should always be 1 (0.01 HTR)
   - No need for confirmation, we just need to check that the data matches the user confirmed data.
 
 ## Transaction parsing
 
 The current process to parse the transaction will parse the 2 version bytes then the length of tokens, intputs and outputs (1 byte each) after this we parse the token uids, inputs and outputs as the length bytes described.
-For "create token transactions" (identified by version byte `0x03`) we have some extra fields at the end of the transaction, these fields should already be confirmed by the user so we just need to make sure the transaction information matches the user confirmed data.
+For "create token transactions" (identified by version byte `0x03`) we need to skip the length of tokens and parse some extra fields at the end of the transaction, these fields should already be confirmed by the user so we just need to make sure the transaction information matches the user confirmed data.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -189,6 +206,11 @@ We could create a separate command for create token transactions, but the transa
 ## Do not create a new `SEND_TOKEN_DATA` command
 
 Instead of the new command to load the token data being created we could just confirm the data when they appear on the transaction parsing, this would create an issue for outputs containing the token being created since during parsing the symbol is unknown (since it is the last piece of information) so we would need to show the amount as "Amount created" or similar (same with authorities) to signify that the output is of the created token.
+
+## Keep a buffer for nft data in the output type
+
+The maximum allowed length for the data in the desktop wallet is 150 characters, if we have one for each token it would add 150 * number of tokens on global context (10), this would add 1500 bytes to the global context, but we only have 536 bytes available to the global context, any more than this will fail the build of the app.
+Using 1 buffer on the global context makes the create token transaction possible and adds only 300 bytes to the global context (150 for the context and 150 for the static variable for screen display).
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
