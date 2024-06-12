@@ -35,6 +35,7 @@ Each input has a `type` argument which will define the other arguments.
 The `type` can be 'utxo', 'raw' or 'action' (defaults to 'utxo' if not present).
 
 The `utxo` inputs will use the storage's `selectUtxos` to find the desired inputs.
+
 - `token`: which token to select, defaults to HTR.
 - `fill`: amount of tokens to select, may require multiple inputs to match.
 - `authority`: 'mint' or 'melt', if present will find the desired authority utxos.
@@ -55,45 +56,52 @@ Each output has a `type` argument which will define the other arguments.
 The `type` can be 'token', 'data', 'raw' or 'action' (defaults to 'token' if not present).
 
 `token` instruction arguments:
+
 - `token`: token uid, defaults to HTR.
 - `address`: create an output script for this address, if not present will get one from the wallet.
 - `amount`: amount of tokens.
 - `authority`: 'mint' or 'melt', if present will create the desired authority output.
 - `checkAddress`: 'true' or 'false', whether to check that the address is from the wallet (defaults to false).
 - `position`: which index to insert the output.
-	- can be `-1` to insert at the end, which is the default behavior.
-	- if the position does not exist, the request will fail.
+  - can be `-1` to insert at the end, which is the default behavior.
+  - if the position does not exist, the request will fail.
 
 `data` instruction arguments:
+
 - `data`: utf-8 encoded string of the data.
 - `position`: which index to insert the output.
-	- can be `-1` to insert at the end, which is the default behavior.
-	- if the position does not exist, the request will fail.
+  - can be `-1` to insert at the end, which is the default behavior.
+  - if the position does not exist, the request will fail.
 
 `raw` instruction arguments:
+
 - `token`: token uid, defaults to HTR.
 - `authority`: 'mint' or 'melt', if present will create the desired authority output.
 - `script`: base64 encoded script.
 - `amount`: number of tokens in this output.
 - `position`: which index to insert the output.
-	- can be `-1` to insert at the end, which is the default behavior.
-	- if the position does not exist, the request will fail.
+  - can be `-1` to insert at the end, which is the default behavior.
+  - if the position does not exist, the request will fail.
 
 `action` instruction arguments:
+
 - `action`: which action to execute.
-	- 'shuffle': will shuffle the current output array.
+  - 'shuffle': will shuffle the current output array.
 
 ### Action instructions
 
 Like the outputs we will have a `type` key that defines the action, `type` can be `shuffle`, `add-output`, `add-input` or `fill-change`.
 
 `shuffle` action arguments:
+
 - `target`: 'outputs', 'inputs' or 'all', defaults to 'all'.
 
 `add-output` action arguments:
+
 - `output`: an output instruction (cannot be an `action`)
 
 `add-input` action arguments:
+
 - `input`: an input instruction (cannot be an `action`)
 
 `fill-change` does not have arguments, as the name implies it will check the transaction balance and find any change outputs necessary.
@@ -117,3 +125,64 @@ The mint deposit inputs are manually added to the transaction and all outputs ar
   ],
 }
 ```
+
+# Reference-level explanation
+[reference-level-explanation]: #reference-level-explanation
+
+The sequence of operations for the template is very straightforward, we choose the inputs, then we form the output array and once the transaction is formed we can perform actions on it to finalize the transaction instance.
+
+## Building the template
+
+### Selecting inputs
+
+If the instruction type is `utxo` we need to use the wallet's storage `selectUtxos` method to find utxos, then we can add them to the inputs array, if any change is required and `autochange` is true or missing we add them to the outputs.
+
+#### Token selection
+
+The following instruction will find 0.10 TST tokens from address `Wtest` and add them to the inputs, adding also change outputs if necessary.
+
+```json
+{
+  "token": "TST",
+  "fill": 10,
+  "address": "Wtest",
+}
+```
+
+This translates to the following query:
+
+```ts
+wallet.storage.selectUtxos({
+  token: "TST",
+  target_amount: 10,
+  filter_address: "Wtest",
+  only_available_utxos: true,
+});
+```
+
+All utxos found will have at least 0.10 TST, they will be unlocked and from address `Wtest`.
+
+#### Authority selection
+
+The following instruction will find 1 TST Mint authority utxo and add them to the inputs.
+
+```json
+{
+  "token": "TST",
+  "fill": 1,
+  "authority": "mint",
+}
+```
+
+This translates to the following query:
+
+```ts
+wallet.storage.selectUtxos({
+  token: "TST",
+  target_amount: 1,
+  authorities: 1, // MINT_AUTHORITY
+  only_available_utxos: true,
+});
+```
+
+We will find 1 unlocked mint authority for TST.
