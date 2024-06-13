@@ -55,7 +55,7 @@ As our intend is to execute commands, the verb `POST` is the most convenient met
 
 ## Create custom token
 
-A single wallet can [create a token](https://hathor.gitbook.io/hathor/guides/headless-wallet/creating-tokens) using `POST:/wallet/create-token` endpoint. This operation creates mint and melt authorities by default.
+A single wallet can [create a token](https://docs.hathor.network/references/headless-wallet/http-api#operation/createToken) using `POST:/wallet/create-token` endpoint. This operation creates mint and melt authorities by default.
 
 To provide a seamless extension to create a custom token in the MultiSig wallet, the endpoint keeps the same command:
 * `POST:/wallet/p2sh/tx-proposal/create-token`
@@ -73,7 +73,7 @@ The data fields are:
 * `melt_authority_address`
 * `allow_external_melt_authority_address`
 
-*`*` as required field 
+*`*` as required field
 
 The response scheme for success:
 ```ts
@@ -89,7 +89,7 @@ With this specification we cover the possibility to create custom tokens with or
 
 ## Mint a custom token
 
-A single wallet can [mint a token](https://hathor.gitbook.io/hathor/guides/headless-wallet/creating-tokens/mint-tokens) using `POST:/wallet/mint-token` endpoint. This operation creates another mint authority by default.
+A single wallet can [mint a token](https://docs.hathor.network/references/headless-wallet/http-api#operation/mintTokens) using `POST:/wallet/mint-token` endpoint. This operation creates another mint authority by default.
 
 For the MultiSig wallet the endpoint keeps the same command:
 `POST:/wallet/p2sh/tx-proposal/mint-token`
@@ -102,7 +102,7 @@ The data fields are:
 * `mint_authority_address`
 * `allow_external_mint_authority_address`
 
-*`*` as required field 
+*`*` as required field
 
 The response scheme for success:
 ```ts
@@ -131,7 +131,7 @@ The data fields are:
 * `melt_authority_address`
 * `allow_external_melt_authority_address`
 
-*`*` as required field 
+*`*` as required field
 
 The response scheme for success:
 ```ts
@@ -147,7 +147,7 @@ With this specification we cover the possibility to melt tokens, send it to anot
 
 ## Decode transaction with wallet metadata
 
-There is an endpoint to [inspect the transaction](https://hathor.gitbook.io/hathor/guides/multisig-wallet/sending-transactions#5.-check-the-multisig-transaction) by decoding the transaction hexadecimal encode in `POST:/wallet/decode`. However, it doesn't bring signature information, nor wallet information with it.
+There is an endpoint to [inspect the transaction](https://docs.hathor.network/references/headless-wallet/http-api) by decoding the transaction hexadecimal encode in `POST:/wallet/decode`. However, it doesn't bring signature information, nor wallet information with it.
 
 By extending this endpoint operation to include wallet metadata we introduce a breaking change in the API. However, we keep coherence, once it is used not only to decode a `txHex` but to decode a partial transaction. The extension adds a semantic decoding of the transaction components regarding the wallet. Also, it reduces the roundtrips to the wallet by delivering the tokens balance.
 
@@ -249,7 +249,7 @@ Despite the current design provides a minimal set of operations to enable the EV
 # Prior art
 [prior-art]: #prior-art
 
-* This design is a complement for the  [EVM compatible bridge design](https://github.com/HathorNetwork/rfcs/blob/doc/evm-compatible-brigde/projects/evm-compatible-bridge/design.md#federation-service). 
+* This design is a complement for the  [EVM compatible bridge design](https://github.com/HathorNetwork/rfcs/blob/doc/evm-compatible-brigde/projects/evm-compatible-bridge/design.md#federation-service).
 * The commands to create token, mint and melt includes a fine tuned authority creation after the PRs [#291](https://github.com/HathorNetwork/hathor-wallet-headless/pull/291) and [#293](https://github.com/HathorNetwork/hathor-wallet-headless/pull/293) in the wallet-headless.
 
 # Unresolved questions
@@ -276,7 +276,7 @@ We can specify the following data fields:
 * `token`*
 * `count`*
 
-*`*` as required field 
+*`*` as required field
 
 The response scheme for success:
 ```ts
@@ -303,7 +303,7 @@ We can specify the following data fields:
 * `authority_address`*
 * `allow_external_authority_address`
 
-*`*` as required field 
+*`*` as required field
 
 The response scheme for success:
 ```ts
