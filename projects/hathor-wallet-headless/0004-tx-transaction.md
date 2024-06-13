@@ -186,3 +186,24 @@ wallet.storage.selectUtxos({
 ```
 
 We will find 1 unlocked mint authority for TST.
+
+## Template implementation
+
+The `TransactionTemplate` class can be initiated from an object (the JSON template specified in this design) or it can be initialized empty and we add each input/output/action instruction with methods of the class.
+
+The class will also have a `build` method to run the template instructions and return a Transaction instance.
+We will also have an `export` method to export the JSON template.
+
+```ts
+class TransactionTemplateBuilder {
+  fromJSON(obs: TxTemplate): TransactionTemplate { ... }
+  addInput(ins: InputInstruction): TransactionTemplate { ... }
+  addOutput(ins: OuputInstruction): TransactionTemplate { ... }
+  addAction(ins: ActionInstruction): TransactionTemplate { ... }
+
+  build(): Transaction { ... }
+  export(): TxTemplate { ... }
+}
+```
+
+This builder approach allows users to create transactions and templates for future use.
