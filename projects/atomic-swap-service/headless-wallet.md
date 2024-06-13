@@ -94,7 +94,7 @@ Calls to this route for a `proposalId` that has not been registered will raise a
 Should the backend return a `404` error, the proposal is considered obsolete and can be removed from the `listenedProposals` map.
 
 ### Update endpoint
-The [current workflow](https://hathor.gitbook.io/hathor/guides/headless-wallet/atomic-swap#step-3-bob-updates-alices-partial-transaction) of updating proposals will be kept unaltered, requiring calls to the `[POST] /wallet/atomic-swap/tx-proposal` route. However, in order to persist the changes on the Atomic Swap Service, the additional body parameter `service.proposal_id` must also be informed on the request.
+The [current workflow](https://docs.hathor.network/tutorials/headless-wallet/atomic-swaps#step-3-bob-updates-alices-partial-transaction-proposal) of updating proposals will be kept unaltered, requiring calls to the `[POST] /wallet/atomic-swap/tx-proposal` route. However, in order to persist the changes on the Atomic Swap Service, the additional body parameter `service.proposal_id` must also be informed on the request.
 
 Calling this route with a proposal identifier that has not been registered will raise a `400` error. Any errors raised while interacting with the service will also be treated and returned on the http response.
 
