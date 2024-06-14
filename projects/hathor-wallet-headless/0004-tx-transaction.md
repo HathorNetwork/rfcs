@@ -1,7 +1,7 @@
 # Summary
 [summary]: #summary
 
-Create a transaction template that can be used to form a transaction by following the instructions.
+Create a transaction template api on the wallet-lib that can be used to build transactions by following user defined instructions.
 
 # Motivation
 [motivation]: #motivation
@@ -9,7 +9,7 @@ Create a transaction template that can be used to form a transaction by followin
 Some clients require special additions to how the transactions are created (e.g. sending authority to certain addresses after the transaction, allowing the authority address to be from outside the wallet, adding a special output in the transaction, etc.).
 Each of these would be added as an option on the wallet facade and allowing the wallet-lib to create the desired transaction, but each option requires discussion, development time and a new release from both the headless and wallet-lib.
 
-A solution to this is a more flexible API that can receive a transaction template and follow its intructions to form a transaction, if the template is well contructed it can solve all special cases without additional development.
+A solution to this is a more flexible API that can receive a transaction template and follow its intructions to form a transaction, if the template is well constructed it can solve all special cases without additional development.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
