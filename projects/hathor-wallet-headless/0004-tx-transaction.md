@@ -207,3 +207,13 @@ class TransactionTemplateBuilder {
 ```
 
 This builder approach allows users to create transactions and templates for future use.
+
+# Task breakdown
+
+- [ ] Create the types for the instructions (0.5 dev day)
+- [ ] Create the transaction builder class (0.5 dev day)
+- [ ] Create methods to run instructions (1 dev day)
+- [ ] Release wallet-lib version (0.2 dev day)
+- [ ] Create run-template API on headless (1 dev day)
+- [ ] Release headless (0.2 dev day)
+ 
