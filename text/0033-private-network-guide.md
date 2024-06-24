@@ -84,7 +84,7 @@ So this is what we will do first.
 We will use our hathor-wallet-headless to generate a new wallet seed. Keep this seed safe if you are configuring a network for a real use case.
 
 ```sh
-export SEED=$(docker run --entrypoint npm hathornetwork/hathor-wallet-headless run generate_words | tail -1)
+export SEED=$(docker run --rm --entrypoint /bin/sh hathornetwork/hathor-wallet-headless -c "make words" | tail -1)
 echo "Your seed is '$SEED'"
 echo "Keep this seed, we will use it at the end of the guide."
 ```
