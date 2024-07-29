@@ -62,22 +62,17 @@ This contract is "ownable" and the admin will be able to make some operations, f
 
 ##### _Token equivalency_
 
-The contract will require some data structures to be stored on the persistent storage mainly to track the mapping of Hathor tokens to EVM tokens and the crossing operations.
+The contract will require some data conversions from bytes32 to address to repesent tokens from hathor on eth.
 
 The ERC-777 and ERC-20 tokens are identified by the contract address and the Hathor token by its 32 bytes token uid.
-There should be a map going both ways to map a contract address to a token uid and a map from token uid to contract address.
+There should be function for data conversion on bridge contract.
 
 ```solidity
-// This maps a local token address to a hathor token uid
-// This can be used to know which token in Hathor is equivalent to our native token.
-mapping (address => bytes32) localTokenToHathorUid;
-
-// This maps a Hathor token uid to a local token address.
-mapping (bytes32 => address) hathorUidToLocalToken;
+   // this converts bytes32 to address
+   function bytesToAddress (bytes32 data) public pure  returns (address) {
+        return address(uint160(uint256(data)));
+    }
 ```
-
-The only special case is Hathor native token (HTR) which has a token uid of `00` which is not 32 bytes long.
-To use the same method we will map HTR to a 32 bytes sequence of zeroes, i.e. `00000000000000000000000000000000`.
 
 ### Federation contract
 
