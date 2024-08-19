@@ -7,13 +7,15 @@
 
 # Summary
 
-This guide will show you how to run a local private Hathor network with its own full nodes, tx mining service, wallet and explorer. Note that a private network will be completely separated from Hathor's mainnet and testnet.
+This guide will show you how to run a local private Hathor network with its own full nodes, tx mining service, cpu miner, wallet and explorer. Note that a private network will be completely separated from Hathor Networks mainnet and testnet.
 
 By the end of the guide, you will have a fully working private network with the following setup:
 
-- Three hathor-core full nodes connected between each other
-- One tx-mining-service to be used by wallets to mine transactions and used by the full nodes to mine blocks
-- One instance of hathor-wallet-headless
+- Three hathor-core full nodes connected between each other.
+- One tx-mining-service to be used by wallets to mine transactions.
+- One cpu-miner connected to the tx-mining-service to mine blocks.
+- One instance of hathor-wallet-headless.
+- One instance of explorer.
 
 The diagram below shows the overall architecture of this private network:
 
@@ -42,6 +44,8 @@ For wallets, we recommend a minimum of 2 CPUs, 2 GB of RAM, and 100 MB of storag
 
 For tx mining service, we recommend a minimum of 2 CPUs and 1 GB of RAM, and 100 MB of storage. CPU miners are usually CPU bounded.
 
+For miners, we recommend a minimum of 2 CPUs and 1 GB of RAM, and 100 MB of storage. CPU miners are usually CPU bounded.
+
 For the explorer, you just need a webserver to serve a bunch of static files.
 
 Here is a table summarizing the minimum requirements for each type of instance:
@@ -51,6 +55,7 @@ Here is a table summarizing the minimum requirements for each type of instance:
 |Full node         | 3 | 4 | 8 GB | 4 GB | hathornetwork/hathor-core
 |Wallet            | 1 | 2 | 2 GB | 100 MB | hathornetwork/hathor-wallet-headless
 |Tx Mining Service | 1 | 2 | 1 GB | 100 MB | hathornetwork/tx-mining-service
+|Miner             | 2 | 2 | 1 GB | 100 MB | hathornetwork/cpuminer
 
 # Creating a new network
 
@@ -59,8 +64,9 @@ The following steps should be executed to create a new network:
 1. Generate the configuration of the new network.
 2. Launch the full nodes and build the new p2p network.
 3. Launch the tx-mining-service to be able to send transactions.
-4. Run the explorer to see what is going on in your private network easily.
-5. Run your wallet to access the pre-mined tokens.
+4. Launch the miner connected to the tx-mining-service.
+5. Run the explorer to see what is going on in your private network easily.
+6. Run your wallet to access the pre-mined tokens.
 
 After all these steps are done, you can spawn as many wallets as you want.
 
@@ -123,6 +129,7 @@ Note that we used a server from our public testnet in the config above. This was
 The same address will work with our private network because we will be using the same type of addess as the public testnet. Otherwise, we would need to translate it.
 
 ### Creating the genesis block and transactions
+
 Now that we have an address, we will use it to create our genesis block and our two initial transactions.
 
 The following command runs a python shell inside our hathor-core Docker image, to create the output script for the genesis.
@@ -254,6 +261,7 @@ This command configures the full node to:
 - Enable `wallet index`, which is needed to perform some kinds of operations in the API, like getting transactions information.
 
 #### Full node Wallet 1
+
 This full node will be named `fullnode-wallet-1` because the first wallet will use it.
 
 ```sh
@@ -270,6 +278,7 @@ This command configures the full node to:
 - Enable `wallet index`, which is needed to perform some kinds of operations in the API, like getting transactions information.
 
 #### Fullnode Miner
+
 This full node will be named `fullnode-miner` because our miner will use it to mine blocks.
 
 ```sh
