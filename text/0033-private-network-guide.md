@@ -42,7 +42,7 @@ For full nodes, we recommend a minimum of 4 CPUs, 8 GB of RAM, and 4 GB of stora
 
 For wallets, we recommend a minimum of 2 CPUs, 2 GB of RAM, and 100 MB of storage. Wallets are usually memory bounded.
 
-For tx mining service, we recommend a minimum of 2 CPUs and 1 GB of RAM, and 100 MB of storage. CPU miners are usually CPU bounded.
+For tx mining service, we recommend a minimum of 2 CPUs and 1 GB of RAM, and 100 MB of storage.
 
 For miners, we recommend a minimum of 2 CPUs and 1 GB of RAM, and 100 MB of storage. CPU miners are usually CPU bounded.
 
