@@ -7,19 +7,19 @@
 
 # Summary
 
-This guide will show you how to run a local private Hathor network with its own full nodes, miner, wallet and explorer. Note that a private network will be completely separated from Hathor's mainnet and testnet.
+This guide will show you how to run a local private Hathor network with its own full nodes, tx mining service, cpu miner, wallet and explorer. Note that a private network will be completely separated from Hathor Networks mainnet and testnet.
 
 By the end of the guide, you will have a fully working private network with the following setup:
 
-- Three hathor-core full nodes connected between each other
-- One cpu-miner mining blocks in the network
-- One tx-mining-service to be used by Wallets to mine transactions
-- One instance of hathor-wallet-headless
+- Three hathor-core full nodes connected between each other.
+- One tx-mining-service to be used by wallets to mine transactions.
+- One cpu-miner connected to the tx-mining-service to mine blocks.
+- One instance of hathor-wallet-headless.
+- One instance of explorer.
 
 The diagram below shows the overall architecture of this private network:
 
-![fig-architecture](./0033-images/private-network-architecture.png "Private network architecture")
-
+![fig-architecture](./0033-images/private-network-architecture-2.png "Private network architecture")
 
 # Motivation
 
@@ -29,8 +29,8 @@ Creating a private network might be helpful for different reasons. Here are a fe
 - Run tests for new features in the full node.
 - Run a use case over a private network.
 - Customize the full node for use cases.
-- Staging environments
-- Run integration tests
+- Staging environments.
+- Run integration tests.
 
 # Requirements
 
@@ -42,6 +42,8 @@ For full nodes, we recommend a minimum of 4 CPUs, 8 GB of RAM, and 4 GB of stora
 
 For wallets, we recommend a minimum of 2 CPUs, 2 GB of RAM, and 100 MB of storage. Wallets are usually memory bounded.
 
+For tx mining service, we recommend a minimum of 2 CPUs and 1 GB of RAM, and 100 MB of storage.
+
 For miners, we recommend a minimum of 2 CPUs and 1 GB of RAM, and 100 MB of storage. CPU miners are usually CPU bounded.
 
 For the explorer, you just need a webserver to serve a bunch of static files.
@@ -52,20 +54,19 @@ Here is a table summarizing the minimum requirements for each type of instance:
 |---  | ---:  | ---: | ---: | ---:     | --- |
 |Full node         | 3 | 4 | 8 GB | 4 GB | hathornetwork/hathor-core
 |Wallet            | 1 | 2 | 2 GB | 100 MB | hathornetwork/hathor-wallet-headless
-|Miner             | 2 | 2 | 1 GB | 100 MB | hathornetwork/cpuminer
 |Tx Mining Service | 1 | 2 | 1 GB | 100 MB | hathornetwork/tx-mining-service
-
+|Miner             | 2 | 2 | 1 GB | 100 MB | hathornetwork/cpuminer
 
 # Creating a new network
 
-The following steps must be executed to create a new network:
+The following steps should be executed to create a new network:
 
 1. Generate the configuration of the new network.
 2. Launch the full nodes and build the new p2p network.
 3. Launch the tx-mining-service to be able to send transactions.
 4. Launch the miner connected to the tx-mining-service.
-4. Run the explorer to see what is going on in your private network easily.
-5. Run your wallet to access the pre-mined tokens.
+5. Run the explorer to see what is going on in your private network easily.
+6. Run your wallet to access the pre-mined tokens.
 
 After all these steps are done, you can spawn as many wallets as you want.
 
@@ -128,6 +129,7 @@ Note that we used a server from our public testnet in the config above. This was
 The same address will work with our private network because we will be using the same type of addess as the public testnet. Otherwise, we would need to translate it.
 
 ### Creating the genesis block and transactions
+
 Now that we have an address, we will use it to create our genesis block and our two initial transactions.
 
 The following command runs a python shell inside our hathor-core Docker image, to create the output script for the genesis.
@@ -242,6 +244,7 @@ docker network create private-network-docker
 ```
 
 #### Full node Main
+
 Our first full-node will be named `fullnode-main`. It will be our central full node, and all other full nodes will connect to it.
 
 ```sh
@@ -258,6 +261,7 @@ This command configures the full node to:
 - Enable `wallet index`, which is needed to perform some kinds of operations in the API, like getting transactions information.
 
 #### Full node Wallet 1
+
 This full node will be named `fullnode-wallet-1` because the first wallet will use it.
 
 ```sh
@@ -274,6 +278,7 @@ This command configures the full node to:
 - Enable `wallet index`, which is needed to perform some kinds of operations in the API, like getting transactions information.
 
 #### Fullnode Miner
+
 This full node will be named `fullnode-miner` because our miner will use it to mine blocks.
 
 ```sh
@@ -289,28 +294,9 @@ This command configures the full node to:
 - Use `~/hathor-private-tutorial/fullnode-miner` as its data directory in the host.
 - Use the configuration file we create for the network in `hathor.conf.privnet`
 
-## Running the miner
-
-Now that our full nodes are in place, the next step is to run a miner to find blocks in our new private network.
-
-The easiest way to do this in a local testing environment is to run a CPU miner. You can also use GPU, FPGA, or ASIC miners.
-
-A Docker image of our CPU mining tool is available at https://hub.docker.com/r/hathornetwork/cpuminer
-
-You should run it with the following command, replacing `<address>` with the same address we generated at the beginning of the guide:
-```sh
-docker run -ti --network="private-network-docker" hathornetwork/cpuminer -t 1 -a sha256d -o stratum+tcp://fullnode-miner:8093 --coinbase-addr <address>
-```
-
-This command connects the miner to our `fullnode-miner` at port 8093.
-
-You'll note that all full nodes start logging the new blocks when you start mining. The `fullnode-miner` logs will be different because the miner will be connected directly to the full node, relaying mined blocks. The other full nodes will only receive the new blocks through the sync algorithm.
-
-Also, note that the blocks will be relayed to all full nodes. This happens because of the synchronization between the full nodes.
-
 ## Running a TxMiningService
 
-The role of this service is to act as a miner for transactions generated by wallets. In Hathor, transactions are also mined just like blocks, just with a lower difficulty.
+The role of this service is to act as a miner for transactions generated by wallets and for mining new blocks. In Hathor, transactions are also mined just like blocks, just with a lower difficulty.
 
 This is commonly used as an anti-spam mechanism. You can safely customize this or even remove it entirely in your private network.
 
@@ -371,6 +357,7 @@ Congratulations! You have successfully sent a transaction to the network. Your p
 
 
 # Running the Explorer
+
 Clone the repo: https://github.com/HathorNetwork/hathor-explorer
 
 Install dependencies:
