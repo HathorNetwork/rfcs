@@ -84,3 +84,13 @@ The "Task facade" would be initiated with the steps to execute and the caller wo
 This allows oportunities to abort or release the lock after the `prepare-tx` step and can be useful for other processes as well.
 
 This was discarded due to the overcomplication and time to develop.
+
+# Task Breakdown
+[task-breakdown]: #task-breakdown
+
+- [ ] Add the autorun option on wallet-lib (2 dev-days).
+- [ ] Change headless to use the `autorun=false` (0.5 dev-day).
+- [ ] Change headless to release the send-tx lock early (0.5 dev-day).
+- [ ] Make all HSM wallets use the same lock (1 dev-day).
+
+Total: 4 dev-days.
