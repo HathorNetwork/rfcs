@@ -19,7 +19,7 @@ This would allow sending more transactions from the same headless wallet instanc
 
 ## Wallet-lib autorun
 
-The wallet facace has some methods that are meant to prepare and send transactions, these methods return a promise that resolves when the transaction is accepted by the network.
+The wallet facade has some methods that are meant to prepare and send transactions, these methods return a promise that resolves when the transaction is accepted by the network.
 This promise is the return of either `run` or `runFromMining` from the `SendTransaction` facade.
 
 The methods that send transactions are:
