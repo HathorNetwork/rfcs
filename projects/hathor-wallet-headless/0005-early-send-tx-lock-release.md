@@ -19,6 +19,7 @@ This would allow sending more transactions from the same headless wallet instanc
 
 ## Wallet-lib autorun
 
+We should aim to affect all types of wallets capable of sending transactions (P2SH, P2PKH, HSM, Fireblocks, etc.).
 The wallet facade has some methods that are meant to prepare and send transactions, these methods return a promise that resolves when the transaction is accepted by the network.
 This promise is the return of either `run` or `runFromMining` from the `SendTransaction` facade.
 
@@ -84,6 +85,16 @@ The "Task facade" would be initiated with the steps to execute and the caller wo
 This allows oportunities to abort or release the lock after the `prepare-tx` step and can be useful for other processes as well.
 
 This was discarded due to the overcomplication and time to develop.
+
+# Unresolved questions
+
+## Finite UTXO selection
+
+Allowing transactions to choose UTXOs faster can eventually make all available UTXOs chosen before the transactions are sent.
+This fails the next attempt to send a transaction with a "Not enough tokens" error even if the wallet may have the balance.
+
+If a wallet is meant to send many transactions in a burst and it wants to avoid this it should spread the tokens on as much UTXOs as possible.
+It will not prevent this error, but minimize since less tokens should be on change outputs that have yet to be sent.
 
 # Task Breakdown
 [task-breakdown]: #task-breakdown
