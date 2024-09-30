@@ -17,7 +17,7 @@ This would allow sending more transactions from the same headless wallet instanc
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-## Wallet-lib autorun
+## Wallet-lib
 
 We should aim to affect all types of wallets capable of sending transactions (P2SH, P2PKH, HSM, Fireblocks, etc.).
 The wallet facade has some methods that are meant to prepare and send transactions, these methods return a promise that resolves when the transaction is accepted by the network.
@@ -38,37 +38,42 @@ The methods that send transactions are:
 - `createNanoContractTransaction`
 - `createAndSendNanoContractTransaction`
 
-These methods (aside from `handleSendPreparedTransaction`) receive an `options` argument, we will add an `autorun` boolean that defaults to `true`.
-When `autorun` is `false` the method should return the `SendTransaction` instance instead.
+We will create new methods that return the `SendTransaction` instance instead and these methods will be changed to use the new methods to avoid code duplication.
 This will give the caller more control over the execution of the "send transaction" process.
 
 ## Headless send-tx lock
 
-We will change the call of any methods listed above to not use autorun.
+We will change the call of any methods listed above to use the new method.
 This will enable the headless to unlock the send-tx lock before mining the transaction.
-Any UTXOs locked during the `prepare-tx` step will not be chosen if another method tries to send a transaction since the `SendTransaction` facade marks them as 'selected as input'.
+
+The send-tx process can be seen as divided in 3 steps:
+
+- `prepare-tx`
+  - Choose UTXOs and create a `Transaction` instance
+  - `SendTransaction` can be instantiated with the `Transaction` instance
+- `mine-tx`
+  - Lock utxos from the `Transaction` instance
+  - Send transaction to a tx-mining service and get the `nonce`
+- `push-tx`
+  - Send the transaction to the fullnode.
+
+The headless will have to manually lock the UTXOs after the `prepare-tx` step so the UTXOs are not chosen by another call to create a transaction.
 
 Some of the wallet-lib methods initiate a `SendTransaction` instance from the expected outputs and others from a prepared `Transaction` instance.
 The caller can still identify if the instance has a prepared transaction or not, meaning the execution steps are:
 
 - If `sendTransaction.transaction` is `null`
   - run `prepareTx`
-  - Release send-tx lock.
-- If `sendTransaction.transaction` is not `null`
-  - Release the send-tx lock.
+- Lock UTXOs with `updateOutputSelected`
+- Release the send-tx lock.
 - call `.runFromMining()` and return the result.
 
-Since these steps do not depend on the method called we can move this to an util method.
+Since these steps do not depend on the method called we can move this to an util method to be used on all routes.
 
 ## HSM special case
 
 The HSM does not allow simultaneous connections so we should use the global send-tx for any HSM wallet.
-Since we release the connection after the transaction is signed the early lock release would be safe if all HSM wallets use the same lock.
-
-# Drawbacks
-[drawbacks]: #drawbacks
-
-This adds another option on the facade methods, making the facade more convoluted.
+Since we release the connection after the transaction is signed the early lock release will be safe if all HSM wallets use the same lock.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -99,9 +104,9 @@ It will not prevent this error, but minimize since less tokens should be on chan
 # Task Breakdown
 [task-breakdown]: #task-breakdown
 
-- [ ] Add the autorun option on wallet-lib (2 dev-days).
-- [ ] Change headless to use the `autorun=false` (0.5 dev-day).
-- [ ] Change headless to release the send-tx lock early (0.5 dev-day).
+- [ ] Create new lib methods (2 dev-days).
+- [ ] Change headless to use the new lib methods (1 dev-day).
+- [ ] Change headless to release the send-tx lock early (1 dev-day).
 - [ ] Make all HSM wallets use the same lock (1 dev-day).
 
-Total: 4 dev-days.
+Total: 5 dev-days.
