@@ -165,3 +165,8 @@ This API will return the task status from an internal cache.
 > ```
 
 </details>
+
+# Task breakdown
+
+- \[wallet-lib\] add support for FIFO PromiseQueue (1 dev day)
+- \[wallet-headless\] create a send-tx queue for all routes (3 dev days)
