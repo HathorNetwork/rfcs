@@ -20,180 +20,107 @@ Also, since the mechanism is blocking, the full node can't reply HTTP requests w
 
 The problem to be solved by this project can be described as uncoupling the P2P subsystem from the full node. In order to do this, we'll have to refactor all coupling points out of the system. This means we must separate every IO, every callback, and every connection, direct or indirect, between the P2P classes and the rest of the codebase.
 
-Once this is done, we should take this independent P2P subsystem and run it in different processes, one for each connection with the network. Of course, we can't use multithreading in Python because of the GIL (in Python 3.13 you can disable it, but it's still experimental). Even if we could, running on separate processes instead of threads has the added benefit that one process does not interfere with the other, as they have separate memory spaces at the OS level.
+Once this is done, we should take this independent P2P subsystem and run it in different processes, ideally one for each connection with the network. Of course, we can't use multithreading in Python because of the GIL (in Python 3.13 you can disable it, but it's still experimental). Even if we could, running on separate processes instead of threads has the added benefit that one process does not interfere with the other, as they have separate memory spaces at the OS level.
 
 During sync P2P agents have to query data from the full node, such as accessing the storage. Then, when processing is done, the agent sends the downloaded vertex to the full node through the `VertexHandler.on_new_vertex` method. This means we must design a way for the subprocess to communicate with the main process, bidirectionally.
 
-To design the solution, we have to first consider the current architecture:
+Currently, The P2P manager calls a Twisted factory that builds protocols that inherit from `HathorProtocol`, which drives the sync with p2p-related classes.
 
-![](./0001-images/before.png)
+Ideally we could keep the P2P manager and the factory in a secondary "P2P-main" process, and then each protocol (i.e., connection) would also have its own independent subprocess. The protocols would communicate with the P2P-main process, and in turn the P2P-main process would communicate with the main process to send and retrieve data to/from the full node. In other words, this would mean that every TCP message would be received and handled directly in each respective subprocess, and then the `HathorProtocol` would use some form of IPC to communicate with the `Node` for querying the storage and sending new vertices.
 
-In this diagram, arrows represent call flow and nested blocks represent inheritance. Currently, the `HathorLineReceiver` class has a double inheritance from `LineReceiver` and `HathorProtocol`. The former is a class provided by Twisted, inheriting from `twisted.Protocol`. The latter is our sync class that actually implements and kickstarts the whole sync logic (it instantiates and handles multiple other classes). Then, `HathorLineReceiver` subclasses them both to connect their behaviors in a single protocol. Being a Twisted protocol, it also means that it is associated with a twisted factory. When a new TCP connection is made, this factory is responsible for creating a new protocol instance, which kicks off the sync process. This bit is not represented in the diagram, but this fact will be important later. Lastly, the sync process communicates with the node though multiple pointers, represented here by the single `Node` block, containing the `HathorManager`, the `ConnectionsManager`, the `TransactionStorage`, and any other class that the sync needs from the rest of the full node. Those are called from the `HathorProtocol`.
+However, this implementation is not straightforward because being in a separate process means using a completely separate Python interpreter, which means using separate Twisted reactors. By default, a Twisted protocol must run in the same reactor as its Twisted factory. To make protocols work on separate processes, we would need at least to work with lower-level socket primitives. At worst, the intrinsic coupling between Twisted factories and protocols could be a blocking factor.
 
-We have to determine where to draw the process boundary line, meaning which classes are going to execute in the subprocesses, and what remains in the main process. The requirement is that each P2P agent runs in its own process, so we know for sure that the `HathorProtocol` must run in the subprocess. We also know that `Node` will remain in the main process, as it demultiplexes the agents to run new vertices through the verification process, the consensus, and to save them in the storage in the main process.
+Then, we propose splitting this project into two:
 
-What about the `LineReceiver`? Ideally, it would be in the subprocess too. This would mean that every TCP message would be received and handled directly in the subprocess, and then the `HathorProtocol` would use some form of IPC to communicate with the `Node` for querying the storage and sending new vertices. However, this is not possible. Being in a separate process means using a completely separate Python interpreter, which means using separate Twisted reactors. By definition, a Twisted protocol must run in the same reactor as its Twisted factory. Then, the `LineReceiver` must also remain in the main process, and its communication with the `HathorProtocol` will also have to be through IPC.
+1. **P2P Multiprocess Phase One** - Split the P2P manager, the factory, and its protocols into a new single P2P subprocess. All connections still share the same process between each other, but are isolated from the rest of the full node (Hathor manager, storage, APIs, etc.). This still has benefits for performance, and there could be a monitor on the main process watching the P2P-main process. When it detects failures, staleness, or high memory usage, it kills and restarts the subprocess.
+2. **P2P Multiprocess Phase Two** - In this phase, we try to split each connection into a single subprocess. This has the advantage of isolating connections, and therefore preventing an attacker from blocking the whole sync, but with a complexity tradeoff and possibly higher IPC overhead.
 
-Here's the proposed new architecture:
-
-![](./0001-images/after.png)
-
-It simply moves the `HathorProtocol` out of the inheritance tree, and changes its communication with the `LineReceiver` to use IPC. It does the same for its communication with the `Node`.
-
-The new `IpcLineReceiver` is a protocol, by still inheriting `LineReceiver`. Through composition, an `IpcServer` has access to it, and it has access to an `IpcClient`. Both of them are connected to an `IpcConnection`, which is simply a wrapper to Python's `multiprocessing.Connection` (which in turn wraps a UNIX socket). The `IpcConnection` is able to connect to another `IpcConnection` in a subprocess, which symmetrically connects to another client/server pair, connected to the `HathorProtocol`. The main process' `IpcServer` also has access to the rest of the `Node`.
-
-When a new TCP connection is created, the Twisted factory (not shown here) will instantiate a new `IpcLineReceiver` protocol. It will do so by setting up and starting a subprocess and arranging all those connections. Then, when a TCP message is received, Twisted will call `IpcLineReceiver.lineReceived`, which will call `HathorProtocol.recv_message` through the `IpcClient`. Analogously, when `HathorProtocol` needs some information from the storage, it will call `Node` through its `IpcClient`. Each client is responded by the corresponding `IpcServer` on the other process. They all share a single UNIX socket through the `IpcConnection` abstraction. Lastly, the `HathorProtocol` can also call `VertexHandler.on_new_vertex` through the same path. The underlying protocol used in the IPC is a simple binary protocol pretty analogous to the sync process itself: it sends a command and data pair via a single binary string.
+By doing this we are able to plan and design each phase independently, possibly with different priorities, since Phase One solves most of our problems.
 
 # Reference-level explanation
 [Reference-level explanation]: #reference-level-explanation
 
-## Proof-of-Concept
+According to what was proposed in the Guide-level section, this section details the implementation for P2P Multiprocess Phase One. In order to validate the proposal, I created a [POC](https://github.com/HathorNetwork/hathor-core/pull/1161) that provides a working version of a full node that is able to sync while running P2P components in a single separate subprocess, without blocking the rest of the full node. For information on how to run it and current limitations, check the link.
 
-In order to validate the idea described in the Guide-level section, I created a [POC](https://github.com/HathorNetwork/hathor-core/pull/1138) that simulates both diagrams. You can run the current architecture simulation by running `python hathor/current_p2p.py` in that branch, and `python hathor/p2p_mp_poc.py` to run the new architecture.
+## Subprocess management
 
-For both simulations, you can use netcat to send TCP messages to the system, like `nc localhost 8080 -c` for an interactive session. Try opening two separate netcat sessions, and sending a message simultaneously in each one. I put a 5-second delay on `HathorProtocol` processing to simulate a CPU-heavy method. The current architecture will take ~10 seconds to respond both requests, and the new architecture takes half that time.
+Subprocess management, that is, spawning, terminating, checking for erros, etc., is done using Twisted's `ProcessProtocol` ([docs](https://docs.twisted.org/en/stable/core/howto/process.html)). Using it facilitates implementation as it integrates seamlessly with the Twisted framework, transforming process events in events that are handled by the Twisted reactor. We override handlers to react appropriately.
 
-Code snippets from that POC will be in the descriptions below, but some code is omitted. For the full code, see the POC link above.
+The caveat is that it takes an executable path in the system as its target, instead of nicely integrated with Python functions (like Python's `multiprocessing` module). We work around this by creating a new P2P "main" file and executing it with Python itself.
 
-### Current architecture simulation
+## Interprocess Communication
 
-In the [`hathor/current_p2p.py`](https://github.com/HathorNetwork/hathor-core/blob/fe7e9a69db37a8032516c0715dbfbf7a46744431/hathor/current_p2p.py) file, a simple script simulates the current P2P subsystem.
+Twisted's `ProcessProtocol` provides a simple way of performing IPC through file descriptors that can be mapped to the parent's file descriptors when the subprocess is spawned. Then, the parent can react accordingly when, for example, the subprocess writes to stdout. This is suitable for simple cases but not so much for our use case of performing bidirectional request/response calls between the processes. Therefore, in the POC we simply ignore this mechanism.
 
-- A `HathorManager` class represents the `Node` from the diagrams above, and has two methods: `read_storage` and `save_storage`. They simulate methods for interacting with the `TransactionStorage`.
-- Then, the `HathorProtocol` class represents its real homonym, providing a `do_something` method that represents the sync process. Notice that it has access to the manager and calls its methods to perform the sync. It also has an abstract `send_line` method.
-- The `MyLineReceiver` protocol represents the `HathorLineReceiver`, inheriting from both `LineReceiver` and `HathorProtocol`. Its `lineReceived` method calls `HathorProtocol.do_something`, and it overrides `HathorProtocol.send_line`, implementing it.
-- Lastly, `MyFactory` represents both `HathorServerFactory` and `HathorClientFactory`, simply instantiating `MyLineReceiver`.
+When the subprocess is spawned, it works as a standalone Python process with its own interpreter and reactor. We then use Twisted's AMP protocols to implement IPC. AMP is Twisted's implementation of Asynchronous Messaging Protocol, an abstraction for remote request/response calls that provides (de)serialization, typing of request and response payloads, and handling of remote exceptions ([docs](https://docs.twisted.org/en/stable/core/howto/amp.html)). While the POC uses AMP, in the Drawbacks, alternatives, and future possibilities section we describe other options for this component which could be used in the final version.
 
-### Proposed architecture simulation
+We use UDS endpoints to create connections between the processes, and attach the AMP protocols to it. Since we need bidirectional communication, we create two sockets, with one AMP server/client pair for each. In the implementation, we may be able to use the file descriptor mapping described in the previous paragraph to perform those connections, instead of creating our own sockets.
 
-The [`hathor/p2p_mp_poc.py`](https://github.com/HathorNetwork/hathor-core/blob/fe7e9a69db37a8032516c0715dbfbf7a46744431/hathor/p2p_mp_poc.py) file contains the new proposed architecture simulation script.
+There are multiple request/response calls between the P2P process and the rest of the full node. All those calls must be converted to remote, IPC calls. Since AMP's `callRemote` returns a `Deferred`, we need to convert all of them to `async`. This amounts for a few refactor PRs. They're listed below.
 
-- It has the same `HathorManager` class as above.
-- The `HathorProtocol` class is mostly the same, except it calls manager methods and `send_line` through an `IpcClient`, instead of directly.
-- The `MyLineReceiver` protocol is replaced by `IpcLineReceiver`, which doesn't have access to the `HathorProtocol` anymore, and instead calls `do_something` through an `IpcClient`, too.
-- The `MyFactory` class is replaced by `IpcFactory`, and when it creates a protocol instance it calls the new `ipc.connect` function (described below) to arrange the subprocess connection.
-- Lastly, it contains 2 `IpcClient`s and 2 `IpcServer`s, one pair for the main process and one for the subprocess. Those are responsible for defining the interface between the processes: which commands can be called in each of them.
-
-### `_IpcConnection`
-
-The private `_IpcConnection` class wraps `multiprocessing.Connection` objects returned by the `multiprocessing.Pipe`. A pair of those represent a single connection between the main process and a subprocess, with each instance in its respective process. It is bidirectional, meaning that each end is able to send and receive messages to the other end. In other words, each end sends and receives both requests and responses.
-
-Its only responsibility is to run a `twisted.LoopingCall` that polls the `Connection` for new messages. When a message is received, an ID mechanism is used to determine whether the message is a new request or a response to one of its own requests.
-
-It provides a `call` method to send requests, which returns a `Deferred` that will be completed when the respective response is received:
+### Calls from the P2P process to the main process
 
 ```python
-def call(self, cmd: bytes, request: bytes | None) -> Deferred[bytes]:
-    data = cmd if request is None else cmd + MESSAGE_SEPARATOR + request
-    message = self._send_message(data)
-    deferred: Deferred[bytes] = Deferred()
-    self._pending_calls[message.id] = deferred
-    return deferred
+# Calls on VertexHandler
+def on_new_vertex(self, vertex: Vertex, *, fails_silently: bool = True) -> bool: ...
+
+# Calls on VerificationService
+def verify_basic(self, vertex: Vertex) -> None: ...
+
+# Calls on PubSub
+def publish(self, key: HathorEvents, **kwargs: Any) -> None: ...
+
+# Calls on TransactionStorage and indexes
+def get_genesis(self, vertex_id: VertexId) -> Vertex | None: ...
+def get_vertex(self, vertex_id: VertexId) -> Vertex: ...
+def get_block(self, block_id: VertexId) -> Block: ...
+def get_latest_timestamp(self) -> int: ...
+def get_first_timestamp(self) -> int: ...
+def vertex_exists(self, vertex_id: VertexId) -> bool: ...
+def can_validate_full(self, vertex: Vertex) -> bool: ...
+def get_merkle_tree(self, timestamp: int) -> tuple[bytes, list[bytes]]: ...
+def get_hashes_and_next_idx(self, from_idx: RangeIdx, count: int) -> tuple[list[bytes], RangeIdx | None]: ...
+def compare_bytes_with_local_vertex(self, vertex: Vertex) -> bool: ...
+def get_best_block(self) -> Block: ...
+def get_n_height_tips(self, n_blocks: int) -> list[HeightInfo]: ...
+def get_tx_tips(self, timestamp: float | None = None) -> set[Interval]: ...
+def get_mempool_tips(self) -> set[VertexId]: ...
+def height_index_get(self, height: int) -> VertexId | None: ...
+def get_parent_block(self, block: Block) -> Block: ...
+def get_best_block_tips(self) -> list[VertexId]: ...
+def partial_vertex_exists(self, vertex_id: VertexId) -> bool: ...
 ```
 
-And the polling mechanism:
+To minimize work, we may refactor calls that are performed by Sync-v2 only, and disable support for Multiprocess P2P when Sync-v1 is enabled, since we'll deprecate it soon.
+
+Since all request and response payloads are classes are serializable, it's not too hard to convert them to IPC calls. When sending vertices though, we must serialize `static_metadata` and send it together. Considering `TransactionMetadata`, there are only some asserts that we may remove (moving them to the main process) so we don't have to serialize and send it. However, in the POC the node only works as a sync client. It's possible that in the sync server version we have other edge cases that use metadata — this has not been checked yet.
+
+About converting them to `async`, this is mostly not too hard since all calls can bubble up to an async TCP message handling call. However, when we introduce `async` calls in the middle of methods that are currently serial, we must be careful to uphold any ordering invariants required by such methods. Using [DeferredLocks](https://docs.twistedmatrix.com/en/stable/api/twisted.internet.defer.DeferredLock.html) may be useful in those situations.
+
+### Calls from the main process to the P2P process
+
+The full node also communicates with the `P2PManager` from some methods, such as endpoints and some control mechanisms:
 
 ```python
-def _unsafe_poll(self) -> None:
-    if not self._conn.poll():
-        return
-
-    message_bytes = self._conn.recv_bytes()
-    message = _Message.deserialize(message_bytes)
-
-    if pending_call := self._pending_calls.pop(message.id, None):
-        # The received message is a response for one of our own requests
-        pending_call.callback(message.data)
-        return
-
-    # The received message is a new request
-    coro = self._server.handle_request(message.data)
-    deferred = Deferred.fromCoroutine(coro)
-    deferred.addCallback(lambda response: self._send_message(response, request_id=message.id))
+def start(self) -> None: ...
+def stop(self) -> None: ...
+def get_connections(self) -> set[HathorProtocol]: ...
+def get_server_factory(self) -> HathorServerFactory: ...
+def get_client_factory(self) -> HathorClientFactory: ...
+def enable_localhost_only(self) -> None: ...
+def has_synced_peer(self) -> bool: ...
+def send_tx_to_peers(self, tx: BaseTransaction) -> None: ...
+def reload_entrypoints_and_connections(self) -> None: ...
+def enable_sync_version(self, sync_version: SyncVersion) -> None: ...
+def add_peer_discovery(self, peer_discovery: PeerDiscovery) -> None: ...
+def add_listen_address_description(self, addr: str) -> None: ...
+def disconnect_all_peers(self, *, force: bool = False) -> None: ...
 ```
 
-Notice that it calls a `self._server.handle_request` to handle requests. That server is an `IpcServer` that will be described below.
-
-To keep track of which response is associated with which request, each pair is assigned a unique message ID that is created by incrementing an `int` from a `multiprocessing.Value`, a Python object that supports atomic read/writes in multiple processes.
-
-### `IpcClient` and `IpcServer`
-
-Users of the `_IpcConnection` class do not interact with it directly. Instead, they do so through client/server abstractions:
-
-```python
-class IpcClient(ABC):
-    def call(self, cmd: bytes, request: bytes | None = None) -> Deferred[bytes]:
-        return self._ipc_conn.call(cmd, request)
-
-class IpcServer(ABC):
-    @abstractmethod
-    def get_cmd_map(self) -> dict[bytes, IpcCommand]:
-        raise NotImplementedError
-```
-
-The user (in this case, the sync process) must implement classes inheriting from the `IpcClient` and `IpcServer`. The client will provide the user with a way to call commands on the other process. And through the server, the user must provide a way to handle those commands. In practice, the user must implement 4 classes: 2 clients and 2 servers, one pair for the main process and another for the subprocess.
-
-### The `connect()` function
-
-Lastly, a function is provided to arrange all connections, starting the subprocess, etc.
-
-```python
-def connect(
-    *,
-    main_reactor: ReactorProtocol,
-    main_client: IpcClient,
-    main_server: IpcServer,
-    subprocess_client_builder: Callable[[], ClientT],
-    subprocess_server_builder: Callable[[ClientT], IpcServer],
-    subprocess_name: str,
-) -> None:
-    conn1: Connection
-    conn2: Connection
-    conn1, conn2 = Pipe()
-    message_id = multiprocessing.Value('L', 0)
-
-    main_ipc_conn = _IpcConnection(
-        reactor=main_reactor, name='main', conn=conn1, message_id=message_id, server=main_server
-    )
-    main_client.set_ipc_conn(main_ipc_conn)
-    main_ipc_conn.start_listening()
-
-    subprocess = Process(
-        name=subprocess_name,
-        target=_run_subprocess,
-        kwargs=dict(
-            name=subprocess_name,
-            conn=conn2,
-            client_builder=subprocess_client_builder,
-            server_builder=subprocess_server_builder,
-            message_id=message_id,
-        ),
-    )
-    subprocess.start()
+Those are trickier to convert to IPC, since some of those types are not serializable, unlike the previous ones. Also conversely, some of them are called from non-`async` contexts and therefore changing them to `async` will be harder. We'll have to examine each call case by case and determine the best solution for each. For example, the `get_connections` method is only called by `Metrics` and it only uses `str(connection.entrypoint)` and `connection.metrics`. Those are in fact serializable, so we should change the method to return them instead of the whole `HathorProtocol`, which is not.
 
 
-def _run_subprocess(
-    *,
-    name: str,
-    conn: Connection,
-    client_builder: Callable[[], IpcClient],
-    server_builder: Callable[[IpcClient], IpcServer],
-    message_id: Synchronized,
-) -> None:
-    subprocess_reactor = initialize_global_reactor()
-    client = client_builder()
-    server = server_builder(client)
-    subprocess_ipc_conn = _IpcConnection(
-        reactor=subprocess_reactor, name=name, conn=conn, server=server, message_id=message_id
-    )
-    client.set_ipc_conn(subprocess_ipc_conn)
-    subprocess_ipc_conn.start_listening()
-    subprocess_reactor.run()
-```
-
-Notice that a new Twisted reactor is initialized in the subprocess.
-
-### Not covered by the POC
+## Not covered by the POC
 
 The following points where mostly ignored in the POC and must be addressed in the implementation:
 
@@ -206,29 +133,62 @@ The following points where mostly ignored in the POC and must be addressed in th
 3. Deal with process termination in both ways
     - What happens when the subprocess dies? Kill the connection.
     - What happens when the main process dies? We shouldn't leave zombie subprocesses.
-4. Use a multiprocessing Pool?
-    - In the POC, one process is created for each P2P connection. We could use a pool to prevent creating a lot of process, and run many connections in each process, one for each CPU in the host machine. This has the advantage of minimizing the number of subprocesses, but then connections are not completely isolated: they would still be isolated from the rest of the node, but not from other connections. This should be investigated.
-5. Further abstractions?
-    - In the POC, the IPC protocol relies on sending binary command and data pairs. We could create an easier abstraction to make calls more similar to calling methods by providing a method name, args, and kwargs. This is not necessary, but could be nice.
-    - Eventually we could extract an RPC abstraction from the IPC classes, making it work for remote connections that are not necessarily processes. This means this code could be reused by the Sync process itself, that is, for abstracting the communication between two full nodes. Sync-v2 already uses a similar deferred calls mechanism, but it is implemented ad-hoc in the protocol. By using the same abstraction, we not only simplify code but also make Sync-v2 a request/response protocol, making its logic more linear. This could be a Sync-v2.5 and is probably out of the scope of this project.
 
-## Sync-v2 refactors
+## Drawbacks, alternatives, and future possibilities
 
-In order to make the solution above work with Sync-v2, some refactors will have to be made. Mainly, we must isolate all places it interacts with the full node (by calling storage methods, manager methods, etc). Some of this work was already done as part of the Multiprocess Verification project, so some of its unmerged PRs can be repurposed.
+I'm condensing those sections into one as they're all related.
 
-Also, the `IpcClient` interface only provides a way to call methods in the other process through an `async` method. This means we may also have to convert some methods in the Sync-v2 to async, if possible. If not possible (that is, if the refactor would be too extensive), we could try to implement a `IpcClient.call_blocking` method, but this also has to be investigated.
+### Twisted's AMP
+
+Specifically for using Twisted's AMP, I see two drawbacks:
+
+1. AMP remote calls can only be `async`. If there are any methods that are too hard to convert, this may be an issue.
+2. AMP messages have a fixed limit in size: no values can be larger than 65535 bytes. Coincidentally, this the same line length limit that we have in the sync protocol, which means vertices will never be larger. However, it's possible that some of the other serialized types that are sent through IPC reach this limit. If this happens, the call will fail and the sync may stall. We have to consider this.
+
+To fix or prevent those problems, we can use alternative technologies to perform the IPC calls:
+
+#### gRPC
+
+[gRPC](https://grpc.io/) is a robust RPC framework by Google that uses protobufs to serialize messages. It has great support for Python and native support for both synchronous and asynchronous calls, which means it doesn't present the same drawbacks as AMP.
+
+The only "drawback" that I see is that it requires defining static schemas and using code generation for its services, which may not be bad, but may be a bit overkill for this use case. We must algo test whether its more expensive (de)serialization introduces a significant overhead.
+
+#### ZeroMQ
+
+[ZeroMQ](https://zeromq.org/) is a lightweight abstraction over sockets that acts as a concurrency framework. It also has great support for Python and native support for both synchronous and asynchronous calls. It doesn't provide its own serialization like gRPC, so we must provide our own or use its utilities for sending messages using json or Python's pickle.
+
+ZeroMQ is used in the official [bitcoin client](https://github.com/bitcoin/bitcoin/blob/master/doc/zmq.md) to provide a notification system that looks like it's similar to our Event Queue system, which uses WebSockets.
+
+#### Other considerations
+
+However, async support for both gRPC and ZeroMQ are integrated with Python's asyncio. In order to use them with Twisted, we may use the `--x-asyncio-reactor` option in the full node, which is currently experimental, or integrate with lower level future primitives. This has to be experimented.
+
+For ZeroMQ, there are two options, its [native support for asyncio](https://pyzmq.readthedocs.io/en/latest/howto/eventloop.html#asyncio) or the third-party [aiozmq](https://github.com/aio-libs/aiozmq/) lib, which is in the same organization as the famous `aiohttp` lib. The latter has a great abstraction for RPC calls that looks like method calls, but it looks like its repo is stale.
+
+Also, even though both gRPC and ZeroMQ support blocking remote calls, this must be used with caution because bidirectional blocking remote calls may cause deadlocks. When making a call from a client to a server, we may only block if we are sure that there are no callbacks from the server to client in the handling path of the initial request. This may be easy to guarantee if the communication from the P2P process to the main process only uses async calls, and use blocking calls only from the main process to the P2P process. Modularizing the P2PManager may also help with this, isolating its IPC endpoints.
+
+### RocksDB's secondary DB
+
+RocksDB has the ability to open a secondary instance of a DB from another process. This instance is read-only, and a `try_catch_up_with_primary` method has to be actively called to update its contents in relation to the primary instance. This could be used in the P2P process instead of performing IPC calls to the `TransactionStorage` and indexes, but I tested it and it was too slow. Even though the method returned quickly in my tests, the DB would actually take about 5 seconds to be updated with the contents from the primary DB, with the method being called in a loop.
+
+This is unusable when syncing from a full node client perspective, but may be useful for syncing from a server perspective, as we can respond the other full node with outdated data and update the secondary DB in the background. However, that would require a refactor to modularize the server and client protocols. This may also be useful for the Multiprocess HTTP API project for the same reason.
+
+### Rate limit and watchdog
+
+As a future possibility, to make the multiprocess system more robust, we may add a rate limit for IPC calls and a watchdog for killing a subprocess when it uses too much memory, for example. This would prevent an attacker from affecting the full node if an exploit is found in the sync. This may be a separate project implemented between the Phase One and Phase Two described in the Guide-level section.
 
 # Task breakdown
 
 Here's a table of main tasks:
 
-| Task                                                         | Dev days |
-|--------------------------------------------------------------|----------|
-| Finish IPC implementation (logging, exceptions, termination) | 2        |
-| Sync-v2 refactors                                            | 2        |
-| Implement Sync-v2 IPC clients and servers                    | 1        |
-| Implement CLI command to enable multiprocess P2P             | 0.2      |
-| Run benchmarks and tests                                     | 1.8      |
-| **Total**                                                    | **7**    |
+| Task                                                     | Dev days |
+|----------------------------------------------------------|----------|
+| Experiment with gRPC and ZeroMQ                          | 1        |
+| Implement P2P process IPC server (including refactors)   | 2        |
+| Implement main process IPC server (including refactors)  | 2        |
+| Implement IPC details (logging, exceptions, termination) | 2        |
+| Implement CLI command to enable multiprocess P2P         | 0.2      |
+| Run benchmarks and tests                                 | 1.8      |
+| **Total**                                                | **9**    |
 
 All tasks include writing unit tests for the respective feature.
