@@ -18,49 +18,48 @@ The new configuration would use the same configuration for biometrics but use a 
 
 ## Access control
 
-The dependency used to manage keychain password is [react-native-keychain](https://www.npmjs.com/package/react-native-keychain) and we use the [setGenericPassword](https://github.com/oblador/react-native-keychain?tab=readme-ov-file#setgenericpasswordusername-password--accesscontrol-accessible-accessgroup-service-securitylevel-) and [getGenericPassword](https://github.com/oblador/react-native-keychain?tab=readme-ov-file#getgenericpassword-authenticationprompt-service-accesscontrol-) to save and retrieve the pin from the keychain.
-Since the new security mode and the current biometrics mode cannot work at the same time we will only use 1 password saved at a time on the keychain (instead of having both pins saved).
+The dependency used to manage keychain password is [react-native-keychain](https://www.npmjs.com/package/react-native-keychain) and we use the [setGenericPassword](https://oblador.github.io/react-native-keychain/docs/api/functions/setGenericPassword) and [getGenericPassword](https://oblador.github.io/react-native-keychain/docs/api/functions/getGenericPassword) to save and retrieve the pin from the keychain.
 
-The [access control](https://github.com/oblador/react-native-keychain?tab=readme-ov-file#keychainaccess_control-enum) and [accessible](https://github.com/oblador/react-native-keychain?tab=readme-ov-file#keychainaccessible-enum) configurations are used with the `setGenericPassword` to manage how this password can be used and by whom.
+The [access control](https://oblador.github.io/react-native-keychain/docs/api/enumerations/ACCESS_CONTROL) and [accessible](https://oblador.github.io/react-native-keychain/docs/api/enumerations/ACCESSIBLE) configurations are used with the `setGenericPassword` to manage how this password can be used and by whom.
 
 This new password should be saved with:
 
-- Access control **`BIOMETRY_ANY_OR_DEVICE_PASSCODE`**: Constraint to access an item with Touch ID for any enrolled fingers or passcode.
-	- This way either biometrics or system pin/pattern will unlock the wallet
+- Access control **`BIOMETRY_ANY`**: Constraint to access an item with Touch ID for any enrolled fingers.
 - Accessible **`WHEN_UNLOCKED_THIS_DEVICE_ONLY`**: The data in the keychain item can be accessed only while the device is unlocked by the user. Items with this attribute do not migrate to a new device.
-
-## Settings
-
-The new configuration should not replace the current one, it will be presented to the user as an option called "Enable system authentication" on the settings page, once clicked the enabling process will start on a new screen.
-
-### Enabling process
-
-When trying to enable system authentication the user will be required to confirm that this is what he wants, this screen also has a more detailed explanation of what will be enabled along with a warning that the wallet pin unlock will be disabled.
-
-After conffirmation the user will be required to input the pin (if biometrics is enabled it can also be used here). The pin will be used to decrypt the access data and encrypt with the new pin.
-
-The new pin will be generated randomly the access data will then be encrypted with the new pin and both will be saved.
-
-### Disabling process
-
-To disable we will have a similar confirmation prompt as the first step and the system authentication as the next step to get the current pin.
-The user will then have to create a new 6 digit pin and confirm it, once the new pin is chosen the access data will be encrypted with the new pin and the wallet will be restarted.
 
 ## Unlocking the wallet
 
-The pin screen to unlock the wallet will have to know that when the system authentication is turned on, the user cannot default to the pin input since the actual pin is not 6 digit anymore, so if the user cancels the system authentication prompt or fails too many times it should show a warning to close the wallet and open again to try one more time along with the "reset wallet" button to allow users to start a new wallet.
+Since the access data is not encrypted with the pin it cannot be used as a fallback if the user fails the system authentication.
+If the user cancels the system authentication prompt or fails too many times it should show a warning along with the "reset wallet" button to allow users to start a new wallet.
 
 ## Feature flag
 
-Since this is a new mode and does not impact the current ones we should keep the settings part of enabling this hidden under a feature flag and release it to some trusted users to review the feature and check for friction in the user experience.
+We should create a feature flag to control this feature rollout.
+This feature flag should be first enabled to trusted users, then we can incrementally rollout to all users.
 
-# Drawbacks
-[drawbacks]: #drawbacks
+## Migration
 
-The new mode is more strict and may be confusing to new users since we already have a biometrics option.
+We should create a configuration migration if a user currently uses biometry the pin should be exchanged by a random password the next time he opens the wallet.
+When the user input his pin and it is verified we should:
 
-# Rationale and alternatives
-[rationale-and-alternatives]: #rationale-and-alternatives
+- generate a random password.
+- decrypt the access data with the pin and encrypt with the new random password.
+- Save the random password and the pin on the keychain.
+- Save mark this migration as complete.
 
-We could just change the biometrics mode for this new one, but I think we should keep the new mode in a feature flag and in the future slowly release this feature.
-Initially users may have both biometrics and system authentication as options, then we can slowly phase out the old biometrics if we sense that the new system is being well received by the userbase.
+## Disable biometry
+
+Since the access data is not encrypted with the pin anymore we should get the pin from the keychain and encrypt the access data with the pin.
+Since the pin is also saved on the keychain this means the user can only do this if he passes the system biometry check.
+
+# Future possibilities
+[future-possibilities]: #future-possibilities
+
+## Passcode or biometry
+
+If we could give the user this option he could choose which authentication type he wants (e.g. biometry, passcode, etc.).
+
+## 2 levels of encryption
+
+We could have the keys of the access data encrypted with the pin and the access data object encrypted with the random password.
+This would make the wallet only open with a biometry check and sending transactions would require the biometry or passcode.
