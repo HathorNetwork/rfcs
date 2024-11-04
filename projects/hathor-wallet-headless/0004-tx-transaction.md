@@ -20,68 +20,92 @@ We can describe a transaction by using a system of *instructions template* set t
 A user must be able to control instructions to design a transaction by using a *client* which should be able to build a *transaction template* and executes its interpretation to generate a final *transaction*.
 
 For this, we can segregate the mentioned system in three areas:
+
 - User land
+  - public set of interfaces, types and classes that will be used to create templates.
 - Interpreter
+  - public set of classes used by wallets to build transactions from a template.
 - Lib land
+  - protected internal methods and utilities used to create templates and transaction.
 
 On *user land* we provides:
+
 - Instruction template interfaces
 - Instruction classes
 - Transaction template builder
 - Transaction template client
 
 On *interpreter* side we provides:
+
 - Wallet facade interpreter
 - Wallet service interpreter
 
 On *lib land* we provides:
-- All the existing methods for transaction preparation, creation and send transaction, including helpers and utils to create transaction components
-- New methods to assist the interpreters, if need
 
-To limit the scope of this work, we are going to focus on transactions of version `0x01` which means that we will not create tokens or NFTs.
+- All the existing methods for transaction preparation, creation and send transaction, including helpers and utils to create transaction components
+- New methods to assist the interpreters, if needed
 
 ## User land
 
 ### Instruction template interfaces
-[instruction-template-interfaces]: #instruction-template-interfaces
 
 **Basic:**
-- [BaseTemplateInstruction](#basetemplateinstruction): determine a instruction template type
-- InputOutputTemplateInstruction: can control an insertion position into the array
-- ActionTemplateInstruction: can determine over which component to act
+
+- [InputTemplateInstruction](#inputtemplateinstruction): controls an input insertion into the array
+- [OutputTemplateInstruction](#outputtemplateinstruction): controls an output insertion into the array
+- [ActionTemplateInstruction](#actiontemplateinstruction): can determine over which component to act
 
 These basic template instructions are for *internal* use and define **required fields** to declare a *template instruction literal* object by the user.
 
 The following interfaces are describing each instruction type by its fields and possible values. A user can define a literal object of these types to design a final transaction.
 
 **Input:**
+
 - [UtxoInputTemplateInstruction](#utxoinputtemplateinstruction): can control any param to query a UTXO input
 - RawInputTemplateInstruction: can determine a known UTXO at the risk to be already spent
 
 **Output:**
+
 - [TokenOutputTemplateInstruction](#utxoinputtemplateinstruction): can control a token output generation
 - DataOutputTemplateInstruction: can control data output generation
 - RawOutputTemplateInstruction: can determine an output
 
 **Action:**
+
 - [ShuffleActionTemplateInstruction](#shuffleactiontemplateinstruction): can determine a shuffle over a target array, either an input or output
 - FillChangeActionTemplateInstruction: can determine a change output generation
 
-#### `BaseTemplateInstruction`
-[basetemplateinstruction]: #basetemplateinstruction
+#### `TemplateInstruction`
 
 ```ts
-interface BaseTemplateInstruction {
+interface TemplateInstruction {
   readonly type: AllInstructionTypes|string;
+  // ... methods will be addresses later in the design
 }
 ```
 
 - `type`: select a type from all possible types among inputs, outputs and actions
 
-#### `InputOutputTemplateInstruction`
+#### `InputTemplateInstruction`
 
 ```ts
-interface InputOutputTemplateInstruction {
+interface InputTemplateInstruction extends TemplateInstruction {
+  /**
+   * A positive integer
+   * It allows -1 to denote the last position in the array
+   */
+  position: number;
+}
+```
+
+- `position`: which index to insert the input, default to `-1`
+  - [NOTE-1]: can be `-1` to insert at the end
+  - [NOTE-2]: the request will fail if position doesn't exists
+
+#### `OutputTemplateInstruction`
+
+```ts
+interface OutputTemplateInstruction extends TemplateInstruction {
   /**
    * A positive integer
    * It allows -1 to denote the last position in the array
@@ -97,7 +121,7 @@ interface InputOutputTemplateInstruction {
 #### `ActionTemplateInstruction`
 
 ```ts
-interface ActionTemplateInstruction {
+interface ActionTemplateInstruction extends TemplateInstruction {
   target: 'inputs'|'outputs'|'all';
 }
 ```
@@ -105,10 +129,11 @@ interface ActionTemplateInstruction {
 - `target`: choose a target to execute an action over
 
 #### `UtxoInputTemplateInstruction`
-[utxoinputtemplateinstruction]: #utxoinputtemplateinstruction
+
+type: `input/utxo`
 
 ```ts
-interface UtxoInputTemplateInstruction extends InputOutputTemplateInstruction, BaseTemplateInstruction {
+interface UtxoInputTemplateInstruction extends InputTemplateInstruction {
   fill: number;
   token?: string;
   authority?: `mint` | `melt`;
@@ -118,42 +143,53 @@ interface UtxoInputTemplateInstruction extends InputOutputTemplateInstruction, B
 ```
 
 - `fill`: amount of tokens to select
-	- [NOTE-1]: It may require multiple selection of UTXO to match the amount
-	- [NOTE-2]: It doesn't imply the generation of a change output
+  - [NOTE-1]: It may require multiple selection of UTXO to match the amount
+  - [NOTE-2]: It doesn't imply the generation of a change output
+  - [NOTE-3]: The amount selected may surpass the `fill`, so a change output may be required.
 - `token`: which token to select, defaults to native token, in practice `00` (HTR)
 - `authority`: `mint` or `melt`
-	- [NOTE-3]: It may miss any UTXO and result in an empty array
+  - [NOTE-4]: It may miss any UTXO and result in an empty array
 - `address`: find only UTXOs of this address to fill the amount
-	- [NOTE-4]: It may miss any UTXOs and result in an empty array
-- `autochange`: whether to add a change output if required, defaults to `true`
-	- [NOTE-5]: If `true` and a change is generated, then it will add the output change at the final position of outputs array
+  - [NOTE-5]: It may miss any UTXOs and result in an empty array
+- `autochange`: whether to automatically add any surplus (amount selected minus `fill`) in a change output, defaults to `true`
+  - [NOTE-6]: If `true` and a change is generated, then it will add the output change at the final position of outputs array
+
+>[!NOTE]
+> Decision 1: Original design implied that if not enough tokens are found to fill the `fill` value we should just return the ones that are available, or an empty list.
+> This can be done but we may also want a "fail early" option when rendering the template so that we don't spend any additional time building an invalid transaction.
+> Should we have this "fail early" as an option or should we always fail if we do not have enough utxos to fill the request?
 
 #### `RawInputTemplateInstruction`
 
+type: `input/raw`
+
 ```ts
-interface RawInputTemplateInstruction extends InputOutputTemplateInstruction, BaseTemplateInstruction {
+interface RawInputTemplateInstruction extends InputTemplateInstruction {
   tx_id: string;
   index: number;
 }
 ```
 
 - `tx_id`: transaction ID in which the input belongs to
-	- [NOTE-1]: It may miss the transaction
+  - [NOTE-1]: It may miss the transaction
 - `index`: output index in which the input is located
-	- [NOTE-2]: It may miss the index
+  - [NOTE-2]: It may miss the index
 
 >[!NOTE]
->Decision: A miss here means an input will not be added to the list of inputs. It can drive the final transaction to be invalid, but the template itself will be generated nevertheless.
+> Decision 2: A miss here means an input will not be added to the list of inputs. It can drive the final transaction to be invalid, but the template itself will be generated nevertheless.
+> Another course of action is related to `Decision 1`, where we can fail the template rendering altogether.
 
 #### `TokenOutputTemplateInstruction`
-[tokenoutputtemplateinstruction]: #tokenoutputtemplateinstruction
+
+type: `output/token`
 
 ```ts
-interface TokenOutputTemplateInstruction extends InputOutputTemplateInstruction, BaseTemplateInstruction {
+interface TokenOutputTemplateInstruction extends OutputTemplateInstruction {
   amount: number;
   token?: string;
   address?: string;
   authority?: `mint` | `melt`;
+  timelock?: number;
   check_address?: boolean;
 }
 ```
@@ -161,29 +197,35 @@ interface TokenOutputTemplateInstruction extends InputOutputTemplateInstruction,
 - `amount`: amount of tokens
 - `token`: which token to select, defaults to native token, in practice `00` (HTR)
 - `address`: create an output script for the address, if not present will get one from the wallet
-	- [NOTE-1]: It will get a not used address from the wallet
+  - [NOTE-1]: It will get a not used address from the wallet
 - `authority`: `mint` or `melt`, if present will create the desired authority output
-	- [NOTE-2]: If the required input is not present, then it will generate an invalid transaction
+  - [NOTE-2]: If the required input is not present, then it will generate an invalid transaction
+- `timelock`: UNIX timestamp, the generated output may not be spent before this date and time.
 - `check_address`: whether to check that the address is from the wallet, defaults to `false`
-	- [NOTE-3]: If `true` and address is not from the wallet, then the interpreter should fail short
+  - [NOTE-3]: If `true` and address is not from the wallet, then the interpreter should fail short
 
 >[!NOTE]
->Decision Call: Should we keep the default behavior or `address` or make it more strict? Like, if there isn't any `address` value, then fail short.
+> Decision 3: Should we keep the default behavior on `address` or make it more strict? Like, if there isn't any `address` value, then fail short.
 >
->To counter the behavior of a stricter `address` we can add a flag to let the user choose the desired behavior, either get a new address or get an address by index.
+> To counter the behavior of a stricter `address` we can add a flag to let the user choose the desired behavior, either get a new address or get an address by index.
 >
->Or we can make `address` a poli typed property which can accept `number` for indexes, the string `new` or a general `string` to denote an address.
+> Or we can make `address` a poli typed property which can accept `number` for indexes, the string `new` or a general `string` to denote an address.
 
 #### `DataOutputTemplateInstruction`
 
+type: `output/data`
+
 ```ts
-interface DataOutputTemplateInstruction extends InputOutputTemplateInstruction, BaseTemplateInstruction {
+interface DataOutputTemplateInstruction extends OutputTemplateInstruction {
   data: string;
 }
 ```
 
 - `data`: UTF-8 encoded string of data
+
 #### `RawOutputTemplateInstruction`
+
+type: `output/raw`
 
 ```ts
 interface RawOutputTemplateInstruction extends InputOutputTemplateInstruction, BaseTemplateInstruction {
@@ -198,13 +240,14 @@ interface RawOutputTemplateInstruction extends InputOutputTemplateInstruction, B
 - `script`: base64 encoded script
 - `token`: which token to select, defaults to native token, in practice `00` (HTR)
 - `authority`: `mint` or `melt`, if present will create the desired authority output
-	- [NOTE-1]: If the required input is not present, then it will generate an invalid transaction
+  - [NOTE-1]: If the required input is not present, then it will generate an invalid transaction
 
 #### `ShuffleActionTemplateInstruction`
-[shuffleactiontemplateinstruction]: #shuffleactiontemplateinstruction
+
+type: `action/shuffle`
 
 ```ts
-interface RawOutputTemplateInstruction extends ActionTemplateInstruction, BaseTemplateInstruction {
+interface RawOutputTemplateInstruction extends ActionTemplateInstruction {
 }
 ```
 
@@ -212,29 +255,65 @@ It will apply an array shuffle action over the selected target.
 
 #### `FillChangeActionTemplateInstruction`
 
+type: `action/change`
+
 ```ts
-interface RawOutputTemplateInstruction extends ActionTemplateInstruction, BaseTemplateInstruction {
+interface FillChangeActionTemplateInstruction extends ActionTemplateInstruction {
+  token?: string;
+  address?: string;
+  timelock?: number;
 }
 ```
 
-The `target` doesn't have any effect. It will will check the transaction balance and calculate any change output, if any it will generate a change output and add it to the final position in outputs array.
+The `target` doesn't have any effect. It will will check the transaction balance and calculate any change output, if any it will generate a list of change outputs and add it to the final position in outputs array.
+
+If `token` is present we will only generate change for this specific token, if not we will generate change outputs for all tokens.
 
 >[!NOTE]
->Decision Call: We can add `position` property to allow user determine the position of the change output if it is generated.
+>Decision 4: We can add `position` property to allow user determine the position of the change output if it is generated.
+
+#### `ConfigActionTemplateInstruction`
+
+type: `action/config`
+
+```ts
+interface ConfigActionTemplateInstruction extends ActionTemplateInstruction {
+  version: number,
+  signalBits: number,
+}
+```
+
+This action can be used to configure some transaction data that does not affect the inputs or outputs.
 
 ### Instruction classes
 
 Each template instruction interface must have its own class implementation. A class instance is useful to both help user to form an instruction and help the interpreter to form the transaction.
 
-- UtxoInputInstruction
-- RawInputInstruction
-- TokenOutputInstruction
-- DataOutputInstruction
-- RawOutputInstruction
-- ShuffleActionInstruction
-- FillChangeActionInstruction
+- [UtxoInputTemplateInstruction](#utxoinputtemplateinstruction)
+- [RawInputTemplateInstruction](#rawinputtemplateinstruction)
+- [TokenOutputTemplateInstruction](#tokenoutputtemplateinstruction)
+- [DataOutputTemplateInstruction](#dataoutputtemplateinstruction)
+- [RawOutputTemplateInstruction](#rawoutputtemplateinstruction)
+- [ShuffleActionTemplateInstruction](#shuffleactiontemplateinstruction)
+- [FillChangeActionTemplateInstruction](#fillchangeactiontemplateinstruction)
+- [ConfigActionTemplateInstruction](#configactiontemplateinstruction)
 
-Nevertheless a user can still form an instruction using a literal object.
+Each class will implement the following interface, directly or indirectly.
+
+```ts
+interface TemplateInstruction {
+  readonly type: AllInstructionTypes|string;
+  // static
+  identify(instruction: Object): bool;
+  // methods
+  fromObject(instruction: Object): TemplateInstruction;
+  toObject(): Object;
+}
+```
+
+- `identify` is a static method that returns true if the object can be an instance of the instruction, it will validate the instruction structure and properties.
+- `fromObject` parses an object to an instruction instance.
+- `toObject` will serialize the instruction into an object that can be parsed in `fromObject`.
 
 ### Transaction template client
 
@@ -242,28 +321,19 @@ A client gives a user the ability to execute a transaction template object to ma
 
 ```ts
 class TransactionTemplate {
-  constructor (instructions: BaseTemplateInstruction[]): TransactionTemplate {...}
-  execute(wallet: IHathorWallet, options?: TransactionTemplateOptions): Transaction {...}
+  constructor (): TransactionTemplate {...}
+  static from(instructions: TemplateInstruction[]): TransactionTemplate {...}
+  static fromObject(instructions: Object[]): TransactionTemplate {...}
+  push(instruction: TemplateInstruction): TransactionTemplate {...};
+  build(interpreter: TxTemplateInstructionInterpreter): Transaction {...}
 }
 ```
 
-- `constructor`: gives user the ability to instantiate a `TransactionTemplate` from an array of instructions, and it may be an object literal while calling the constructor
-- `execute`: triggers the interpretation of the set of instructions using the appropriate interpreter implementation, either the one for Wallet Facade or the one for Wallet Service, and must result in a `Transaction`
-	- [NOTE-1]: It will generate the transaction and send it.
-
-```ts
-interface TransactionTemplateOptions {
-  useWalletService: boolean;
-}
-```
-
-- `useWalletService`: determine the use of Wallet Service, defaults to `false`, which means "use the Wallet Facade interpreter implementation".
-
->[!NOTE]
->In case of a mismatch in the passed wallet to `execute` signature and the value of `useWalletService`, it must throw an error. 
-
->[!NOTE]
->Decision Call: Should the `execute` method build **and** send the transaction? As an alternative we can have `execute` to build a transaction, a `send` method only to send the transaction built and `executeAndSend` to do it in sequence. 
+- `from`: gives user the ability to instantiate a `TransactionTemplate` from an array of instruction instances
+- `fromObject`: gives the ability to instantitate from a list of objects, each object will be identified and parsed from the appropriate instruction class
+- `push`: Add a new instruction at the end of the instruction array.
+- `build`: triggers the interpretation of the set of instructions using the appropriate interpreter implementation, either the one for Wallet Facade or the one for Wallet Service, and must result in a `Transaction`
+  - [NOTE-1]: It will generate the transaction and return it.
 
 ### Transaction template builder
 
@@ -305,7 +375,7 @@ class TransactionTemplateBuilder {
   ): TransactionTemplateBuilder {}
   addDataOutput(
     position: number,
-	data: string,
+    data: string,
   ): TransactionTemplateBuilder {}
   addRawOutput(
     position: number,
@@ -345,38 +415,42 @@ The mint deposit inputs are manually added to the transaction and all outputs ar
 
 ```json
 [
-	{ "type": "input/utxo", "position": -1, "fill": 2, "token": "00" },
-	{ "type": "input/utxo", "position": -1, "fill": 1, "token": "TST", "authority": "mint" },
-    { "type": "output/token", "position": -1, "token": "TST", "amount": 1 },
-    { "type": "output/token", "position": -1, "token": "TST", "authority": "mint", "amount": 1 },
-    { "type": "action/shuffle", "target": "outputs" },
-    { "type": "output/data", "position": 0, "data": "foobar" },
+  { "type": "input/utxo", "position": -1, "fill": 2, "token": "00", "autochange": false },
+  { "type": "input/utxo", "position": -1, "fill": 1, "token": "TST", "authority": "mint", "autochange": false },
+  { "type": "output/token", "position": -1, "token": "TST", "amount": 1 },
+  { "type": "output/token", "position": -1, "token": "TST", "authority": "mint", "amount": 1 },
+  { "type": "action/change" },
+  { "type": "action/shuffle", "target": "outputs" },
+  { "type": "output/data", "position": 0, "data": "foobar" },
 ]
 ```
 
 This same transaction template instructions set could be built as:
 
 ```ts
+// Token UID for token TST
+let TST = '000cafe...cafe123';
+
 const ttInstructions = new TransactionTemplateBuilder()
   .addUtxoInput(-1, 2)
-  .addUtxoInput(-1, 2, "TST", "mint")
-  .addTokenOutput(-1, 1, "TST")
-  .addTokenOutput(-1, 1, "TST", "mint")
+  .addUtxoInput(-1, 2, TST, "mint")
+  .addTokenOutput(-1, 1, TST)
+  .addTokenOutput(-1, 1, TST, "mint")
   .addShuffleAction("outputs")
   .addDataOutput("foobar")
   .export();
 ```
 
-We can get a transaction template instance from the instructions set by the `build` or by calling the transaction template constructor directly with the transaction template instructions:
+We can get a transaction template instance from the instructions set by the `build` or by calling the transaction template `from` with the transaction template instructions:
 
 ```ts
-const tt = new TransactionTemplate(ttInstructions);
+const tt = TransactionTemplate.from(ttInstructions);
 ```
 
-Then we can get the designed transaction by calling the `execute`:
+Then we can get the designed transaction by calling the `build`:
 
 ```ts
-const transaction = tt.execute(myWalletFacade);
+const transaction = tt.build(myWalletFacade);
 ```
 
 ## Interpreters
@@ -384,14 +458,30 @@ const transaction = tt.execute(myWalletFacade);
 A class which responsibility is to read the sequence of instructions to create a transaction using a determined type of wallet.
 
 ```ts
-interface TemplateInstructionInterpreter {
-  createTx(tt: TransactionTemplate): Transaction;
+interface TxTemplateInstructionInterpreter {
+  execute(tt: TransactionTemplate): Transaction;
 }
 ```
 
+- execute: Will create a `TxTemplateInterpreterContext` instance and execute each instruction with the context then return the resulting `Transaction` instance.
+
 We have two instances of interpreters:
+
 - WalletFacadeTemplateInterpreter
 - ServiceTemplateInterpreter
+
+```ts
+interface TxTemplateInterpreterContext {
+  version: number,
+  signalBits: number,
+  inputs: Input[],
+  outputs: Output[],
+  tokens: string[],
+  balance: Record<string, IBalance>,
+  wallet: IHathorWallet,
+  isWalletService: boolean,
+}
+```
 
 ## Lib land
 
@@ -403,25 +493,16 @@ For now we don't need to create anything. However, it worths to mention the `IHa
 >Decision Call: Should we use this implementation as an opportunity to improve the lib in the topics mentioned?
 
 # Reference-level explanation
-[reference-level-explanation]: #reference-level-explanation
 
-The sequence of operations for the template is very straightforward, we choose the inputs, then we form the output array and once the transaction is formed we can perform actions on it to finalize the transaction instance.
+## UTXO Input Template Instruction Implementation
 
-## UTXO Input Instruction
-
-If the instruction type is `input/utxo` we need to use the wallet's API to query for UTXOs, however token and authority requires a specialized usage of the APIs for one or the other, therefore we can optimize implementation for either:
-- Token selection, or
-- Authority selection
+Query the requested utxos from the wallet and add them as inputs to the transaction.
 
 ### Token selection
 
 After query for UTXOs then we add them to the inputs array at the defined position.
 
-	The addition must happen as a merge of arrays.
-
 If any change is required and `autochange` is `true` or missing we add them to the outputs.
-
-	We first create a token ouput instruction and then add it to the last position of outputs array.
 
 #### Sample
 
@@ -436,23 +517,11 @@ The following instruction will find unlocked UTXOs that completes at least 0.10 
 }
 ```
 
-This translates to the following call to `getUtxos`:
-
-```ts
-wallet.getUtxos({
-  tokenId: "TST",
-  addresses: ["Wtest"],
-  totalAmount: 10,
-});
-```
-
 ### Authority selection
 
 After query for UTXOs then we add them to the inputs array at the defined position.
 
-	The addition must happen as a merge of arrays.
-
-There is no output change for authority.
+The addition must happen as a merge of arrays.
 
 #### Sample
 
@@ -467,27 +536,12 @@ The following instruction will find 1 TST Mint authority UTXO and add them to th
 }
 ```
 
-This translates to the following call to `getUtxos`:
-
-```ts
-wallet.getUtxos({
-  tokenId: "TST",
-  addresses: ["Wtest"],
-  authority: "mint",
-  count: 1,
-});
-```
-
 ## Shuffle Action
 
-1. Select an array and create a new array of the same size
-2. For each position generate a random index in the range of the array size that not repeat
-3. Iterate over the new array and replace each element elements by the element of the selected array that represents the index value
+Shuffle the target array, either inputs, outputs or tokens.
 
 ## Fill Change Action
 
-1. Iterate over all UTXOs inputs totaling the amount of each token
-2. Iterate over all input instructions totaling the fill value of each token
-3. Operate the difference between them
-4. Create an output change if any difference is found
-5. Position the output change at the end of outputs
+1. Will use the context to check the balance and for each target token run the following steps.
+1. Create an output change if the balance is lower than 0 with the absolute (positive) value of the amount.
+1. Position the output change at the end of outputs
