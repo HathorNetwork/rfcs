@@ -169,7 +169,7 @@ interface UtxoInputTemplateInstruction extends InputTemplateInstruction {
   token?: string;
   authority?: `mint` | `melt`;
   address?: string;
-  autochange?: boolean;
+  autoChange?: boolean;
 }
 ```
 
@@ -177,12 +177,12 @@ interface UtxoInputTemplateInstruction extends InputTemplateInstruction {
   - [NOTE-1]: It may require multiple selection of UTXO to match the amount
   - [NOTE-2]: It doesn't imply the generation of a change output
   - [NOTE-3]: The amount selected may surpass the `fill`, so a change output may be required.
-- `token`: which token to select, defaults to native token, in practice `00` (HTR)
+- `token`: which token to select, defaults to native token, in practice `00` (HTR). User must set the token UID here.
 - `authority`: `mint` or `melt`
   - [NOTE-4]: It may miss any UTXO and result in an empty array
 - `address`: find only UTXOs of this address to fill the amount
   - [NOTE-5]: It may miss any UTXOs and result in an empty array
-- `autochange`: whether to automatically add any surplus (amount selected minus `fill`) in a change output, defaults to `true`
+- `autoChange`: whether to automatically add any surplus (amount selected minus `fill`) in a change output, defaults to `true`
   - [NOTE-6]: If `true` and a change is generated, then it will add the output change at the final position of outputs array
 
 >[!NOTE]
@@ -196,12 +196,12 @@ type: `input/raw`
 
 ```ts
 interface RawInputTemplateInstruction extends InputTemplateInstruction {
-  tx_id: string;
+  txId: string;
   index: number;
 }
 ```
 
-- `tx_id`: transaction ID in which the input belongs to
+- `txId`: transaction ID in which the input belongs to
   - [NOTE-1]: It may miss the transaction
 - `index`: output index in which the input is located
   - [NOTE-2]: It may miss the index
@@ -221,18 +221,18 @@ interface TokenOutputTemplateInstruction extends OutputTemplateInstruction {
   address?: string;
   authority?: `mint` | `melt`;
   timelock?: number;
-  check_address?: boolean;
+  checkAddress?: boolean;
 }
 ```
 
 - `amount`: amount of tokens
-- `token`: which token to select, defaults to native token, in practice `00` (HTR)
+- `token`: which token to select, defaults to native token, in practice `00` (HTR). User must set the token UID here.
 - `address`: create an output script for the address, if not present will get one from the wallet
   - [NOTE-1]: It will get a not used address from the wallet
 - `authority`: `mint` or `melt`, if present will create the desired authority output
   - [NOTE-2]: If the required input is not present, then it will generate an invalid transaction
 - `timelock`: UNIX timestamp, the generated output may not be spent before this date and time.
-- `check_address`: whether to check that the address is from the wallet, defaults to `false`
+- `checkAddress`: whether to check that the address is from the wallet, defaults to `false`
   - [NOTE-3]: If `true` and address is not from the wallet, then the interpreter should fail short
 
 >[!NOTE]
@@ -259,7 +259,7 @@ interface DataOutputTemplateInstruction extends OutputTemplateInstruction {
 type: `output/raw`
 
 ```ts
-interface RawOutputTemplateInstruction extends InputOutputTemplateInstruction, BaseTemplateInstruction {
+interface RawOutputTemplateInstruction extends OutputTemplateInstruction {
   amount: number;
   script: string;
   token?: string;
@@ -269,7 +269,7 @@ interface RawOutputTemplateInstruction extends InputOutputTemplateInstruction, B
 
 - `amount`: amount of tokens
 - `script`: base64 encoded script
-- `token`: which token to select, defaults to native token, in practice `00` (HTR)
+- `token`: which token to select, defaults to native token, in practice `00` (HTR). User must set the token UID here.
 - `authority`: `mint` or `melt`, if present will create the desired authority output
   - [NOTE-1]: If the required input is not present, then it will generate an invalid transaction
 
@@ -375,13 +375,7 @@ The `TransactionTemplate` class can be initiated from an object (the JSON templa
 ```ts
 class TransactionTemplateBuilder {
   addInstruction(
-    instruction: BaseTemplateInstruction
-  ): TransactionTemplateBuilder {}
-  addInputOrOutput(
-    io: InputOutputTemplateInstruction
-   ): TransactionTemplateBuilder {}
-  addAction(
-    action: ActionTemplateInstruction
+    instruction: TemplateInstruction
   ): TransactionTemplateBuilder {}
   addUtxoInput(
     position: number,
@@ -389,11 +383,11 @@ class TransactionTemplateBuilder {
     token?: string,
     authority?: `mint` | `melt`,
     address?: string,
-    autochange?: boolean,
+    autoChange?: boolean,
   ): TransactionTemplateBuilder {}
   addRawInput(
     position: number,
-    tx_id: string,
+    txId: string,
     index: number,
   ): TransactionTemplateBuilder {}
   addTokenOutput(
@@ -402,7 +396,7 @@ class TransactionTemplateBuilder {
     token?: string,
     authority?: `mint` | `melt`,
     address?: string,
-    check_address?: boolean,
+    checkAddress?: boolean,
   ): TransactionTemplateBuilder {}
   addDataOutput(
     position: number,
@@ -422,13 +416,11 @@ class TransactionTemplateBuilder {
     target: 'inputs'|'outputs'|'all',
   ): TransactionTemplateBuilder {}
   build(): TransactionTemplate {}
-  export(): BaseTemplateInstruction[] {}
+  export(): TemplateInstruction[] {}
 }
 ```
 
 - `addInstruction`: add a general instruction as an object literal
-- `addInputOrOutput`: add a general input or output as an object literal
-- `addAction`: add a general action as an object literal
 - `addUtxoInput`: add the specific UTXO input instruction
 - `addRawInput`: add the specific Raw input instruction
 - `addTokenOutput`: add the specific Token output instruction
@@ -446,8 +438,8 @@ The mint deposit inputs are manually added to the transaction and all outputs ar
 
 ```json
 [
-  { "type": "input/utxo", "position": -1, "fill": 2, "token": "00", "autochange": false },
-  { "type": "input/utxo", "position": -1, "fill": 1, "token": "TST", "authority": "mint", "autochange": false },
+  { "type": "input/utxo", "position": -1, "fill": 2, "token": "00", "autoChange": false },
+  { "type": "input/utxo", "position": -1, "fill": 1, "token": "TST", "authority": "mint", "autoChange": false },
   { "type": "output/token", "position": -1, "token": "TST", "amount": 1 },
   { "type": "output/token", "position": -1, "token": "TST", "authority": "mint", "amount": 1 },
   { "type": "action/change" },
@@ -533,7 +525,7 @@ Query the requested utxos from the wallet and add them as inputs to the transact
 
 After query for UTXOs then we add them to the inputs array at the defined position.
 
-If any change is required and `autochange` is `true` or missing we add them to the outputs.
+If any change is required and `autoChange` is `true` or missing we add them to the outputs.
 
 #### Sample
 
