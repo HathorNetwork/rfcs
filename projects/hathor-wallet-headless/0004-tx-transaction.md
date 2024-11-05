@@ -1,10 +1,8 @@
 # Summary
-[summary]: #summary
 
 Create a transaction template api on the wallet-lib that can be used to build transactions by following user defined instructions and implement an endpoint on wallet-headless to allow user build a transaction by offering a transaction template as a JSON object.
 
 # Motivation
-[motivation]: #motivation
 
 Some clients require special additions to how the transactions are created, for instance when sending authority to a certain addresses after the transaction, allowing the authority address to be from outside the wallet, adding a special output in the transaction, etc.
 
@@ -13,7 +11,6 @@ Each of these use cases would require us to write new methods or extend existing
 A compelling solution for this problem is to create an abstraction layer of transaction creation by using transaction description. This way we detach the transaction building logic from the specific implementation details, allowing for greater flexibility and extensibility. This approach minimizes the risks associated with frequent code changes while giving users more control over transaction structure, though it may introduce new responsibilities for users in ensuring correct template design.
 
 # Guide-level explanation
-[guide-level-explanation]: #guide-level-explanation
 
 We can describe a transaction by using a system of *instructions template* set that represents a collection of basic transaction components like *input*, *output* and common operations over inputs or outputs by the means of *actions*.
 
@@ -104,7 +101,9 @@ The following interfaces are describing each instruction type by its fields and 
 **Action:**
 
 - [ShuffleActionTemplateInstruction](#shuffleactiontemplateinstruction): can determine a shuffle over a target array, either an input or output
-- FillChangeActionTemplateInstruction: can determine a change output generation
+- [FillChangeActionTemplateInstruction](#fillchangeactiontemplateinstruction): can determine a change output generation
+- [ConfigActionTemplateInstruction](#configactiontemplateinstruction): Change a transaction data that is not related to the inputs and outputs.
+- [SetVarActionTemplateInstruction](#setvaractiontemplateinstruction): Set a variable in the template context.
 
 #### `TemplateInstruction`
 
@@ -316,6 +315,98 @@ interface ConfigActionTemplateInstruction extends ActionTemplateInstruction {
 
 This action can be used to configure some transaction data that does not affect the inputs or outputs.
 
+#### `SetVarActionTemplateInstruction`
+
+type: `action/setvar`
+
+```ts
+// List of pre-determined actions that will generate a value for the var.
+type SetVarCmd = 'get_wallet_address' | 'get_wallet_balance';
+
+type SetVarGetWalletAddressOpts = {
+  unused?: bool; // defaults to true
+  withBalance?: number; // Find an address with at least this amount of tokens
+  withAuthority?: 'mint' | 'melt'; // If the address should have a mint or melt authority for the token (withBalance now works as a number of authorities) 
+  token?: string; // To define token used when searching for an address, defaults to HTR.
+};
+
+type SetVarGetWalletBalanceOpts = {
+  token?: string, // defaults to HTR
+};
+
+type SetVarOpts = SetVarGetWalletAddressOpts | SetVarGetWalletBalanceOpts;
+
+interface SetVarActionTemplateInstruction extends ActionTemplateInstruction {
+  name: string,
+  value?: number|string,
+  action?: SetVarCmd,
+  options?: SetVarOpts;
+}
+```
+
+This action can be used to create a reusable variable that other instructions can reference.
+The variable will be referenced by the `name` the user provides and the value will be determined by the `value` or `action`.
+
+If `value` is provided the variable will be stored with it, but if `action` is provided the `options` will be used to determine the actual value to store.
+
+- `get_wallet_address` will get an address from the wallet
+  - If no option is provided a simple unused address will be fetched.
+  - If `option` is provided it will be used to determine the address.
+    - `unused` should be used to filter if we want an address with at least 1 tx in its history of not.
+    - `withBalance`
+      - should be used to find an address with at least this amount of tokens.
+    - `withAuthority`: `mint` or `melt`
+      - should be used to find an address with this authority
+      - `withBalance` is now the number of this authorities the wallet should have.
+    - `token`: token UID
+      - should be used to determine which token the balance and authority is refering to, defaults to HTR.
+- `get_wallet_balance` will get the wallet balance for a token
+  - If no option is provided the HTR balance will be returned.
+  - If `option` is provided it will be used to fetch the balance for a specific token.
+    - `token` will determine which token to get the balance, defaults to HTR.
+
+To use a stored variable the template should have a string with brackets with the variable name inside, for instance `{addr}` for the `addr` variable.
+
+```json
+[
+  {
+    "type": "action/setvar",
+    "name": "changeAddr",
+    "action": "get_wallet_address"
+  },
+  {
+    "type": "action/setvar",
+    "name": "dstAddr",
+    "action": "get_wallet_address"
+  },
+  {
+    "type": "action/setvar",
+    "name": "TKA",
+    "value": "00002ba722721e482cf3e32310e1ecf7d589744f9c5043b1b88cb4403ae6bfba"
+  },
+  {
+    "type": "output/token",
+    "amount": 100,
+    "token": "{TKA}",
+    "address": "{dstAddr}"
+  },
+  {
+    "type": "input/utxo",
+    "fill": 100,
+    "token": "{TKA}",
+    "autoChange": false
+  },
+  {
+    "type": "output/change",
+    "token": "{TKA}",
+    "address": "{changeAddr}",
+  },
+]
+```
+
+In this example we send 100 tokens from our wallet to our wallet, we ensure that the destination address is different from the change address even if both are from the same wallet.
+We also use a specific token in all instances, which is easier to notice since we don't have to compare the 64 character string on all instructions to know that we are using the same token.
+
 ### Instruction classes
 
 Each template instruction interface must have its own class implementation. A class instance is useful to both help user to form an instruction and help the interpreter to form the transaction.
@@ -328,6 +419,7 @@ Each template instruction interface must have its own class implementation. A cl
 - [ShuffleActionTemplateInstruction](#shuffleactiontemplateinstruction)
 - [FillChangeActionTemplateInstruction](#fillchangeactiontemplateinstruction)
 - [ConfigActionTemplateInstruction](#configactiontemplateinstruction)
+- [SetVarActionTemplateInstruction](#setvaractiontemplateinstruction)
 
 Each class will implement the following interface, directly or indirectly.
 
@@ -503,6 +595,7 @@ interface TxTemplateInterpreterContext {
   balance: Record<string, IBalance>,
   wallet: IHathorWallet,
   isWalletService: boolean,
+  vars: Record<string, string|number>,
 }
 ```
 
