@@ -45,6 +45,37 @@ On *lib land* we provides:
 - All the existing methods for transaction preparation, creation and send transaction, including helpers and utils to create transaction components
 - New methods to assist the interpreters, if needed
 
+```mermaid
+flowchart TD;
+%% Nodes
+    USER(fa:fa-user User)
+    INS("fa:fa-list Template instructions")
+    TMPL("fa:fa-code Template instance")
+    INT("fa:fa-cubes Interpreter")
+    WALLET("fa:fa-wallet Wallet")
+    WDEC{"fa:fa-wallet type of wallet"}
+    STRG(fa:fa-shapes Storage)
+    WSVC("fa:fa-comment-dots Wallet Service API")
+
+%% Connections
+    USER -- Creates --> INS
+    INS --> TMPL
+    INT -- Read instructions --> TMPL
+    USER --> WALLET
+    WALLET --> INT
+    INT --> WDEC
+    WDEC -- Query --> STRG
+    WDEC -- Call api --> WSVC
+
+    style INT color:#FFFFFF, fill:#AA00FF, stroke:#AA00FF
+    style INS color:#FFFFFF, stroke:#00C853, fill:#00C853
+    style WALLET color:#FFFFFF, stroke:#00C853, fill:#00C853
+    style TMPL color:#FFFFFF, stroke:#00C853, fill:#00C853
+    style USER color:#FFFFFF, stroke:#2962FF, fill:#2962FF
+    style STRG color:#FFFFFF, stroke:#014743, fill:#014743
+    style WSVC color:#FFFFFF, stroke:#014743, fill:#014743
+```
+
 ## User land
 
 ### Instruction template interfaces
