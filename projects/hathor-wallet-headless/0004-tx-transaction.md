@@ -277,7 +277,7 @@ interface RawOutputTemplateInstruction extends OutputTemplateInstruction {
 type: `action/shuffle`
 
 ```ts
-interface RawOutputTemplateInstruction extends ActionTemplateInstruction {
+interface ShuffleTemplateInstruction extends ActionTemplateInstruction {
 }
 ```
 
