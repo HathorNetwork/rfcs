@@ -531,9 +531,9 @@ The mint deposit inputs are manually added to the transaction and all outputs ar
 ```json
 [
   { "type": "input/utxo", "position": -1, "fill": 2, "token": "00", "autoChange": false },
-  { "type": "input/utxo", "position": -1, "fill": 1, "token": "TST", "authority": "mint", "autoChange": false },
-  { "type": "output/token", "position": -1, "token": "TST", "amount": 1 },
-  { "type": "output/token", "position": -1, "token": "TST", "authority": "mint", "amount": 1 },
+  { "type": "input/utxo", "position": -1, "fill": 1, "token": "TST_UID", "authority": "mint", "autoChange": false },
+  { "type": "output/token", "position": -1, "token": "TST_UID", "amount": 1 },
+  { "type": "output/token", "position": -1, "token": "TST_UID", "authority": "mint", "amount": 1 },
   { "type": "action/change" },
   { "type": "action/shuffle", "target": "outputs" },
   { "type": "output/data", "position": 0, "data": "foobar" },
