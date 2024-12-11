@@ -90,6 +90,7 @@ flowchart TD;
 
 - [ShuffleInstruction](#shuffleinstruction): can determine a shuffle over a target array, either an input or output
 - [ChangeInstruction](#changeinstruction): can determine a change output generation
+- [CompleteTxInstruction](#completetxinstruction): complete the transaction balance.
 - [ConfigInstruction](#configinstruction): Change a transaction data that is not related to the inputs and outputs.
 - [SetVarInstruction](#setvarinstruction): Set a variable in the template context.
 
@@ -122,14 +123,14 @@ const UtxoSelectInstruction = z.object({
   position: z.number().default(-1),
   fill: TemplateRef.or(z.coerce.bigint()),
   token: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}|00$/).default('00')),
-  address: TemplateRef.or(z.string()).optional(),
-  autoChange: z.boolean().default(false),
+  address: TemplateRef.or(z.string().optional()),
+  autoChange: z.boolean().default(true),
+  changeAddress: TemplateRef.or(z.string().optional()),
 });
 ```
 
 - `position`: which index to insert the input, default to `-1`
   - can be `-1` to insert at the end
-  - the request will fail if position doesn't exists
 - `fill`: amount of tokens to select
   - It may require multiple selection of UTXO to match the amount
   - It doesn't imply the generation of a change output
@@ -138,6 +139,7 @@ const UtxoSelectInstruction = z.object({
 - `address`: find only UTXOs of this address to fill the amount
 - `autoChange`: whether to automatically add any surplus (amount selected minus `fill`) in a change output, defaults to `true`
   - If `true` and a change is generated, then it will add the output change at the final position of outputs array
+- `changeAddress`: If a change is generated with `autoChange` it will be sent to this address.
 
 #### `AuthoritySelectInstruction`
 
@@ -145,18 +147,17 @@ Query authority UTXOs to add as inputs.
 
 ```ts
 const AuthoritySelectInstruction = z.object({
-  type: z.literal('input/utxo'),
+  type: z.literal('input/authority'),
   position: z.number().default(-1),
   authority: z.enum(['mint', 'melt']),
   token: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}$/)),
   amount: TemplateRef.or(z.coerce.bigint()),
-  address: TemplateRef.or(z.string()).optional(),
+  address: TemplateRef.or(z.string().optional()),
 });
 ```
 
 - `position`: which index to insert the input, default to `-1`
   - can be `-1` to insert at the end
-  - the request will fail if position doesn't exists
 - `authority`: `mint` or `melt`
 - `token`: which token to select. User must set the token UID here.
 - `amount`: amount of authorities to select
@@ -168,7 +169,7 @@ Add a known UTXO as input on the transaction.
 
 ```ts
 const RawInputInstruction = z.object({
-  type: z.literal('input/utxo'),
+  type: z.literal('input/raw'),
   position: z.number().default(-1),
   index: TemplateRef.or(z.coerce.number()),
   txId: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}$/)),
@@ -177,7 +178,6 @@ const RawInputInstruction = z.object({
 
 - `position`: which index to insert the input, default to `-1`
   - can be `-1` to insert at the end
-  - the request will fail if position doesn't exists
 - `txId`: Transaction ID os the UTXO.
 - `index`: output index of the UTXO.
 
@@ -191,7 +191,7 @@ const TokenOutputInstruction = z.object({
   position: z.number().default(-1),
   amount: TemplateRef.or(z.coerce.bigint()),
   token: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}|00$/).default('00')),
-  address: TemplateRef.or(z.string()).optional(),
+  address: TemplateRef.or(z.string()),
   timelock: TemplateRef.or(z.coerce.number()).optional(),
   checkAddress: z.boolean().optional(),
 });
@@ -199,21 +199,12 @@ const TokenOutputInstruction = z.object({
 
 - `position`: which index to insert the input, default to `-1`
   - can be `-1` to insert at the end
-  - the request will fail if position doesn't exists
 - `amount`: amount of tokens
 - `token`: which token to select, defaults to native token, in practice `00` (HTR). User must set the token UID here.
-- `address`: create an output script for the address, if not present will get one from the wallet
-  - It will get a not used address from the wallet
+- `address`: create an output script for the address.
 - `timelock`: UNIX timestamp, the generated output may not be spent before this date and time.
 - `checkAddress`: whether to check that the address is from the wallet, defaults to `false`
   - If `true` and address is not from the wallet, then the interpreter should fail
-
->[!NOTE]
-> Decision: Should we keep the default behavior on `address` or make it more strict? Like, if there isn't any `address` value, then fail short.
->
-> To counter the behavior of a stricter `address` we can add a flag to let the user choose the desired behavior, either get a new address or get an address by index.
->
-> Or we can make `address` a poli typed property which can accept `number` for indexes, the string `new` or a general `string` to denote an address.
 
 #### `AuthorityOutputInstruction`
 
@@ -226,7 +217,7 @@ const AuthorityOutputInstruction = z.object({
   count: TemplateRef.or(z.coerce.number()),
   token: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}$/)),
   authority: z.enum(['mint', 'melt']),
-  address: TemplateRef.or(z.string()).optional(),
+  address: TemplateRef.or(z.string()),
   timelock: TemplateRef.or(z.coerce.number()).optional(),
   checkAddress: z.boolean().optional(),
 });
@@ -234,11 +225,9 @@ const AuthorityOutputInstruction = z.object({
 
 - `position`: which index to insert the input, default to `-1`
   - can be `-1` to insert at the end
-  - the request will fail if position doesn't exists
 - `count`: amount of authority outputs to create.
-- `token`: which token to select, defaults to native token. User must set the token UID here.
-- `address`: create an output script for the address, if not present will get one from the wallet
-  - It will get a not used address from the wallet.
+- `token`: which token to select. User must set the token UID here.
+- `address`: create an output script for the address
 - `timelock`: UNIX timestamp, the generated output may not be spent before this date and time.
 - `checkAddress`: whether to check that the address is from the wallet, defaults to `false`
   - If `true` and address is not from the wallet, then the interpreter should fail
@@ -251,12 +240,12 @@ const DataOutputInstruction = z.object({
   type: z.literal('output/data'),
   position: z.number().default(-1),
   data: TemplateRef.or(z.string()),
+  token: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}|00$/).default('00')),
 });
 ```
 
 - `position`: which index to insert the input, default to `-1`
   - can be `-1` to insert at the end
-  - the request will fail if position doesn't exists
 - `data`: UTF-8 encoded string of data
 
 #### `RawOutputInstruction`
@@ -275,7 +264,6 @@ const RawOutputInstruction = z.object({
 
 - `position`: which index to insert the input, default to `-1`
   - can be `-1` to insert at the end
-  - the request will fail if position doesn't exists
 - `amount`: amount of tokens
 - `script`: base64 encoded script
 - `token`: which token to select, defaults to native token, in practice `00` (HTR). User must set the token UID here.
@@ -305,8 +293,25 @@ const ChangeInstruction = z.object({
 });
 ```
 
+This action creates change output to match the outstanding balance of the transaction.
 If `token` is present we will only generate change for this specific token, if not we will generate change outputs for all tokens.
 `address` and `timelock` will control the generated change outputs.
+
+#### `CompleteTxInstruction`
+
+```ts
+const CompleteTxInstruction = z.object({
+  type: z.literal('action/complete'),
+  token: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}$/)).optional(),
+  address: TemplateRef.or(s.string().optional()),
+  changeAddress: TemplateRef.or(s.string().optional()),
+  timelock: TemplateRef.or(z.coerce.number()).optional(),
+});
+```
+
+This action will try to complete a transaction, meaning that if inputs are required it will try to select inputs, if outputs are required it will add change outputs to match the balance.
+If `token` is present we will only try to complete this specific token, if not we will complete all tokens.
+`address` will control the generated inputs, while `changeAddress` and `timelock` will control the generated change outputs.
 
 #### `ConfigInstruction`
 
@@ -400,7 +405,7 @@ To use a stored variable the template should have a string with brackets with th
     "autoChange": false
   },
   {
-    "type": "output/change",
+    "type": "action/change",
     "token": "{TKA}",
     "address": "{changeAddr}",
   },
@@ -425,6 +430,7 @@ const TxTemplateInstruction = z.discriminatedUnion('type', [
   AuthorityOutputInstruction,
   ShuffleInstruction,
   ChangeInstruction,
+  CompleteTxInstruction,
   ConfigInstruction,
   SetVarInstruction,
 ]);
@@ -522,7 +528,7 @@ let TST = '000cafe...cafe123';
 
 const templ = new TransactionTemplateBuilder()
   .addUtxoInput(-1, 2)
-  .addUtxoInput(-1, 2, TST, "mint")
+  .addUtxoInput(-1, 1, TST, "mint")
   .addTokenOutput(-1, 1, TST)
   .addTokenOutput(-1, 1, TST, "mint")
   .addShuffleAction("outputs")
@@ -586,6 +592,3 @@ Beyond the wallet API we can use any utils or helper available to support the in
 For now we don't need to create anything. However, it worths to mention the `IHathorWallet` doesn't conveys all methods available on both wallets.
 Just to reference one, we can take the `getUtxos` which is implemented in both wallets but is not present at `IHathorWallet`.
 Not to mention the lack of type inference at wallet facade which makes the development experience poorer.
-
->[!NOTE]
->Decision Call: Should we use this implementation as an opportunity to improve the lib in the topics mentioned?
