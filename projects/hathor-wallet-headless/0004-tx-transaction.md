@@ -151,7 +151,7 @@ const AuthoritySelectInstruction = z.object({
   position: z.number().default(-1),
   authority: z.enum(['mint', 'melt']),
   token: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}$/)),
-  amount: TemplateRef.or(z.coerce.bigint()),
+  count: TemplateRef.or(z.coerce.bigint()),
   address: TemplateRef.or(z.string().optional()),
 });
 ```
