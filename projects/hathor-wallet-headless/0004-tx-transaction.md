@@ -194,6 +194,7 @@ const TokenOutputInstruction = z.object({
   address: TemplateRef.or(z.string()),
   timelock: TemplateRef.or(z.coerce.number()).optional(),
   checkAddress: z.boolean().optional(),
+  createdToken: z.boolean().default(false),
 });
 ```
 
@@ -205,6 +206,9 @@ const TokenOutputInstruction = z.object({
 - `timelock`: UNIX timestamp, the generated output may not be spent before this date and time.
 - `checkAddress`: whether to check that the address is from the wallet, defaults to `false`
   - If `true` and address is not from the wallet, then the interpreter should fail
+- `createdToken`: If this is true we will reference the token being created in this transaction
+  - This means using `tokenData = 1` even if the token array is empty.
+  - We will ignore the `token` argument even if one is present.
 
 #### `AuthorityOutputInstruction`
 
@@ -220,6 +224,7 @@ const AuthorityOutputInstruction = z.object({
   address: TemplateRef.or(z.string()),
   timelock: TemplateRef.or(z.coerce.number()).optional(),
   checkAddress: z.boolean().optional(),
+  createdToken: z.boolean().default(false),
 });
 ```
 
@@ -231,6 +236,9 @@ const AuthorityOutputInstruction = z.object({
 - `timelock`: UNIX timestamp, the generated output may not be spent before this date and time.
 - `checkAddress`: whether to check that the address is from the wallet, defaults to `false`
   - If `true` and address is not from the wallet, then the interpreter should fail
+- `createdToken`: If this is true we will reference the token being created in this transaction
+  - This means using `tokenData = 1` even if the token array is empty.
+  - We will ignore the `token` argument even if one is present.
 
 
 #### `DataOutputInstruction`
@@ -241,12 +249,18 @@ const DataOutputInstruction = z.object({
   position: z.number().default(-1),
   data: TemplateRef.or(z.string()),
   token: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}|00$/).default('00')),
+  createdToken: z.boolean().default(false),
 });
 ```
 
 - `position`: which index to insert the input, default to `-1`
   - can be `-1` to insert at the end
 - `data`: UTF-8 encoded string of data
+- `token`: which token to select. User must set the token UID here.
+  - Defaults to HTR.
+- `createdToken`: If this is true we will reference the token being created in this transaction
+  - This means using `tokenData = 1` even if the token array is empty.
+  - We will ignore the `token` argument even if one is present.
 
 #### `RawOutputInstruction`
 
@@ -259,6 +273,7 @@ const RawOutputInstruction = z.object({
   token: TemplateRef.or(z.string().regex(/^[a-fA-F0-9]{64}|00$/).default('00')),
   timelock: TemplateRef.or(z.coerce.number()).optional(),
   authority: z.enum(['mint', 'melt']).optional(),
+  createdToken: z.boolean().default(false),
 });
 ```
 
@@ -270,6 +285,9 @@ const RawOutputInstruction = z.object({
 - `authority`: `mint` or `melt`, if present will create the desired authority output
   - If the required input is not present, then it will generate an invalid transaction
 - `timelock`: UNIX timestamp, the generated output may not be spent before this date and time.
+- `createdToken`: If this is true we will reference the token being created in this transaction
+  - This means using `tokenData = 1` even if the token array is empty.
+  - We will ignore the `token` argument even if one is present.
 
 #### `ShuffleInstruction`
 
@@ -448,75 +466,42 @@ A builder class must assists the user to build a `TransactionTemplate` instance.
 
 ```ts
 class TransactionTemplateBuilder {
+  build(): TransactionTemplate {}
   addInstruction(
     instruction: TxTemplateInstructionType
   ): TransactionTemplateBuilder {}
-  addUtxoInput(
-    position: number,
-    fill: number,
-    token?: string,
-    authority?: `mint` | `melt`,
-    address?: string,
-    autoChange?: boolean,
-  ): TransactionTemplateBuilder {}
-  addRawInput(
-    position: number,
-    txId: string,
-    index: number,
-  ): TransactionTemplateBuilder {}
-  addTokenOutput(
-    position: number,
-    amount: number,
-    token?: string,
-    authority?: `mint` | `melt`,
-    address?: string,
-    checkAddress?: boolean,
-  ): TransactionTemplateBuilder {}
-  addDataOutput(
-    position: number,
-    data: string,
-  ): TransactionTemplateBuilder {}
-  addRawOutput(
-    position: number,
-    amount: number,
-    script: string,
-    token?: string,
-    authority?: `mint` | `melt`,
-  ): TransactionTemplateBuilder {}
-  addShuffleAction(
-    target: 'inputs'|'outputs'|'all',
-  ): TransactionTemplateBuilder {}
-  addFillChangeAction(
-    target: 'inputs'|'outputs'|'all',
-  ): TransactionTemplateBuilder {}
-  build(): TransactionTemplateType {}
+  addRawInput(ins: Omit<RawInputInstruction, "type">) {}
+  addUtxoSelect(ins: Omit<UtxoSelectInstruction, "type">) {}
+  addAuthoritySelect(ins: Omit<AuthoritySelectInstruction, "type">) {}
+  addRawOutput(ins: Omit<RawOutputInstruction, "type">) {}
+  addDataOutput(ins: Omit<DataOutputInstruction, "type">) {}
+  addTokenOutput(ins: Omit<TokenOutputInstruction, "type">) {}
+  addAuthorityOutput(ins: Omit<AuthorityOutputInstruction, "type">) {}
+  addShuffleAction(ins: Omit<ShuffleInstruction, "type">) {}
+  addChangeAction(ins: Omit<ChangeInstruction, "type">) {}
+  addCompleteAction(ins: Omit<CompleteTxInstruction, "type">) {}
+  addConfigAction(ins: Omit<ConfigInstruction, "type">) {}
+  addSetVarAction(ins: Omit<SetVarInstruction, "type">) {}
 }
 ```
 
-- `addInstruction`: add a general instruction as an object literal
-- `addUtxoInput`: add the specific UTXO input instruction
-- `addRawInput`: add the specific Raw input instruction
-- `addTokenOutput`: add the specific Token output instruction
-- `addDataOutput`: add the specific Data output instruction
-- `addRawOutput`: add the specific Raw output instruction
-- `addShuffleAction`: add the specific Shuffle action instruction
-- `addFillChangeAction`: add the specific FillChange action instruction
-- `build`: build and returns a `TransactionTemplate` instance
+Each `add` method will add an instruction of the same name, the methods will parse user and validate each instruction.
 
 ### Usage example
 
-The following template will mint 0.01 TST, generate another mint authority to the wallet and it will have a 'foobar' data output as the first output.
+The following template will mint 1.00 TST, generate another mint authority to the wallet and it will have a 'foobar' data output as the first output.
 The mint deposit inputs are manually added to the transaction and all outputs are shuffled except for the data output at position 0.
 
 ```json
 [
-  { "type": "input/utxo", "position": -1, "fill": 2, "token": "00", "autoChange": false },
-  { "type": "input/utxo", "position": -1, "fill": 1, "token": "TST_UID", "authority": "mint", "autoChange": false },
-  { "type": "output/token", "position": -1, "token": "TST_UID", "amount": 1 },
-  { "type": "output/token", "position": -1, "token": "TST_UID", "authority": "mint", "amount": 1 },
-  { "type": "action/change" },
+  { "type": "action/setvar", "name": "TKA", "value": "000cafe...cafe123" },
+  { "type": "action/setvar", "name": "addr", "action": "get_wallet_address" },
+  { "type": "input/utxo", "fill": 2 },
+  { "type": "input/authority", "authority": "mint", "token": "{TKA}" },
+  { "type": "output/token", "amount": 100, "token": "{TKA}", "address": "{addr}" },
+  { "type": "output/authority" "token": "{TKA}", "authority": "mint", "address": "{addr}" },
   { "type": "action/shuffle", "target": "outputs" },
-  { "type": "output/data", "position": 0, "data": "foobar" },
+  { "type": "output/data", "data": "foobar", "position": 0 }
 ]
 ```
 
@@ -527,13 +512,15 @@ This same transaction template instructions set could be built as:
 let TST = '000cafe...cafe123';
 
 const templ = new TransactionTemplateBuilder()
-  .addUtxoInput(-1, 2)
-  .addUtxoInput(-1, 1, TST, "mint")
-  .addTokenOutput(-1, 1, TST)
-  .addTokenOutput(-1, 1, TST, "mint")
-  .addShuffleAction("outputs")
-  .addDataOutput("foobar")
-  .build();
+    .addSetVarAction({name: 'TKA', value: TST})
+    .addSetVarAction({name: 'addr', action: 'get_wallet_address'})
+    .addUtxoSelect({ fill: 2 })
+    .addAuthoritySelect({ authority: 'mint', token: '{TKA}' })
+    .addTokenOutput({ address: '{addr}', amount: 100, token: '{TKA}' })
+    .addAuthorityOutput({ authority: 'mint', address: '{addr}', token: '{TKA}' })
+    .addShuffleAction({ target: 'outputs' })
+    .addDataOutput({ data: 'foobar', position: 0 })
+    .build();
 ```
 
 ## Interpreters
