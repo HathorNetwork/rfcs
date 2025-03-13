@@ -32,80 +32,74 @@ Adding the fee-based model the platform won't require an upfront deposit. Instea
 
 By selecting the appropriate model, token creators can optimize their minting strategy based on their specific needs and usage scenarios. A key use case is the creation of memecoins.
 
-### An hybrid approach
+### How to pproach
 
-An alternative to bitcoin and etherium approchaes for blockchain fees is a hybrid model that combines minimum fees with payments based on actual resource usage, along with policies to prevent spam on the network. This model aims to balance user simplicity, protection against spam attacks, and long-term sustainability.
+An alternative to bitcoin and etherium approchaes for blockchain fees is a hybrid model that combines fees based in the transaction size, with priority tip payments.
 
 This model offers several advantages. First, it simplifies the user experience by providing a predictable fee without major fluctuations. Additionally, it enables a filtering mechanism to prevent excessively large or complex transactions, protecting the network from spam. Finally, its structure promotes sustainability, ensuring controlled blockchain growth.
 
-### General Fee calculation rule
+### Fee calculation
 
+Hathor’s fees will be calculated similarly to Bitcoin, depending only on transaction size (in bytes) and a network-defined fee rate (in HTR per byte).
+
+Proof-of-Work difficulty (transaction weight) will not influence the fee calculation.
+
+Let's assume:
 1. HTR is always used as the fee unit, regardless of the tokens involved in the transaction.
-2. If only fee-based tokens are used, a single fee in HTR will be charged, regardless of the number of tokens.
-3. If a transaction includes both deposit-based and fee-based tokens, only the fee-based tokens will incur a fee.
-4. Interacting with nano contracts may introduce an additional fee depending on the execution complexity.
+2. Even if fee-based tokens are used alone, or with a deposit-based token, a single fee in HTR will be charged, regarding the transaction size.
+3. Interacting with nano contracts may introduce an additional fee depending on the execution complexity.
 
-### Example Scenarios
+Below is a pseudo code that explain how fee should be calculated, using a fee rate per byte:
 
-#### Swapping Token A for Token A with a fee paid in HTR (fee in HTR)
+*(Note: Excluded "hash" size from calculation, hence 114 reduced to 84 bytes.)*
 
-Description: Transfer of the same token (A) between two parties.
+```python
+def calculate_tx_fee(tx, fee_rate_per_byte):
+    # Fixed size fields (always present)
+    fixed_size = 84  # version (2) + timestamp (4) + nonce (4) + weight (8) + parents (64)
 
-Fee Calculation:
+    # Tokens array size
+    tokens_size = 32 * len(tx.tokens)
 
-- Since Token A is fee-based, the transaction requires a fee in HTR.
-```
-- Base Fee: 0.001 HTR
-- Total Fee: 0.001 HTR (regardless of the amount transferred)
-```
-----
-#### Token A x Token B x Token C (only 1 fee, in HTR)
+    # Inputs size calculation
+    inputs_size = 0
+    for input in tx.inputs:
+        inputs_size += 35 + len(input.data)  
+        # 32 bytes (tx_id) + 1 byte (index) + 2 bytes (data length prefix) + len(data)
 
-Description: Multi-token transfer involving three fee-based tokens.
+    # Outputs size calculation
+    outputs_size = 0
+    for output in tx.outputs:
+        outputs_size += 7 + len(output.script)
+        # 4 bytes (value) + 1 byte (token_data) + 2 bytes (script length prefix) + len(script)
 
-Fee Calculation:
-- Only one HTR fee is charged, regardless of the number of tokens.
-```
-- Base Fee: 0.001 HTR
-- Complexity Fee (extra tokens): 0.0005 HTR per additional token.
-- Total Fee: 0.002 HTR (0.001 + 0.0005 + 0.0005)
-```
+    # Total transaction size
+    tx_size = fixed_size + tokens_size + inputs_size + outputs_size
 
-#### Token A x HTR (fee in HTR)
+    # Fee calculation
+    fee = tx_size * fee_rate_per_byte
 
-Description: Transfer of a fee-based token and HTR in the same transaction.
-
-Fee Calculation:
-- Since a fee-based token is involved, an HTR fee will be charged.
-```
-- Base Fee: 0.001 HTR
-- Total Fee: 0.001 HTR
-```
-
-#### Token D (deposit-based) x Token B (fee-based)
-Description: Transfer of a deposit-based token (D) and a fee-based token (B).
-
-Fee Calculation:
-- The deposit-based token (D) does not pay a fee.
-- The fee-based token (B) pays the standard fee.
+    return fee + tx.priority_tip # plus any nano fee that should match
 
 ```
-- Base Fee: 0.001 HTR
-- Total Fee: 0.001 HTR (no extra charge for Token D)
-```
 
-#### Transaction Interacting with a Nano Contract
-Description: A transfer involving a nano contract, which may require additional execution on the network.
 
-Fee Calculation:
-- The standard transaction base fee still applies.
-- Since nano contract execution involves additional computation, an extra fee may be charged based on complexity.
-- Execution Fee (depends on contract complexity): Example, 0.002 HTR.
+### **Example Calculation:**
 
-```	
-- Base Fee: 0.001 HTR
-- Total Fee: 0.003 HTR (0.001 base + 0.002 contract execution)
-```
+**Hypothetical Transaction:**
+- 1 token UID
+- 2 inputs (with 108 bytes of data each, common signature size)
+- 2 outputs (with 25 bytes of script each, common P2PKH script)
+
+Calculate size:
+
+| Field                | Calculation                 | Size     |
+|----------------------|-----------------------------|----------|
+| Fixed-size fields    |                             | **84** bytes |
+| Tokens               | 1 token × 32 bytes          | **32** bytes |
+| Inputs               | 2 × (35 + 108)              | **286** bytes |
+| Outputs              | 2 × (7 + 25)                | **64** bytes |
+| **Total Tx Size**    | 84 + 32 + 286 + 64          | **466** bytes |
 
 ## Wallet UI
 
@@ -149,19 +143,17 @@ The Base Fee is burned, reducing the Ether supply, while the Priority Tip goes t
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
+- What will happen to the fees? Will they be collected by the miners?
 - How should melt operations be handled for fee-based custom tokens?
 - Should storage fees be one-time or recurring (rent model)?
-- Should there be discounts for batch transactions?
-- Should fee adjustments be governed by community proposals?
-- Should TX mining remain if transaction fees are introduced?
+- How fee adjustments will be governed?
+- Should TX mining remain if transaction fees are introduced? How will it affect the tx-mining-service?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-- L2 Solutions (e.g., batch-processing for lower fees).
 - Custom Fee Markets (letting users optimize fees).
 - Dynamic Fee Adjustment Mechanism, where fees scale based on network congestion.
-
 
 # References
 
