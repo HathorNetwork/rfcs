@@ -13,7 +13,7 @@ This proposal suggests an alternative mechanism where, instead of requiring an u
 # Motivation
 [motivation]: #motivation
 
-Dozer suggested an alternative to the HTR deposit requirement when minting tokens. The idea is to create a new type of custom tokens where tokens would be minted for free (i.e., no deposits) and fess will be charged for transactions. [RFC](https://github.com/Dozer-Protocol/hathor-rfcs/blob/new-token-economics/projects/new-token-economics/token-economics.md)
+Dozer suggested an alternative to the HTR deposit requirement when minting tokens. The idea is to create a new type of custom tokens where tokens would be minted for free (i.e., no deposits) and fees will be charged for transactions. [RFC](https://github.com/Dozer-Protocol/hathor-rfcs/blob/new-token-economics/projects/new-token-economics/token-economics.md)
 
 This change would reduce the upfront cost of minting tokens, making it more accessible to users who may not have sufficient HTR at the time of minting. The network would still benefit from a fee mechanism that contributes to miners’ incentives and overall network security.
 
@@ -32,9 +32,9 @@ Adding the fee-based model the platform won't require an upfront deposit. Instea
 
 By selecting the appropriate model, token creators can optimize their minting strategy based on their specific needs and usage scenarios. A key use case is the creation of memecoins.
 
-### How to pproach
+### How to approach
 
-An alternative to bitcoin and etherium approchaes for blockchain fees is a hybrid model that combines fees based in the transaction size, with priority tip payments.
+An alternative to Bitcoin and Ethereum approchaes for blockchain fees is a hybrid model that combines fees based in the transaction size, with priority tip payments.
 
 This model offers several advantages. First, it simplifies the user experience by providing a predictable fee without major fluctuations. Additionally, it enables a filtering mechanism to prevent excessively large or complex transactions, protecting the network from spam. Finally, its structure promotes sustainability, ensuring controlled blockchain growth.
 
@@ -133,7 +133,7 @@ Bitcoin handles transaction fees through a system based on competition for limit
 
 Wallets and services use fee estimators to suggest optimal fees based on the mempool. The protocol does not enforce a minimum fee, but nodes can set a "relay fee" to prevent spam from very low-value transactions.
 
-### How Etherium deals with fee
+### How Ethereum deals with fee
 
 Ethereum handles transaction fees through the concept of Gas, where each operation consumes a specific amount of computational resources. Before EIP-1559, users set the Gas Price, and those who paid more had priority. With EIP-1559, a dynamically adjusted Base Fee was introduced based on demand, along with an optional Priority Tip to incentivize validators. 
 
