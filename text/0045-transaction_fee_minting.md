@@ -38,6 +38,9 @@ An alternative to Bitcoin and Ethereum approchaes for blockchain fees is a hybri
 
 This model offers several advantages. First, it simplifies the user experience by providing a predictable fee without major fluctuations. Additionally, it enables a filtering mechanism to prevent excessively large or complex transactions, protecting the network from spam. Finally, its structure promotes sustainability, ensuring controlled blockchain growth.
 
+### Minning
+By adding fees to the transactions, we don't need to mine them anymore. So the proof of work (PoW) won't affect the fee calculation.
+
 ### Fee calculation
 
 Hathor’s fees will be calculated similarly to Bitcoin, depending only on transaction size (in bytes) and a network-defined fee rate (in HTR per byte).
@@ -147,7 +150,7 @@ The Base Fee is burned, reducing the Ether supply, while the Priority Tip goes t
 - How should melt operations be handled for fee-based custom tokens?
 - Should storage fees be one-time or recurring (rent model)?
 - How fee adjustments will be governed?
-- Should TX mining remain if transaction fees are introduced? How will it affect the tx-mining-service?
+- Removing the transaction fee from minning, how will it affect the tx-mining-service?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
