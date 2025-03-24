@@ -30,16 +30,22 @@ Currently, creators must [deposit a percentage](https://github.com/HathorNetwork
 
 Adding the fee-based model the platform won't require an upfront deposit. Instead, each transfer of the minted tokens incurs a transaction fee, which is deducted automatically. The exact fee rate will be defined at a later stage.
 
-By selecting the appropriate model, token creators can optimize their minting strategy based on their specific needs and usage scenarios. A key use case is the creation of memecoins.
+By selecting the appropriate model, token creators can optimize their minting strategy based on their specific needs and usage scenarios. A popular use case is the creation of memecoins. However, the user can use for any other scenario that might appear.
+
 
 ### How to approach
 
-An alternative to Bitcoin and Ethereum approchaes for blockchain fees is a hybrid model that combines fees based in the transaction size, with priority tip payments.
+An alternative to Bitcoin and Ethereum approchaes for blockchain fees is a model that charge fees based in the transaction size.
 
-This model offers several advantages. First, it simplifies the user experience by providing a predictable fee without major fluctuations. Additionally, it enables a filtering mechanism to prevent excessively large or complex transactions, protecting the network from spam. Finally, its structure promotes sustainability, ensuring controlled blockchain growth.
+This model offers two advantages:
+  -  It simplifies the user experience by providing a predictable fee without major fluctuations. 
+  -  It creates a fair mechanism that makes simple transactions cheaper and charges more for complex ones.
 
-### Minning
+### Transaction Mining
 By adding fees to the transactions, we don't need to mine them anymore. So the proof of work (PoW) won't affect the fee calculation.
+
+### Fee destination
+The fees will be burned, if we need to do something with it, possibly in another issue we can change the behavior. For now let's keep it simple.
 
 ### Fee calculation
 
@@ -51,38 +57,54 @@ Let's assume:
 1. HTR is always used as the fee unit, regardless of the tokens involved in the transaction.
 2. Even if fee-based tokens are used alone, or with a deposit-based token, a single fee in HTR will be charged, regarding the transaction size.
 3. Interacting with nano contracts may introduce an additional fee depending on the execution complexity.
+4. Fee rate, static and dynamic, are arbitary values to be defined by the business.
+
+We'll adopt a fee_rate_per_static_byte, and fee_rate_per_dynamic_byte that assumes the fixed size of the tx to act as our flat fee and the dynamic part of the tx to ensure we'll charge less for simple transaction and more for larger.
+
+In this proposal we are excluding simple transactions, 1 input, 1 token, and up to 2 outputs from the dynamic calculation.
 
 Below is a pseudo code that explain how fee should be calculated, using a fee rate per byte:
 
 *(Note: Excluded "hash" size from calculation, hence 114 reduced to 84 bytes.)*
 
+*(Note: We already have a way to calculate the tx size, here the idea is to shown what is the flat part and what is considered the dynamic part. Where we can mainupulate the rates to create flat fee and dynamic fees that are predictable to the user)*
+
 ```python
-def calculate_tx_fee(tx, fee_rate_per_byte):
+def calculate_tx_fee(tx, fee_rate_per_static_byte, fee_rate_per_dynamic_byte):
     # Fixed size fields (always present)
     fixed_size = 84  # version (2) + timestamp (4) + nonce (4) + weight (8) + parents (64)
-
+    
     # Tokens array size
-    tokens_size = 32 * len(tx.tokens)
-
+    tokens_size = 0
+    if len(tx.tokens) > 1:
+      tokens_size = 32 * len(tx.tokens) - 1
+    
     # Inputs size calculation
     inputs_size = 0
-    for input in tx.inputs:
-        inputs_size += 35 + len(input.data)  
-        # 32 bytes (tx_id) + 1 byte (index) + 2 bytes (data length prefix) + len(data)
-
+    if len(tx.inputs) > 1: 
+        for i in range(len(tx.inputs) - 1):
+          input = tx.outputs[i]
+          inputs_size += 35 + len(input.data)  
+          # 32 bytes (tx_id) + 1 byte (index) + 2 bytes (data length prefix) + len(data)
+    
     # Outputs size calculation
     outputs_size = 0
-    for output in tx.outputs:
-        outputs_size += 7 + len(output.script)
-        # 4 bytes (value) + 1 byte (token_data) + 2 bytes (script length prefix) + len(script)
+    if len(tx.outputs) > 2:
+        for i in range(len(tx.outputs) - 2):
+            output = tx.outputs[i]
+            outputs_size += 7 + len(output.script)
+            # 4 bytes (value) + 1 byte (token_data) + 2 bytes (script length prefix) + len(script)
 
     # Total transaction size
-    tx_size = fixed_size + tokens_size + inputs_size + outputs_size
+    flat_fee = fixed_size * fee_rate_per_static_byte
+
+    ## Here we can also define how we want to calculate the dynamic fee. For example, imagine that we only want to charge fee for transactions that have more than two outputs, or ignore how the inputs size on the formula in order to make it predictable according to business needs.
+    dynamic_fee = (tokens_size + inputs_size + outputs_size) * fee_rate_per_dynamic_byte
 
     # Fee calculation
-    fee = tx_size * fee_rate_per_byte
+    fee = flat_fee + dynamic_fee + tx.priority_tip
 
-    return fee + tx.priority_tip # plus any nano fee that should match
+    return fee # plus any nano fee that should match
 
 ```
 
@@ -90,19 +112,21 @@ def calculate_tx_fee(tx, fee_rate_per_byte):
 ### **Example Calculation:**
 
 **Hypothetical Transaction:**
+- Fee rate per static byte to result in 0.01 HTR (flat): 0,000119047619048
+- Fee rate per dynamic byte to increase the fee based on the complexity of the tx: 0,000119047619048
 - 1 token UID
-- 2 inputs (with 108 bytes of data each, common signature size)
-- 2 outputs (with 25 bytes of script each, common P2PKH script)
+- 2 inputs
+- 2 outputs
 
-Calculate size:
+Calculate fee:
 
-| Field                | Calculation                 | Size     |
-|----------------------|-----------------------------|----------|
-| Fixed-size fields    |                             | **84** bytes |
-| Tokens               | 1 token × 32 bytes          | **32** bytes |
-| Inputs               | 2 × (35 + 108)              | **286** bytes |
-| Outputs              | 2 × (7 + 25)                | **64** bytes |
-| **Total Tx Size**    | 84 + 32 + 286 + 64          | **466** bytes |
+| Field                | Calculation                 | Size          | Byte type | Total
+|----------------------|-----------------------------|---------------|-----------|-----|
+| Fixed-size fields     |                             | **84** bytes  | static    | 0.01 HTR
+| Tokens               | 1 token × 32 bytes          | **32** bytes  | dynamic   | 0 HTR  
+| Inputs               | 2 × 35                      | **286** bytes | dynamic   | 0.0038 HTR
+| Outputs              | 2 × (7 + 25)                | **64** bytes  | dynamic   | 0 HTR
+| **Total Fee**    |           |  |    | 0.0138 HTR
 
 ## Wallet UI
 
@@ -142,13 +166,17 @@ Ethereum handles transaction fees through the concept of Gas, where each operati
 
 The Base Fee is burned, reducing the Ether supply, while the Priority Tip goes to validators. This model improves fee predictability, making costs more stable and transparent for users.
 
+# Business unresolved questions
+- Should we allow deposit based tokens to collect fees?
+- Should we burn or move it to a burn address?
+- How the fee will be calculated?
+- Should we only consider the outputs in the fee calculation?
+
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-- What will happen to the fees? Will they be collected by the miners?
 - How should melt operations be handled for fee-based custom tokens?
-- Should storage fees be one-time or recurring (rent model)?
 - How fee adjustments will be governed?
 - Removing the transaction fee from minning, how will it affect the tx-mining-service?
 
