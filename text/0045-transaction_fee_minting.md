@@ -13,14 +13,14 @@ This proposal suggests an alternative mechanism where, instead of requiring an u
 # Motivation
 [motivation]: #motivation
 
-Dozer suggested an alternative to the HTR deposit requirement when minting tokens. The idea is to create a new type of custom tokens where tokens would be minted for free (i.e., no deposits) and fees will be charged for transactions. [RFC](https://github.com/Dozer-Protocol/hathor-rfcs/blob/new-token-economics/projects/new-token-economics/token-economics.md)
+Dozer suggested an alternative to the HTR deposit requirement when minting tokens. The idea is to create a new type of custom token where tokens would be minted for free (i.e., no deposits) and fees would be charged for transactions. [RFC](https://github.com/Dozer-Protocol/hathor-rfcs/blob/new-token-economics/projects/new-token-economics/token-economics.md)
 
 This change would reduce the upfront cost of minting tokens, making it more accessible to users who may not have sufficient HTR at the time of minting. The network would still benefit from a fee mechanism that contributes to miners’ incentives and overall network security.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-When minting tokens, creators can choose between two transaction models: Deposit-Based and Fee-Based. Each model offers different benefits, depending on how the tokens will be used. For handle it we will use the same definitions of the [Token Creation Transaction](https://github.com/HathorNetwork/rfcs/blob/master/text/0004-tokens.md), possibly adding a variation of it using a new version.
+When minting tokens, creators can choose between two transaction models: Deposit-Based and Fee-Based. Each model offers different benefits, depending on how the tokens will be used. To handle this, we will use the same definitions from the [Token Creation Transaction](https://github.com/HathorNetwork/rfcs/blob/master/text/0004-tokens.md), possibly adding a variation of it using a new version.
 
 ## Deposit-Based Model (as is)
 
@@ -28,32 +28,31 @@ Currently, creators must [deposit a percentage](https://github.com/HathorNetwork
 
 ## Fee-Based Model
 
-Adding the fee-based model the platform won't require an upfront deposit. Instead, each transfer of the minted tokens incurs a transaction fee.
+With the fee-based model, the platform won't require an upfront deposit. Instead, each transfer of the minted tokens incurs a transaction fee.
 
 By selecting the appropriate model, token creators can optimize their minting strategy based on their specific needs and usage scenarios. A popular use case is the creation of memecoins by minting tokens that aren’t bound to HTR value. Besides that, the user can use it for any other scenario that may arise.
 
 ### Fee cost
 
-Fees will be proportional to the amount of outputs with fee-based tokens. For instance, if there are 3 HTR outputs, 2 outputs with deposit-based tokens and another 5 with fee-based tokens, only the latter 5 will count towards the fee.
+Fees will be proportional to the number of outputs with fee-based tokens. For instance, if there are 3 HTR outputs, 2 outputs with deposit-based tokens, and another 5 with fee-based tokens, only the latter 5 will count towards the fee.
 
 This proposal suggests **0.01 HTR per output**.
 
-Appart from accepting HTR for fee payment, any deposit-based token will be accepted. In this case, since the token was created with a 100:1 ratio of HTR ([deposit model](#deposit-based-model-as-is)), the fee needs to be 100x the HTR rate. It means **0.01 HTR or 1.00 deposit-based-token**
-  
+Apart from accepting HTR for fee payment, any deposit-based token will be accepted. In this case, since the token was created with a 100:1 ratio of HTR ([deposit model](#deposit-based-model-as-is)), the fee needs to be 100x the HTR rate. That means **0.01 HTR or 1.00 deposit-based-token**.
+
 ### Transaction Mining
 
 By adding fees to the transactions, we don't need to mine them anymore. So the proof of work (PoW) won't affect the fee calculation.
 
 ### Fee destination
 
-The fees will be burned, if we need to do something with it, possibly in another issue we can change the behavior. For now let's keep it simple.
-
+The fees will be burned.
 
 ## Wallet UI
 
-Since Hathor has an easy to use approach, we should provide to the users the option to select between the two models (deposit and fee) when minting. Also, in the wallet we should always require fee payment in HTR to incentivize HTR demand.
+Since Hathor has an easy-to-use approach, we should provide users the option to select between the two models (deposit and fee) when minting. Also, in the wallet, we should always require fee payment in HTR to incentivize HTR demand.
 
-That's the initial recommendation. After testing and feedback, we may choose to allow paying with other tokens as well. Note that this is just for the Hathor wallet. **At the protocol level, other tokens are accepted**.
+**At the protocol level, other tokens are accepted**.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
@@ -63,40 +62,42 @@ In this section, technical details are expanded for what was described above.
 ## Token info version
 Given Hathor's [Anatomy of a Transaction RFC](https://github.com/HathorNetwork/rfcs/blob/master/text/0015-anatomy-of-tx.md#token-creation), it is reasonable to suggest that the byte used by the token creation transaction `token_info_version` will be used to determine fee-created tokens.
 
-Since each custom token `id` is the hash of the token creation transaction that created it, we can assume the enum values below that can be assigned to the `token_info_version` byte in the token creation tx and then we can retrieve it.
+Since each custom token `id` is the hash of the token creation transaction that created it, we can assume the enum values below can be assigned to the `token_info_version` byte in the token creation tx and then we can retrieve it.
 
-So, by adding an TokenInfoVersion enum we have:
+So, by adding a TokenInfoVersion enum we have:
 - DEPOSIT = 1 (as is)
 - FEE = 2
 
-Then, we must allow the versions above in the `deserialize_token_info` method, by checking the enum values.
+Then, we must allow the versions above in the `deserialize_token_info` method by checking the enum values.
 
 ## Transaction 
-From the section below we know how to diferenciate between deposit and fee tokens, based on that we need to add a couple of method to the transaction in order to calculate the fee.
+From the section below, we know how to differentiate between deposit-based and fee-based tokens. Based on that, we need to add a couple of methods to the transaction in order to calculate the fee.
 
-`should_charge_fee` method will check if the transaction has any fee based output and if the `FEE_FEATURE_FLAG` is enabled.
+The `should_charge_fee` method will check if the transaction has any fee-based output and if the `FEE_FEATURE_FLAG` is enabled.
 
-`calculate_fee` method will count the fee based outputs and apply a constant value `FEE_OUTPUT_VALUE` to each, returning the total fee. This one should also be in the `base_transaction.py` returning a 0 value, so it won't affect any calculation from not being implemented.
+The `calculate_fee` method will count the fee-based outputs and apply a constant value `FEE_OUTPUT_VALUE` to each, returning the total fee. This method should also be in `base_transaction.py`, returning a value of 0 so it won't affect any calculation from not being implemented.
 
 ## Transaction verifier 
 
-Inside the transaction verifier we have the `verify_sum` method which is responsible for check if the sum of outputs are equal of the sum of inputs. If the sum of inputs and outputs is not 0, we'll add the new case.
+Inside the transaction verifier, we have the `verify_sum` method, which is responsible for checking if the sum of outputs equals the sum of inputs. If the sum of inputs and outputs is not 0, we'll add the new case.
 
 - Melting: Amount > 0
 - Minting: Amount < 0
 - Fee: Amount < 0
 
-Here the `tx.should_charge_fee()` comes into action and help us to bypass any deposit that should be made for the current token and move on charging the (`tx.calculate_fee()`) fee without conflict.
+Here, the `tx.should_charge_fee()` comes into action and helps us bypass any deposit that should be made for the current token and proceed with charging the fee via `tx.calculate_fee()` without conflict.
+
+Once we have the transaction fee value in hand, we should iterate over each input and output to collect the required amount. It can come from HTR, deposit-based tokens, or a combination of both.
 
 ## Feature flag in settings
-For development purpose this feature will be feature flagged to run only in local net by changing the FEE_FEATURE_FLAG in settings to true
+For development purposes, this feature will be feature-flagged to run only on the local network by setting the `FEE_FEATURE_FLAG` in settings to true.
 
 ## Feature activation
-For production, we'll rely on the feature activation to release this feature.
+For production, we'll rely on feature activation to release this feature.
 
 # Drawbacks
 
-A drawback would be an increase in CPU consumption, because the verification algorithm will be more complicated, but it seems to be a minor drawback.
+A drawback would be an increase in CPU consumption because the verification algorithm will be more complicated, but it seems to be a minor drawback.
 
 # Prior art
 
@@ -113,18 +114,17 @@ Ethereum handles transaction fees through the concept of Gas, where each operati
 The Base Fee is burned, reducing the Ether supply, while the Priority Tip goes to validators. This model improves fee predictability, making costs more stable and transparent for users.
 
 # Business unresolved questions
-- ~~Should we allow deposit based tokens to collect fees?~~
+- ~~Should we allow deposit-based tokens to collect fees?~~
 - ~~Should we burn or move it to a burn address?~~
-- ~~How the fee will be calculated?~~
+- ~~How will the fee be calculated?~~
 - ~~Should we only consider the outputs in the fee calculation?~~
-
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
 - How should melt operations be handled for fee-based custom tokens?
-- ~~How fee adjustments will be governed?~~
-- Removing the transaction fee from minning, how will it affect the tx-mining-service?
+- ~~How will fee adjustments be governed?~~
+- By removing the transaction fee from mining, how will it affect the tx-mining-service?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
@@ -140,4 +140,3 @@ The Base Fee is burned, reducing the Ether supply, while the Priority Tip goes t
 - https://eips.ethereum.org/EIPS/eip-1559
 - https://ethereum.org/en/developers/docs/gas/
 - https://developer.bitcoin.org/devguide/transactions.html#transaction-fees-and-change
-
