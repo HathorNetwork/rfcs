@@ -20,7 +20,7 @@ This change would reduce the upfront cost of minting tokens, making it more acce
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-When minting tokens, creators can choose between two transaction models: Deposit-Based and Fee-Based. Each model offers different benefits, depending on how the tokens will be used. To handle this, we will use the same definitions from the [Token Creation Transaction](https://github.com/HathorNetwork/rfcs/blob/master/text/0004-tokens.md), possibly adding a variation of it using a new version.
+When minting tokens, creators can choose between two transaction models: Deposit-Based and Fee-Based. Each model offers different benefits, depending on how the tokens will be used. To handle this, we will use the same definitions from both [Token Creation Transaction](https://github.com/HathorNetwork/rfcs/blob/master/text/0004-tokens.md) and this proposal.
 
 ## Deposit-Based Model (as is)
 
@@ -71,7 +71,7 @@ So, by adding a TokenInfoVersion enum we have:
 Then, we must allow the versions above in the `deserialize_token_info` method by checking the enum values.
 
 ## Transaction 
-From the section below, we know how to differentiate between deposit-based and fee-based tokens. Based on that, we need to add a couple of methods to the transaction in order to calculate the fee.
+From the section above, we know how to differentiate between deposit-based and fee-based tokens. Based on that, we need to add a couple of methods to the transaction in order to calculate the fee.
 
 The `should_charge_fee` method will check if the transaction has any fee-based output and if the `FEE_FEATURE_FLAG` is enabled.
 
