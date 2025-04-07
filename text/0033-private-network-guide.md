@@ -187,7 +187,7 @@ SETTINGS = HathorSettings(
     BOOTSTRAP_DNS=[],
     # Genesis stuff
     GENESIS_OUTPUT_SCRIPT=bytes.fromhex("<GENESIS_OUTPUT_SCRIPT>"),
-    GENESIS_TIMESTAMP=1632426140,
+    GENESIS_BLOCK_TIMESTAMP=1632426140,
     MIN_TX_WEIGHT_K=0,
     MIN_TX_WEIGHT_COEFFICIENT=0,
     MIN_TX_WEIGHT=8,
@@ -201,18 +201,22 @@ Rerun the python shell with additional parameters to use our newly created setti
 ```sh
 docker run -it --entrypoint python  -v ~/hathor-private-tutorial/conf:/privnet/conf --env HATHOR_CONFIG_FILE=privnet.conf.privnet hathornetwork/hathor-core -c "
 from hathor.conf import HathorSettings
-from hathor.transaction import genesis
+from hathor.conf.settings import GENESIS_TOKENS
+from hathor.transaction.genesis import generate_new_genesis
 
 settings = HathorSettings()
 
 # This should output 'privatenet'
 print('NETWORK', settings.NETWORK_NAME)
 
-for tx_name in ['BLOCK_GENESIS', 'TX_GENESIS1', 'TX_GENESIS2']:
-    tx = getattr(genesis, tx_name)
-    tx_hash = tx.start_mining(update_time=False).hex()
-    print(f'{tx_name}_HASH', tx_hash)
-    print(f'{tx_name}_NONCE', tx.nonce)
+block, tx1, tx2 = generate_new_genesis(tokens=GENESIS_TOKENS, address="<address>", block_timestamp=settings.GENESIS_BLOCK_TIMESTAMP, min_block_weight=settings.MIN_BLOCK_WEIGHT, min_tx_weight=settings.MIN_TX_WEIGHT)
+
+print('GENESIS_BLOCK_NONCE', block.nonce)
+print('GENESIS_BLOCK_HASH', block.hash_hex)
+print('GENESIS_TX1_NONCE', tx1.nonce)
+print('GENESIS_TX1_HASH', tx1.hash_hex)
+print('GENESIS_TX2_NONCE', tx2.nonce)
+print('GENESIS_TX2_HASH', tx2.hash_hex)
 "
 ```
 
