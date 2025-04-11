@@ -15,7 +15,7 @@ This proposal suggests an alternative mechanism where, instead of requiring an u
 
 Dozer suggested an alternative to the HTR deposit requirement when minting tokens. The idea is to create a new type of custom token where tokens would be minted for free (i.e., no deposits) and fees would be charged for transactions. [RFC](https://github.com/Dozer-Protocol/hathor-rfcs/blob/new-token-economics/projects/new-token-economics/token-economics.md)
 
-This change would reduce the upfront cost of minting tokens, making it more accessible to users who may not have sufficient HTR at the time of minting. The network would still benefit from a fee mechanism that contributes to miners’ incentives and overall network security.
+This change would reduce the upfront cost of minting tokens, making it more accessible to users who may not have sufficient HTR at the time of minting.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -28,13 +28,13 @@ Currently, creators must [deposit a percentage](https://github.com/HathorNetwork
 
 ## Fee-Based Model
 
-With the fee-based model, the platform won't require an upfront deposit. Instead, each transfer of the minted tokens incurs a transaction fee.
-
-By selecting the appropriate model, token creators can optimize their minting strategy based on their specific needs and usage scenarios. A popular use case is the creation of memecoins by minting tokens that aren’t bound to HTR value. Besides that, the user can use it for any other scenario that may arise.
+In the fee-based model, no upfront deposit is required — each transfer simply incurs a transaction fee. This gives token creators flexibility to tailor their strategy to specific use cases, such as minting large quantities of memecoins without tying them to HTR value. The model also supports other scenarios that benefit from predictable, low-cost transactions. For example, it enables the creation of scalable in-game currencies or loyalty tokens, where frequent, small transactions don’t incur high fees, and projects can monetize their services more effectively by using custom tokens for fees.
 
 ### Fee cost
 
 Fees will be proportional to the number of outputs with fee-based tokens. For instance, if there are 3 HTR outputs, 2 outputs with deposit-based tokens, and another 5 with fee-based tokens, only the latter 5 will count towards the fee.
+
+For melting operations which doesn't contain any output we'll count as 1 output in the fee calculation.
 
 This proposal suggests **0.01 HTR per output**.
 
@@ -48,7 +48,11 @@ By adding fees to the transactions, we don't need to mine them anymore. So the p
 
 The fees will be burned.
 
-## Wallet UI
+## Explorer
+
+Add the fee field in the transaction view, and the token_info_version in the token creation transaction.
+
+## Wallet (desktop, mobile, wallet-lib)
 
 Since Hathor has an easy-to-use approach, we should provide users the option to select between the two models (deposit and fee) when minting. Also, in the wallet, we should always require fee payment in HTR to incentivize HTR demand.
 
@@ -94,6 +98,9 @@ For development purposes, this feature will be feature-flagged to run only on th
 
 ## Feature activation
 For production, we'll rely on feature activation to release this feature.
+
+## Transaction fee rosource
+Add an endpoint to calculate fees based in the inputs and outputs, in order to expose the logic used in the transaction verifiers to the wallets.
 
 # Drawbacks
 
