@@ -34,15 +34,29 @@ In the fee-based model, no upfront deposit is required — each transfer simply 
 
 Fees will be proportional to the number of outputs with fee-based tokens. For instance, if there are 3 HTR outputs, 2 outputs with deposit-based tokens, and another 5 with fee-based tokens, only the latter 5 will count towards the fee.
 
-For melting operations which doesn't contain any output we'll count as 1 output in the fee calculation.
+For melting operations that don't contain any outputs, we'll count them as 1 output in the fee calculation.
 
 This proposal suggests **0.01 HTR per output**.
 
 Apart from accepting HTR for fee payment, any deposit-based token will be accepted. In this case, since the token was created with a 100:1 ratio of HTR ([deposit model](#deposit-based-model-as-is)), the fee needs to be 100x the HTR rate. That means **0.01 HTR or 1.00 deposit-based-token**.
 
-### Transaction Mining
+### Fee and melting operations
+The fee will be charged before any melting operation and doesn't require any authority for it.
 
-By adding fees to the transactions, we don't need to mine them anymore. So the proof of work (PoW) won't affect the fee calculation.
+For instance, if there is a transaction with:
+Fee-based Token (FBT), Deposit-based Token (DBT)
+
+    Inputs: [1000 FBT, FBT Melt Authority, 500 DBT]
+    Outputs: [500 FBT, 400 DBT]
+
+In this scenario, 100 DBT is used to pay the fee without requiring any authority.
+
+For a combination of paying the fee and also melting the token, we'll have the following:
+
+    Inputs: [1000 FBT, FBT Melt Authority, 500 DBT, DBT Melt Authority]
+    Outputs: [500 FBT, FBT Melt Authority, 300 DBT, DBT Melt Authority]
+
+Here, 100 DBT is used to pay the fee, and there is a melt of 500 FBT and 100 DBT. For melting tokens, the behavior remains the same, requiring authority.
 
 ### Fee destination
 
@@ -74,24 +88,45 @@ So, by adding a TokenInfoVersion enum we have:
 
 Then, we must allow the versions above in the `deserialize_token_info` method by checking the enum values.
 
-## Transaction 
-From the section above, we know how to differentiate between deposit-based and fee-based tokens. Based on that, we need to add a couple of methods to the transaction in order to calculate the fee.
+## Transaction token_dict
+From the section above, we know how to differentiate between deposit and fee tokens. Based on that, we need to add the input and output data to the current `token_dict` in order to calculate the outputs and check for melting operations without outputs.
 
-The `should_charge_fee` method will check if the transaction has any fee-based output and if the `FEE_FEATURE_FLAG` is enabled.
+## Fee (fee.py)
+This new file is responsible for keeping the fee logic, but not for orchestrating it; this will be done in the transaction verifier.
 
-The `calculate_fee` method will count the fee-based outputs and apply a constant value `FEE_OUTPUT_VALUE` to each, returning the total fee. This method should also be in `base_transaction.py`, returning a value of 0 so it won't affect any calculation from not being implemented.
+The `should_charge_fee` method will check if the transaction has any fee-based input or output and if the `FEE_FEATURE_FLAG` is enabled.
+
+The `calculate_fee` method will receive a `token_dict` as input, then count the fee-based non-authority outputs and apply a constant value `FEE_OUTPUT_VALUE` to each, returning the total fee in HTR.
+
+It will consider 1 output for melting operations that don't have any output.  
+It won't consider mint and melt authorities.
+
+The `collect_fee` method will receive the `token_dict` and the fee. It will use the differences between the input and output amounts and return the paid fee in HTR. For each token that has a difference, it will collect the fee by incrementing the amount value in the corresponding `token_dict` entry.
 
 ## Transaction verifier 
 
-Inside the transaction verifier, we have the `verify_sum` method, which is responsible for checking if the sum of outputs equals the sum of inputs. If the sum of inputs and outputs is not 0, we'll add the new case.
+### verify_fee()
+Inside the transaction verifier, the `verify_fee` method will be added. It's responsible for orchestrating the fee flow by checking if the fee should be charged, calculating it, and checking the payment availability:
 
-- Melting: Amount > 0
-- Minting: Amount < 0
-- Fee: Amount < 0
+Example: 
+```python
+if not should_charge_fee(token_dict):
+    return
 
-Here, the `tx.should_charge_fee()` comes into action and helps us bypass any deposit that should be made for the current token and proceed with charging the fee via `tx.calculate_fee()` without conflict.
+fee = calculate_fee(token_dict)
+paid_fee = collect_fee(token_dict)
 
-Once we have the transaction fee value in hand, we should iterate over each input and output to collect the required amount. It can come from HTR, deposit-based tokens, or a combination of both.
+if fee - paid_fee > 0:
+    raise InputOutputMismatch(
+        'HTR or deposit tokens are not enough to pay the fee. (amount={}, expected={})'.format(
+            paid_fee,
+            fee,
+        ))
+```
+
+### verify_sum()
+
+Since we already normalized the `token_dict` values in the `verify_fee` method before calling this one, we just need to adjust the withdraw and deposit amounts here, collecting only for deposit tokens.
 
 ## Feature flag in settings
 For development purposes, this feature will be feature-flagged to run only on the local network by setting the `FEE_FEATURE_FLAG` in settings to true.
@@ -99,8 +134,8 @@ For development purposes, this feature will be feature-flagged to run only on th
 ## Feature activation
 For production, we'll rely on feature activation to release this feature.
 
-## Transaction fee rosource
-Add an endpoint to calculate fees based in the inputs and outputs, in order to expose the logic used in the transaction verifiers to the wallets.
+## Transaction fee resource
+Add an endpoint to calculate fees based on the inputs and outputs, in order to expose the logic used in the transaction verifiers to the wallets.
 
 # Drawbacks
 
