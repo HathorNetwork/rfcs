@@ -41,10 +41,15 @@ This proposal suggests **0.01 HTR per output**.
 Apart from accepting HTR for fee payment, any deposit-based token will be accepted. In this case, since the token was created with a 100:1 ratio of HTR ([deposit model](#deposit-based-model-as-is)), the fee needs to be 100x the HTR rate. That means **0.01 HTR or 1.00 deposit-based-token**.
 
 ### Fee and melting operations
-The fee will be charged before any melting operation and doesn't require any authority for it.
+In the examples below we'll use Fee-based Token (FBT), and Deposit-based Token (DBT) as our tokens.
+
+To accept deposit tokens, the transaction should have an amount >= 100, for example: 
+    
+    Inputs: [100 FBT, 150 DBT]
+    Outputs: [100 FBT, 100 DBT] 
+Since 50 DBT represents an withdraw of 0 HTR, this operation should be blocked and considered an attempt to melt without an authority.
 
 For instance, if there is a transaction with:
-Fee-based Token (FBT), Deposit-based Token (DBT)
 
     Inputs: [1000 FBT, FBT Melt Authority, 500 DBT]
     Outputs: [500 FBT, 400 DBT]
@@ -101,32 +106,62 @@ The `calculate_fee` method will receive a `token_dict` as input, then count the 
 It will consider 1 output for melting operations that don't have any output.  
 It won't consider mint and melt authorities.
 
-The `collect_fee` method will receive the `token_dict` and the fee. It will use the differences between the input and output amounts and return the paid fee in HTR. For each token that has a difference, it will collect the fee by incrementing the amount value in the corresponding `token_dict` entry.
-
 ## Transaction verifier 
 
-### verify_fee()
-Inside the transaction verifier, the `verify_fee` method will be added. It's responsible for orchestrating the fee flow by checking if the fee should be charged, calculating it, and checking the payment availability:
-
-Example: 
-```python
-if not should_charge_fee(token_dict):
-    return
-
-fee = calculate_fee(token_dict)
-paid_fee = collect_fee(token_dict)
-
-if fee - paid_fee > 0:
-    raise InputOutputMismatch(
-        'HTR or deposit tokens are not enough to pay the fee. (amount={}, expected={})'.format(
-            paid_fee,
-            fee,
-        ))
-```
-
 ### verify_sum()
+The `verify_sum` method will be modified to match the following based on the `token_dict` result:
 
-Since we already normalized the `token_dict` values in the `verify_fee` method before calling this one, we just need to adjust the withdraw and deposit amounts here, collecting only for deposit tokens.
+- Only calculate a fee value if the `should_charge_fee()` method returns `True`.
+- It will call the `calculate_fee()` method from `fee.py` as the `fee`.
+
+For deposit tokens:
+- It will sum all the deposit based tokens withdraws with melt authority
+- It will sum all the deposit based tokens withdraws without a melt authority:
+    -  When the amount of a token is a multiple of 100, otherwise it will be **treated as an attempt of melting without an authority**. 
+        - For example, `99 DBT` isn't represents `1 HTR` and an `InputOutputMismatch` error will be raised.
+        - Also, `101 DBT` and `199 DBT` represents `1 HTR` and a `InputOutputMismatch` error will be raised, blocking the melting.
+- It will **reject** any deposit based token which tries to **mint without an authority**.
+- It'll **reject** if the sum of the **withdraws without an authority** are **higher than** the `fee`. If this validation fails, an `InputOutputMismatch` error will be raised.
+
+For fee tokens:
+- It will reject any Fee based token which tries to **melt** or **melt** without an authority.
+
+The assertions above are placed to guaranteed the following equality:
+
+    diffHTR = HTR Output - HTR Input
+    fee = result of fee calculation
+    withdraw_without_authority = sum of withdraw by melting deposit based tokens without an authority
+    withdraw = sum of withdraw by melting deposit based tokens with an authority
+    deposit = sum of the required HTR to mint deposit based tokens
+
+    diffHTR + fee = withdraw + withdraw_without_authority - deposit
+
+
+Let's use the same example of the guide level explanation use the following tokens: Deposit Based Token (DBT), and Fee Based Token (FBT).
+    
+    Inputs: [2 HTR, 100 FBT, 200 DBT, 100 DBT3, 100 DBT3 melt authority]
+    Outputs: [
+        1 HTR,
+        50 FBT, 
+        50 FBT,
+        200 DBT2,
+        DBT2 mint authority,
+        DBT2 melt authority
+    ]
+    Fee: 2 HTR
+
+    diffHTR = 2 HTR
+    fee = 2 HTR
+    withdraw_without_authority = 2 HTR (resulting from 200 DBT) 
+    withdraw = 1 HTR (resulting from 100 DBT3)
+    deposit = 2
+
+The balance check is valid: 
+
+    diffHTR + fee = withdraw + withdraw_without_authority - deposit
+    -1 + 2 = 1 + 2 - 2
+    1 = 1
+
 
 ## Feature flag in settings
 For development purposes, this feature will be feature-flagged to run only on the local network by setting the `FEE_FEATURE_FLAG` in settings to true.
