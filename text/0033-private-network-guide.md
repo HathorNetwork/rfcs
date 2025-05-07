@@ -1,8 +1,5 @@
 - Feature Name: private_network_guide
-- Status: Draft
-- Start Date: 2021-09-27
-- RFC PR: (leave this empty)
-- Hathor Issue: (leave this empty)
+- Last update: 2021-11-11
 - Author: Luis Helder <luislhl@hathor.network>
 
 # Summary
