@@ -1,6 +1,7 @@
 - Feature Name: nano-contracts-support
 - Start Date: 2025-01-02
-- Author: @andreabadesso
+- Update Date: 2025-07-07
+- Author: @andreabadesso @r4mmer
 
 # Summary
 
@@ -12,16 +13,19 @@ The Hathor Network is introducing nano-contracts. To maintain complete transacti
 
 # Guide-level explanation
 
-Currently, the wallet-service syncs with the fullnode through reliable integrations, which sends events in the exact order they occur. The daemon processes these events through a state machine (SyncMachine) that handles different types of events like new transactions, metadata changes, and voided transactions.
+Currently, nano-contract transactions are any transaction with a nano-contract header, the protocol currently only supports nano-contract headers for normal transactions (version 1) and create token transactions (version 2), along with the usual tracking of inputs and outputs the main change that needs to be implemented is tracking the caller's (address caller from the header) relationship with the transaction, especially when they are not directly involved in any token transfer.
 
-For nano-contracts, the main change is tracking the caller's relationship with the transaction, especially when they are not directly involved in token transfers. When a nano-contract transaction is received (identified by its version), we'll:
+The wallet-service syncs with the fullnode through reliable integrations, which sends events in the exact order they occur. The daemon processes these events through a state machine (SyncMachine) that handles different types of events like new transactions, metadata changes, and voided transactions.
+
+When a nano-contract transaction is received (identified by its version), we'll:
 
 1. Process normal inputs/outputs as usual
 2. Check if the caller is involved in inputs/outputs
 3. If not, explicitly add the transaction to their history
-4. Forward any contract-specific API calls to the fullnode
+4. Update the seqnum for the caller's address
+5. Forward any contract-specific API calls to the fullnode
 
-This means that if address is the caller in a contract call that moves tokens from X to Y (e.g. a deposit action), all three addresses will see this transaction in their history:
+This means that if address Z is the caller in a contract call that moves tokens from X to Y (e.g. a deposit action), all three addresses will see this transaction in their history:
 - X and Y through normal UTXO tracking
 - Z through explicit caller tracking
 
@@ -42,7 +46,10 @@ From the user's perspective, they will be able to:
 
 ## Database Changes
 
-No schema changes are required. The existing tables (`address_tx_history` and `wallet_tx_history`) will be used to track contract interactions, but we need to explicitly add entries for callers when they are not involved in inputs/outputs.
+An `address_metadata` table with the address and `seqnum` will be created.
+The column `is_nanocontract` will be added to the `transaction` table.
+
+The relationship between a nano contract caller and the transaction will be made through the existing `address_tx_history` and `wallet_tx_history` tables, which require no changes but will have to be forced when the caller is not involved in any inputs/outputs.
 
 Important implementation notes:
 1. The `updateAddressTablesWithTx` function needs to be modified to handle zero balances efficiently:
@@ -57,7 +64,7 @@ Important implementation notes:
 ### SyncMachine Updates
 The `handleVertexAccepted` service will be enhanced to handle nano-contract transactions:
 
-1. Detect nano-contract transactions (by version)
+1. Detect nano-contract transactions
 2. Extract the caller information from the transaction metadata
 3. If the caller is not involved in any inputs or outputs:
    - Use `updateAddressTablesWithTx` with a zero balance to add the transaction to their history
