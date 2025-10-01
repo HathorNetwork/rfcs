@@ -87,7 +87,11 @@ The `_through_path` variant should be called when the `path` length is greater t
 The actual exchange rate of a token swap is defined during the swap, but on Hathor you have to provide the deposit and withdrawal before running the method.
 To make this possible we have to account for slippage when building the transaction, to achieve this it depends if the known amount is the input token or output token.
 
-This means that the accepted slippage will always be defined by the user's wallet and the swap will automatically fail if slippage is more than expected by the user.
+We will define the accepted slippage to always be 0.5% of the expected value shown to the user.
+
+In the case where the user defined the input tokens, If the actual value of tokens to be withdrawn is lower than 99.5% of the value shown to the user the swap will fail.
+
+In the case where the user defined the output tokens, If the actual value of tokens to be deposited is higher than 100.5% of the value shown to the user the swap will fail.
 
 ##### 1. Input token value is known
 
@@ -289,6 +293,26 @@ class SwapResult(NamedTuple):
 
 To account for slippage the Dozer protocol allows to the unknown part of the balance to be left as balance on the contract for the caller address, this value is only known at runtime on the nano contract.
 This design does not offer a solution to withdraw the tokens.
+
+# Future possibilities
+[future-possibilities]: #future-possibilities
+
+## Variance from the best swap quote shown to the user
+
+The quote shown to the user by the `find_best_swap` methods are only valid for the current state of the contract.
+If another user makes a swap using at least one of the same pools the value may change.
+So as time goes on and other swaps are made by other users and services the value may get increasingly different from the quote.
+
+So the probability of the swap failing increases as times goes on from the moment the users is shown a quote.
+We currently do not have a "best approach" solution for this issue so this design will act as if the quote is always valid.
+
+In the future we can have a strategy to remake the quote or make the user aware of its expiration.
+
+## Slippage definition
+
+This design implements a fixed 0.5% slippage on the expected value for the swap.
+So the slippage will increase with the number of tokens being swapped, e.g. an acceptable slippage for 100.00 HTR is 0.50 HTR but an acceptable slippage for 100,000.00 HTR is 500.00 HTR.
+The user should be able to configure the acceptable percentage of slippage accepted or even an acceptable value, e.g. 1 HTR fixed no matter the expected HTR output of the swap.
 
 # Task Breakdown
 [task-breakdown]: #task-breakdown
