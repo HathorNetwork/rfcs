@@ -33,6 +33,11 @@ The user then has to verify the information on the swap.
 
 Once the user confirms we can swap the tokens using the Dozer protocol.
 
+## Unleash feature toggles
+
+The feature toggle `mobile-token-swap.rollout` will be created, we can use the `stage` key of the context to differentiate the rollout between the testnet and mainnet.
+If the flag is off we will hide the swap tab icon on the bottom of the screen so the user cannot reach the token swap pages.
+
 ## Dozer token swap protocol
 
 The Dozer protocol for token swap is implemented as a nano contract on Hathor. 
@@ -141,6 +146,11 @@ The JSON should follow the schema:
       "type": "object",
       "required": ["tokens"],
       "properties": {
+        "swap_contract": {
+          "type": "string",
+          "description": "Dozer protocol swap contract id in this network.",
+          "pattern": "^[a-fA-F0-9]{64}$",
+        },
         "tokens": {
           "type": "array",
           "description": "Array of allowed tokens for the swap.",
@@ -241,7 +251,6 @@ These methods require a transaction to be sent, the swap methods also require a 
 
 ##### Type definitions
 
-
 ```py
 class SwapPathInfo(NamedTuple):
     """Information about the best swap path between tokens."""
@@ -280,3 +289,14 @@ class SwapResult(NamedTuple):
 
 To account for slippage the Dozer protocol allows to the unknown part of the balance to be left as balance on the contract for the caller address, this value is only known at runtime on the nano contract.
 This design does not offer a solution to withdraw the tokens.
+
+# Task Breakdown
+[task-breakdown]: #task-breakdown
+
+- Create allowed token swap CDN (2 dd)
+- CI/CD for allowed tokens repo (1.5 dd)
+- Import icons for allowed tokens (0.25 dd)
+- Implement token swap screens (3 dd)
+- Implement Dozer contract calls (2 dd)
+- Error treatment for failed swap (1 dd)
+- Create feature flag on unleash (0.25 dd)
