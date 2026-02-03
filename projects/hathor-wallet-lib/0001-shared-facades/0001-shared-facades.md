@@ -48,15 +48,186 @@ interchangeably during its operation, with no adaptation to their inner workings
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-This is the technical portion of the RFC. Explain the design in sufficient
-detail that:
+## 1. Async/Sync Signature Alignment
 
-- Its interaction with other features is clear.
-- It is reasonably clear how the feature would be implemented.
-- Corner cases are dissected by example.
+The following methods must become async in both facades. The Wallet Service facade
+currently returns synchronous values, while the Fullnode facade returns Promises.
 
-The section should return to the examples given in the previous section, and
-explain more fully how the detailed proposal makes those examples work.
+### 1.1 Address Methods
+
+```typescript
+// Before (WalletServiceWallet - sync)
+getCurrentAddress(options?: { markAsUsed: boolean }): AddressInfoObject;
+getNextAddress(): AddressInfoObject;
+
+// After (both facades - async)
+getCurrentAddress(options?: { markAsUsed: boolean }): Promise<AddressInfoObject>;
+getNextAddress(): Promise<AddressInfoObject>;
+```
+
+### 1.2 Lifecycle Methods
+
+```typescript
+// Before (IHathorWallet - sync)
+stop(): void;
+
+// After (IHathorWallet - async, matching both implementations)
+stop(): Promise<void>;
+```
+
+## 2. Unified Return Types
+
+### 2.1 Address Info Object
+
+Both facades will return a consistent `AddressInfoObject`:
+
+```typescript
+interface AddressInfoObject {
+  address: string;
+  index: number;
+  addressPath: string;
+  info?: string; // Optional, WalletService-specific metadata
+}
+```
+
+**Corner case:** `index` is `number | null` in Fullnode facade. This will be changed to
+always `number`, as unknown/unindexed addresses are not possible in the scope of this method.
+
+### 2.2 Authority UTXO Type
+
+Create a unified `AuthorityUtxo` type for `getMintAuthority()`, `getMeltAuthority()`,
+and `getAuthorityUtxo()`:
+
+```typescript
+interface AuthorityUtxo {
+  txId: string;
+  index: number;
+  address: string;
+  authorities: OutputValueType;
+  // Optional fields present when available from storage
+  tokenId?: string;
+  value?: OutputValueType;
+  timelock?: number | null;
+}
+```
+
+Both facades will return `Promise<AuthorityUtxo[]>`. The Fullnode facade currently
+returns `IUtxo[]` (richer), while WalletService returns `AuthorityTxOutput[]` (minimal).
+The unified type uses the intersection of required fields, with optional enrichment.
+
+### 2.3 Transaction Return Types
+
+```typescript
+// Standardize to non-nullable return
+sendTransaction(...): Promise<Transaction | null>;
+sendManyOutputsTransaction(...): Promise<Transaction | null>;
+```
+
+**Corner case:** Fullnode facade returns `null` when `startMiningTx: false`. This
+null possibility will be enforced in the other facade as well.
+
+## 3. Interface Method Additions
+
+Add methods that exist in both facades but are missing from `IHathorWallet`:
+
+```typescript
+interface IHathorWallet {
+
+  // Authority methods (currently missing)
+  getMintAuthority(tokenUid: string, options?: AuthorityOptions): Promise<AuthorityUtxo[]>;
+  getMeltAuthority(tokenUid: string, options?: AuthorityOptions): Promise<AuthorityUtxo[]>;
+  getAuthorityUtxo(tokenUid: string, authority: 'mint' | 'melt', options?: AuthorityOptions): Promise<AuthorityUtxo[]>;
+
+  // State methods (currently missing)
+  isReady(): boolean;
+
+  // Cleanup methods (currently missing)
+  clearSensitiveData(): void;
+  isHardwareWallet(): boolean;
+}
+
+// Will be declared on the dedicated shared types file
+interface AuthorityOptions {
+  many?: boolean;
+  skipSpent?: boolean; // Replaces only_available_utxos
+  filterAddress?: string; // Replaces filter_address (camelCase)
+}
+```
+
+## 4. Typed Options Parameters
+
+Replace untyped `options` with explicit types:
+
+```typescript
+interface CreateTokenOptions {
+  address?: string;
+  changeAddress?: string;
+  createMint?: boolean;
+  mintAuthorityAddress?: string;
+  allowExternalMintAuthorityAddress?: boolean;
+  createMelt?: boolean;
+  meltAuthorityAddress?: string;
+  allowExternalMeltAuthorityAddress?: boolean;
+  data?: string;
+  pinCode?: string;
+}
+
+interface SendTransactionOptions {
+  token?: string;
+  changeAddress?: string;
+  pinCode?: string;
+}
+
+interface SendManyOutputsOptions {
+  inputs?: Array<{ txId: string; index: number }>;
+  changeAddress?: string;
+  pinCode?: string;
+}
+```
+
+## 5. Shared Types File Structure
+
+Create `src/shared_types.ts` containing:
+
+```
+src/
+├── shared_types.ts          # New: All shared interface types
+├── new/
+│   └── wallet.ts            # HathorWallet (Fullnode facade)
+│   └── types.ts             # Fullnode-specific types only
+└── wallet/
+    └── wallet.ts            # HathorWalletServiceWallet
+    └── types.ts             # WalletService-specific types only
+```
+
+The `IHathorWallet` interface moves from `src/wallet/types.ts` to `src/shared_types.ts`,
+along with all types used in interface method signatures.
+
+## 6. Methods Remaining Facade-Specific
+
+The following methods will NOT be added to `IHathorWallet` and remain facade-specific:
+
+**Fullnode-only:**
+- `buildTxTemplate()`, `runTxTemplate()` - Transaction template system
+- `getFullHistory()` - Large dataset, different storage models
+- `consolidateUtxos()` - Requires local UTXO management
+- `setGapLimit()`, `getGapLimit()` - Local address derivation control
+- `syncHistory()`, `reloadStorage()` - Local storage operations
+- Multisig methods - Different signing workflows
+
+**WalletService-only:**
+- Service-specific connection management
+- Polling configuration
+
+## 7. Implementation Order
+
+1. Create `shared_types.ts` with unified types
+2. Update `IHathorWallet` interface with new signatures
+3. Modify WalletServiceWallet sync methods to async
+4. Update return types in both facades to match interface
+5. Add missing methods to interface
+6. Update existing tests to use shared test patterns
+7. Create shared test suite for interface compliance
 
 # Drawbacks
 [drawbacks]: #drawbacks
