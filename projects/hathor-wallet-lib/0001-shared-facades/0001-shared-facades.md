@@ -17,9 +17,6 @@ on the lib.
 # Motivation
 [motivation]: #motivation
 
-Why are we doing this? What use cases does it support? What is the expected
-outcome?
-
 At the moment, both facades are similar, but not equal. This causes duplicated
 test suites, requires additional time and attention from the developers and
 ultimately introduces bugs on the Wallet Lib clients when they need to switch
