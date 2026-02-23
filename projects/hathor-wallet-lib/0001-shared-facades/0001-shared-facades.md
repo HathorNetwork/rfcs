@@ -269,13 +269,10 @@ many places as a valid replace for `undefined`. This is
 We should consider keeping a `v2` version with minor and patch updates for
 critical issues, but going forward we would fully migrate to `v3`.
 
-- What parts of the design do you expect to resolve through the RFC process
-  before this gets merged?
-- What parts of the design do you expect to resolve through the implementation
-  of this feature before stabilization?
-- What related issues do you consider out of scope for this RFC that could be
-  addressed in the future independently of the solution that comes out of this
-  RFC?
+### Possible `beta` version
+There is the possibility of adding a beta branch to the Wallet Lib repository, where we could release multiple PRs, publish them to `npm` and only use those in our own clients ( Desktop/Mobile/Headless/Web Wallets ).
+
+This would be a way to allow for our entire flow of reviews and internal tests to complete before exposing the new changes to the external public. It would also avoid accumulating a large code diff to `master` that would require a huge review effort and further postpone the refactoring effort.
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
