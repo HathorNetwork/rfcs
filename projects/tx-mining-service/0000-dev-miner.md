@@ -195,9 +195,7 @@ The existing infrastructure works but continues to impose costs:
 
 ## Unresolved questions
 
-- **Block interval tuning**: The default 1-second block interval works for current tests but may need adjustment as the test suite grows. Should this be configurable per-test-file or remain a global Docker composition setting?
-
-- **Test helper service scope**: The helper service currently handles fund injection and wallet generation. Should it expand to cover other common test operations (e.g., waiting for confirmations, creating tokens), or should those remain in the wallet-lib test helpers?
+None.
 
 ## Future possibilities
 
@@ -206,3 +204,5 @@ The existing infrastructure works but continues to impose costs:
 - **On-demand block production**: Instead of a fixed interval, the dev-miner could expose an API to mine blocks on demand (similar to Bitcoin's `generatetoaddress`). Tests that need confirmations could request exactly the number of blocks they need, making tests faster and more deterministic.
 
 - **Weight-zero mode**: A more aggressive optimization would skip PoW validation entirely in test mode (weight = 0, nonce = 0 always valid). This would eliminate even the trivial nonce iteration for immediate test results. That will require a new design for a new test suite dedicated to mining transactions with actual weights - a kind of coverage that we currently do not have in the Wallet Lib.
+
+- **Block interval tuning**: The default 1-second block interval works for current tests but may improve with dynamic adjustment as the test suite grows. This could be configurable per-test-file, for example, to allow testing complex nano contract scenarios.
