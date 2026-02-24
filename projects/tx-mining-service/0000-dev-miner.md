@@ -172,6 +172,14 @@ We considered keeping `cpuminer` but with a lower difficulty target. The problem
 
 If we consider the change to the production `tx-mining-service` potentially dangerous or compromising, a new dedicated `tx-mining-service-dev` repository could be built, containing exclusively this simplified mining code.
 
+### Disable mining altogether
+
+We could just disable the weight validation completely like we do for unit tests in hathor-core: it's internally possible and just needs some configuration to expose it like with the proposed `--test-mode-block-weight` flag. That way, all the additional services (wallet-service, etc), could just skip the mining step where transactions are sent to tx-mining-service.
+
+This, however, would require adjustments that would skip a critical part of the Wallet Lib: the [`mineTransaction` class](https://github.com/HathorNetwork/hathor-wallet-lib/blob/fe79648449fe9e7045344d538ce03655004f52ac/src/wallet/mineTransaction.ts), which currently needs a very thorough testing for it to receive a complete refactor.
+
+So for now the best implementation is to keep the mining structure as is, just leaner. A more efficient process will be discussed in the _Future Possibilities_ section below.
+
 ### What if we do nothing?
 
 The existing infrastructure works but continues to impose costs:
@@ -197,4 +205,4 @@ The existing infrastructure works but continues to impose costs:
 
 - **On-demand block production**: Instead of a fixed interval, the dev-miner could expose an API to mine blocks on demand (similar to Bitcoin's `generatetoaddress`). Tests that need confirmations could request exactly the number of blocks they need, making tests faster and more deterministic.
 
-- **Weight-zero mode**: A more aggressive optimization would skip PoW validation entirely in test mode (weight = 0, nonce = 0 always valid). This would eliminate even the trivial nonce iteration, though it further diverges from production behavior.
+- **Weight-zero mode**: A more aggressive optimization would skip PoW validation entirely in test mode (weight = 0, nonce = 0 always valid). This would eliminate even the trivial nonce iteration for immediate test results. That will require a new design for a new test suite dedicated to mining transactions with actual weights - a kind of coverage that we currently do not have in the Wallet Lib.
