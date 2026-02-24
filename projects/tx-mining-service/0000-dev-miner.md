@@ -128,7 +128,7 @@ _Note: The contents of this branch are less relevant to this RFC because it only
 **Changes across 12 test files, 1 new helper module, Docker composition update, and setup changes.**
 
 **Docker composition** ([`docker-compose.yml`](https://github.com/HathorNetwork/hathor-wallet-lib/blob/master/__tests__/integration/configuration/docker-compose.yml)):
-- Fullnode image switched from a parameterized image to `hathor-core:test-mode-block-weight` (local build with the new flag)
+- Fullnode image switched from a parameterized image to `hathor-core:test-mode-block-weight` (proposed build with the new flag)
 - Added `--test-mode-block-weight` to the fullnode command
 - Replaced `cpuminer` container with `--dev-miner` flag on `tx-mining-service`
 
@@ -187,8 +187,6 @@ The existing infrastructure works but continues to impose costs:
 
 ## Unresolved questions
 
-- **Image distribution**: Should the locally-built images be published to a registry (even as `dev` or `test` tags) to simplify CI setup? Or should CI pipelines build them from source as part of the test workflow?
-
 - **Block interval tuning**: The default 1-second block interval works for current tests but may need adjustment as the test suite grows. Should this be configurable per-test-file or remain a global Docker composition setting?
 
 - **Test helper service scope**: The helper service currently handles fund injection and wallet generation. Should it expand to cover other common test operations (e.g., waiting for confirmations, creating tokens), or should those remain in the wallet-lib test helpers?
@@ -198,7 +196,5 @@ The existing infrastructure works but continues to impose costs:
 - **Parallel test execution**: With the test helper service managing UTXOs centrally, it becomes feasible to run integration test files in parallel (multiple Jest workers). Each file requests funds independently, and the helper service prevents double-spending.
 
 - **On-demand block production**: Instead of a fixed interval, the dev-miner could expose an API to mine blocks on demand (similar to Bitcoin's `generatetoaddress`). Tests that need confirmations could request exactly the number of blocks they need, making tests faster and more deterministic.
-
-- **Upstream integration**: If these changes prove stable, the `--test-mode-block-weight` flag and dev-miner mode could be merged upstream and published as official images, eliminating the local build requirement.
 
 - **Weight-zero mode**: A more aggressive optimization would skip PoW validation entirely in test mode (weight = 0, nonce = 0 always valid). This would eliminate even the trivial nonce iteration, though it further diverges from production behavior.
