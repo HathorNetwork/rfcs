@@ -1,6 +1,7 @@
 - Feature Name: nano-contracts-support
 - Start Date: 2025-01-02
-- Author: @andreabadesso
+- Update Date: 2025-07-07
+- Author: @andreabadesso @r4mmer
 
 # Summary
 
@@ -12,16 +13,19 @@ The Hathor Network is introducing nano-contracts. To maintain complete transacti
 
 # Guide-level explanation
 
-Currently, the wallet-service syncs with the fullnode through reliable integrations, which sends events in the exact order they occur. The daemon processes these events through a state machine (SyncMachine) that handles different types of events like new transactions, metadata changes, and voided transactions.
+Currently, nano-contract transactions are any transaction with a nano-contract header, the protocol currently only supports nano-contract headers for normal transactions (version 1) and create token transactions (version 2), along with the usual tracking of inputs and outputs the main change that needs to be implemented is tracking the caller's (address caller from the header) relationship with the transaction, especially when they are not directly involved in any token transfer.
 
-For nano-contracts, the main change is tracking the caller's relationship with the transaction, especially when they are not directly involved in token transfers. When a nano-contract transaction is received (identified by its version), we'll:
+The wallet-service syncs with the fullnode through reliable integrations, which sends events in the exact order they occur. The daemon processes these events through a state machine (SyncMachine) that handles different types of events like new transactions, metadata changes, and voided transactions.
+
+When a nano-contract transaction is received (identified by the header), we'll:
 
 1. Process normal inputs/outputs as usual
 2. Check if the caller is involved in inputs/outputs
 3. If not, explicitly add the transaction to their history
-4. Forward any contract-specific API calls to the fullnode
+4. Update the seqnum for the caller's address
+5. Forward any contract-specific API calls to the fullnode
 
-This means that if address is the caller in a contract call that moves tokens from X to Y (e.g. a deposit action), all three addresses will see this transaction in their history:
+This means that if address Z is the caller in a contract call that moves tokens from X to Y (e.g. a deposit action), all three addresses will see this transaction in their history:
 - X and Y through normal UTXO tracking
 - Z through explicit caller tracking
 
@@ -37,53 +41,50 @@ From the user's perspective, they will be able to:
 - See all their contract interactions in their history, whether they moved tokens or just called the contract
 - Create and execute contracts through the wallet-service API
 - Query contract state through proxied fullnode APIs
+### Seqnum tracking
 
+The `seqnum` is a metadata of an address, it is a sequentially increasing number (with each nano contract sent from the address) that starts with 0 and is reset with each block (and round of nano contract executions) that is used to deduplicate nano contracts executions.
+
+The `seqnum` will be cached for each address caller of a nano contract in redis and when a new block arrives the redis cache will be invalidated/cleared so that all addresses are reset to 0.
 # Reference-level explanation
 
 ## Database Changes
 
-No schema changes are required. The existing tables (`address_tx_history` and `wallet_tx_history`) will be used to track contract interactions, but we need to explicitly add entries for callers when they are not involved in inputs/outputs.
-
-Important implementation notes:
-1. The `updateAddressTablesWithTx` function needs to be modified to handle zero balances efficiently:
-   - Keep updating the `address` table for transaction count
-   - Skip `address_balance` updates when all values (balance and authorities) are zero
-   - Always add entries to `address_tx_history`, even for zero balances
-
-2. The `voided` column in history tables applies to callers as well - if a nano-contract transaction is voided, all history entries (including the caller's) must be marked as voided
+The relationship between a nano contract caller and the transaction will be made through the existing `address_tx_history` and `wallet_tx_history` tables, which require no changes but will have to be forced when the caller is not involved in any inputs/outputs.
 
 ## Daemon Changes
 
 ### SyncMachine Updates
 The `handleVertexAccepted` service will be enhanced to handle nano-contract transactions:
 
-1. Detect nano-contract transactions (by version)
-2. Extract the caller information from the transaction metadata
+1. Detect nano-contract transactions
+2. Extract the caller information from the nano header
 3. If the caller is not involved in any inputs or outputs:
-   - Use `updateAddressTablesWithTx` with a zero balance to add the transaction to their history
-   - The function will handle incrementing transaction count and adding history entries
+   - Use `getAddressBalanceMap` to add a zero balance HTR entry to the transaction addresses.
+   - The `updateAddressTablesWithTx` function will handle incrementing transaction count and adding history entries.
 
 Example flow:
 ```typescript
-// In handleVertexAccepted
-if (isNanoContractTx(metadata)) {
-  const { caller } = metadata;
-  const addresses = new Set([
-    ...inputs.map(i => i.address),
-    ...outputs.map(o => o.address)
-  ]);
+// In getAddressBalanceMap
+// ...
+  for (const header of headers) {
+    if (header.id !== '10') {
+      // We currently only handle nano contract headers
+      continue;
+    }
 
-  // If caller is not in inputs or outputs, add to history
-  if (!addresses.has(caller)) {
-    // Create a map with zero balance for the HTR token
-    const zeroBalanceMap = {
-      [caller]: TokenBalanceMap.fromStringMap({
-        '00': { unlocked: 0, locked: 0 }
-      })
-    };
+    const address = header.nc_address;
 
-    await updateAddressTablesWithTx(mysql, txId, timestamp, zeroBalanceMap);
-  }
+    if (addressBalanceMap[address]) {
+      // Already have balance for the nc_address
+      continue;
+    }
+
+    // Create an empty balance HTR entry if nc_address did not already have balance on the tx
+    const emptyHTR = new TokenBalanceMap();
+    const balance = emptyHTR.get(constants.NATIVE_TOKEN_UID)
+    emptyHTR.set(constants.NATIVE_TOKEN_UID, balance);
+	addressBalanceMap[address] = emptyHTR;
 }
 ```
 
@@ -94,7 +95,7 @@ Scenario 1: X (caller) sends to Y
 - Y appears in history (output)
 
 Scenario 2: Z (caller) triggers X to send to Y
-- Z appears in history (zero balance entry via updateAddressTablesWithTx)
+- Z appears in history (zero balance entry via getAddressBalanceMap)
 - X appears in history (input)
 - Y appears in history (output)
 
@@ -102,6 +103,17 @@ Scenario 3: Y (caller) triggers X to send to Y
 - X appears in history (input)
 - Y appears in history (output)
 ```
+
+### Seqnum tracking
+
+The `seqnum` should be easily searched by address and listed (for clearing when a block arrives).
+
+We could make it work with sparse keys with a common prefix but a better alternative is to use a JSON key, where each key will be the address and the value will be the seqnum.
+
+- Clearing the cache can be done with [JSON.CLEAR](https://redis.io/docs/latest/commands/json.clear/)
+- Incrementing the seqnum could be done with either [JSON.NUMINCRBY](https://redis.io/docs/latest/commands/json.numincrby/) or [JSON.GET](https://redis.io/docs/latest/commands/json.get/) + [JSON.SET](https://redis.io/docs/latest/commands/json.set/)
+
+JSON keys can be inspected in many ways, but a good for debugging is [JSON.DEBUG MEMORY](https://redis.io/docs/latest/commands/json.debug-memory/) that returns the size of the key in bytes, so we know how much space it takes.
 
 ## Wallet Service Changes
 
@@ -122,7 +134,6 @@ All nano contract endpoints will be proxied transparently, maintaining the same 
 - Preserve request parameters and body
 - Handle errors appropriately (including 404s)
 - Maintain proper authentication and rate limiting
-
 # Drawbacks
 
 1. Additional storage requirements for tracking caller information
