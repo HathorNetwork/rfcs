@@ -298,3 +298,11 @@ Note that having something written down in the future-possibilities section
 is not a reason to accept the current or a future RFC; such notes should be
 in the section on motivation or rationale in this or subsequent RFCs.
 The section merely provides additional information.
+
+# Annex
+
+## Additional changes
+Taking advantage of the amount of breaking changes that will be implemented in the `v3`, a few other unrelated changes are also going to be pushed with this design.
+
+### SendTransaction.run() parameters
+[Link to the code](https://github.com/HathorNetwork/hathor-wallet-lib/blob/56b81dacff41f1546e1a93a359f7ce1313ace7ef/src/wallet/types.ts#L490-L493). Currently both parameters are optional, but if you want to inform the second, the first must be informed as empty. A change will turn them from named parameters to a single object containing all optional ( see [this comment from PR 1022](https://github.com/HathorNetwork/hathor-wallet-lib/pull/1022#discussion_r2878658323))
