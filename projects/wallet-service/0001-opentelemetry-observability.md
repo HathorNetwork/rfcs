@@ -393,6 +393,29 @@ For production, use a **tail-based sampling** strategy at the collector level:
 
 This keeps storage costs manageable while ensuring we never miss problematic traces.
 
+## Infrastructure changes
+
+Changes required in `ops-tools`:
+
+**1. Deploy Grafana Tempo** — new Flux HelmRelease (same pattern as `kube-prometheus`):
+- `kubernetes/infrastructure/tempo/helm-repo.yml` — Grafana Helm repo
+- `kubernetes/infrastructure/tempo/helm-release.yml` — Tempo chart, S3 backend config
+- `kubernetes/infrastructure/tempo/namespace.yml`
+
+**2. Add Tempo data source to Grafana** — extend the `kube-prometheus` HelmRelease values in `kubernetes/infrastructure/kube-prometheus/helm-release.yml` to include a Tempo data source with `tracesToMetrics` linking to the existing Prometheus.
+
+**3. Add OTel Collector sidecar to daemon** — modify the StatefulSet in `kubernetes/apps/hathor-wallet-service/base/deployment.yml`:
+- Add a second container (`otel/opentelemetry-collector-k8s`) with OTLP receiver on ports 4317/4318
+- Must match existing security context (non-root uid 10001, read-only rootfs)
+- Lightweight resources (~64Mi request, ~128Mi limit)
+- Add a ConfigMap for the collector config (receivers, Span Metrics Connector, exporters to Tempo + Prometheus)
+
+**4. Update network policies** — `kubernetes/apps/hathor-wallet-service/base/network-policies.yml`:
+- Allow egress from the daemon pod to Tempo (port 4317)
+- Allow egress to Prometheus (port 8889 for span metrics scrape)
+
+**5. Add OTel env vars** — add `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` to the daemon environment files (per-overlay in Kustomize).
+
 ## Rollout plan
 
 1. **Infrastructure:** Deploy Grafana Tempo (backed by S3) and configure it as a data source in our existing Grafana. Deploy OTel Collector with Span Metrics Connector and Prometheus exporter.
