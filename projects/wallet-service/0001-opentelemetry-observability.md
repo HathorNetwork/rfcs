@@ -311,6 +311,78 @@ Most metrics come for free from the Span Metrics Connector — it automatically 
 
 These custom metrics are exported via the same OTel Collector and scraped by Prometheus alongside the span-derived metrics.
 
+## Grafana dashboards
+
+### Dashboard 1: API Overview
+
+High-level health of the wallet-service Lambda endpoints.
+
+**Panels:**
+- Request rate (req/s) by endpoint — timeseries
+- Latency heatmap (all endpoints) — shows distribution over time, hot spots = slow requests
+- p50 / p95 / p99 latency by endpoint — timeseries
+- Error rate (%) by endpoint — timeseries
+- Top 10 slowest endpoints — table, sorted by p99
+
+**Data source:** Prometheus (span-derived metrics from Span Metrics Connector)
+
+### Dashboard 2: Database Performance
+
+Visibility into MySQL query performance across both daemon and Lambdas.
+
+**Panels:**
+- Query duration heatmap — all queries, spot outliers instantly
+- p50 / p95 / p99 query duration by `db.statement` — timeseries
+- Slowest queries — table with statement, avg duration, call count
+- Query rate (queries/s) — timeseries
+- Active connections — gauge (from mysql2 pool metrics)
+
+**Data source:** Prometheus (span-derived metrics filtered by `span.name` matching `mysql.*`)
+
+### Dashboard 3: Daemon Sync
+
+Daemon-specific health and performance.
+
+**Panels:**
+- Event processing duration (p50/p95/p99) — timeseries
+- Event processing rate (events/s) — timeseries
+- Sync lag (blocks behind fullnode tip) — gauge
+- Void handling duration — timeseries
+- Reorg handling duration — timeseries
+- WebSocket connection status — state timeline
+
+**Data source:** Prometheus (mix of span-derived and custom daemon metrics)
+
+### Dashboard 4: External Dependencies
+
+Redis, SQS, and other outbound calls.
+
+**Panels:**
+- Redis command duration (p50/p95/p99) — timeseries
+- Redis hit/miss ratio — timeseries (if available from custom spans)
+- SQS publish duration — timeseries
+- SQS message count — timeseries
+- Lambda-to-Lambda invoke duration — timeseries
+- External dependency error rate — timeseries
+
+**Data source:** Prometheus (span-derived metrics filtered by `span.name` matching `redis.*`, `sqs.*`, etc.)
+
+### Alerts
+
+All alerts use Grafana Alerting, evaluated against Prometheus metrics.
+
+| Alert | Condition | Severity |
+|---|---|---|
+| API latency SLO breach | p99 > 5s for any endpoint over 5 min | Critical |
+| High error rate | Error rate > 5% for any endpoint over 5 min | Critical |
+| Slow DB queries | p95 query duration > 2s over 5 min | Warning |
+| Daemon sync lag | Sync lag > 100 blocks for 10 min | Critical |
+| Daemon event processing stuck | p99 processing duration > 60s over 5 min | Warning |
+| Redis latency spike | p95 > 500ms over 5 min | Warning |
+| Lambda cold start regression | Avg cold start > 2s over 15 min | Info |
+
+All alerts link to the relevant dashboard panel for immediate drill-down. Critical alerts route to PagerDuty/Slack; warnings and info route to Slack only.
+
 ## Sampling strategy
 
 For production, use a **tail-based sampling** strategy at the collector level:
