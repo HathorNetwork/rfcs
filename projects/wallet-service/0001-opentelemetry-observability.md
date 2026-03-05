@@ -36,26 +36,9 @@ The expected outcome is a system where any developer can pull up a trace for a s
 
 Most observability comes for free. By loading OTel auto-instrumentation at startup, every outgoing MySQL query, HTTP request, Redis call, and AWS SDK call is automatically traced. Developers do not need to modify existing handler code.
 
-**Daemon** — add a `tracing.ts` file that initializes the OTel SDK before any other imports:
+**Daemon** — add a `tracing.ts` file that initializes the OTel SDK and import it before all other imports in the entrypoint. See Reference-level explanation for the full code.
 
-```typescript
-// packages/daemon/src/tracing.ts
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-
-const sdk = new NodeSDK({
-  serviceName: 'wallet-service-daemon',
-  traceExporter: new OTLPTraceExporter(),
-  instrumentations: [getNodeAutoInstrumentations()],
-});
-
-sdk.start();
-```
-
-Then in the entrypoint: `import './tracing';` before all other imports.
-
-**Wallet-service Lambdas** — use the ADOT (AWS Distro for OpenTelemetry) Lambda layer. This wraps the Lambda handler automatically and exports traces to X-Ray or any OTLP endpoint. Configuration is via environment variables — no code changes to individual handlers.
+**Wallet-service Lambdas** — add the ADOT (AWS Distro for OpenTelemetry) Lambda layer. It wraps every handler automatically via environment variables — no code changes to individual functions.
 
 ### Adding custom spans (when needed)
 
@@ -240,23 +223,9 @@ This wraps every Lambda handler automatically. No code changes to individual fun
 
 **Option B — Manual SDK init (if ADOT layer overhead is unacceptable):**
 
-Create a Middy middleware that initializes the SDK per cold start:
+Initialize the OTel SDK on cold start and add a Middy middleware to set span attributes (`lambda.function`, `http.route`) per invocation.
 
-```typescript
-// packages/wallet-service/src/middlewares/tracing.ts
-const tracingMiddleware = () => ({
-  before: async (request) => {
-    // SDK already initialized on cold start; just set span attributes
-    const span = trace.getActiveSpan();
-    if (span) {
-      span.setAttribute('lambda.function', request.context.functionName);
-      span.setAttribute('http.route', request.event.path);
-    }
-  },
-});
-```
-
-**Cold start overhead:** ADOT layer adds 200-800ms to cold starts. For our use case this is acceptable since most endpoints already have cold starts in that range, and warm invocations add <10ms overhead.
+**Cold start overhead:** ADOT layer adds 200-800ms to cold starts. Warm invocations add <10ms.
 
 ## Collector deployment
 
@@ -310,6 +279,22 @@ Most metrics come for free from the Span Metrics Connector — it automatically 
 - `daemon.sync.lag` — gauge showing how far behind the daemon is from the fullnode tip
 
 These custom metrics are exported via the same OTel Collector and scraped by Prometheus alongside the span-derived metrics.
+
+## Log correlation
+
+Inject trace IDs into existing Winston logs so that log lines can be linked to their parent trace in Grafana. OTel provides this via `@opentelemetry/instrumentation-winston`, which automatically adds `trace_id` and `span_id` fields to every log entry. No changes to existing `logger.info(...)` calls — the instrumentation patches Winston at startup.
+
+In Grafana, this enables "Logs for this trace" — click a trace in Tempo and see the corresponding log lines from Loki or CloudWatch.
+
+## Local development
+
+Developers can view traces locally without deploying infrastructure by using the **console exporter** (prints spans to stdout) or running a local **Jaeger all-in-one** container:
+
+```bash
+docker run -d --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/all-in-one:latest
+```
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` and traces appear at `http://localhost:16686`. This makes it easy to debug span hierarchy and timing during development.
 
 ## Grafana dashboards
 
@@ -463,13 +448,10 @@ We continue operating blind. Incident response remains slow (hours of log-greppi
 # Prior art
 [prior-art]: #prior-art
 
-- **AWS Lambda + OTel:** AWS officially supports OTel via ADOT Lambda layers. AWS documentation recommends OTel over the X-Ray SDK for new projects. Many production Lambda-based services use this pattern successfully.
-
-- **Grafana Tempo + OTel:** Grafana Labs designed Tempo specifically as an OTel-native trace backend. It uses object storage (S3) for cost-effective trace storage and integrates with Grafana dashboards for visualization. This is a proven pattern in the Kubernetes ecosystem.
-
-- **Node.js OTel in production:** Companies like Stripe, GitHub, and Shopify use OTel for Node.js services in production. The JS SDK 2.0 (released March 2025) stabilized the tracing API and improved performance significantly.
-
-- **OpenTelemetry Collector as sidecar:** The collector-as-sidecar pattern is standard in Kubernetes. It decouples the application from the backend, allows local buffering, and enables tail-based sampling without application changes.
+- **AWS ADOT Lambda layers** are officially supported and recommended over the X-Ray SDK for new projects.
+- **Grafana Tempo** was designed as an OTel-native trace backend with S3 storage. Widely adopted in the Kubernetes ecosystem.
+- **Node.js OTel in production** is used by Stripe, GitHub, and Shopify. The JS SDK 2.0 (March 2025) stabilized the tracing API.
+- **OTel Collector as sidecar** is the standard Kubernetes pattern for decoupling applications from trace backends.
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
@@ -485,14 +467,7 @@ We continue operating blind. Incident response remains slow (hours of log-greppi
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-- **Continuous profiling.** OTel is adding profiling signals. Once stable, we could attach CPU/memory profiles to specific traces to debug performance issues at the code level.
-
-- **SLO-based alerting.** With latency histograms, we can define SLOs (e.g., "99% of /wallet/balance requests complete in <500ms") and alert on burn rate rather than raw thresholds.
-
-- **Trace-driven testing.** Record production traces and replay them in staging to validate that code changes do not introduce regressions.
-
-- **Business metrics from spans.** Extract custom metrics from trace data: transactions processed per second, average reorg depth, void handling throughput. This avoids duplicating metric collection in application code.
-
-- **Common package instrumentation.** Create a shared `@wallet-service/tracing` package in the monorepo that provides pre-configured OTel setup, common span attributes, and helper functions. This ensures consistent instrumentation across daemon and wallet-service.
-
-- **Extend to event-downloader.** The new `event-downloader` package could also benefit from tracing, especially for understanding fullnode event processing latencies.
+- **SLO-based alerting.** Define SLOs (e.g., "99% of /wallet/balance requests < 500ms") and alert on burn rate rather than raw thresholds.
+- **Business metrics from spans.** Extract custom metrics from trace data (transactions/s, reorg depth, void throughput) without duplicating collection in application code.
+- **Shared tracing package.** Create `@wallet-service/tracing` in the monorepo with pre-configured OTel setup and common span attributes for consistent instrumentation.
+- **Extend to event-downloader.** The new `event-downloader` package could also benefit from tracing.
