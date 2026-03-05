@@ -343,14 +343,13 @@ Daemon-specific health and performance.
 Redis, SQS, and other outbound calls.
 
 **Panels:**
-- Redis command duration (p50/p95/p99) — timeseries
-- Redis hit/miss ratio — timeseries (if available from custom spans)
 - SQS publish duration — timeseries
 - SQS message count — timeseries
 - Lambda-to-Lambda invoke duration — timeseries
+- Redis command duration (WebSocket session ops) — timeseries
 - External dependency error rate — timeseries
 
-**Data source:** Prometheus (span-derived metrics filtered by `span.name` matching `redis.*`, `sqs.*`, etc.)
+**Data source:** Prometheus (span-derived metrics filtered by `span.name` matching `sqs.*`, `redis.*`, etc.)
 
 ### Alerts
 
@@ -363,7 +362,6 @@ All alerts use Grafana Alerting, evaluated against Prometheus metrics.
 | Slow DB queries | p95 query duration > 2s over 5 min | Warning |
 | Daemon sync lag | Sync lag > 100 blocks for 10 min | Critical |
 | Daemon event processing stuck | p99 processing duration > 60s over 5 min | Warning |
-| Redis latency spike | p95 > 500ms over 5 min | Warning |
 | Lambda cold start regression | Avg cold start > 2s over 15 min | Info |
 
 All alerts link to the relevant dashboard panel for immediate drill-down. Critical alerts route to PagerDuty/Slack; warnings and info route to Slack only.
