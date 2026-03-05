@@ -101,35 +101,47 @@ Developers query traces in the chosen backend (see Reference-level explanation).
 
 ## Architecture overview
 
-```
-┌─────────────────────────┐     ┌──────────────────────────────┐
-│  Daemon (K8s Pod)       │     │  Wallet-Service (Lambda)     │
-│                         │     │                              │
-│  tracing.ts (SDK init)  │     │  ADOT Lambda Layer           │
-│       │                 │     │       │                      │
-│  auto-instrumentation:  │     │  auto-instrumentation:       │
-│  - mysql2               │     │  - mysql2                    │
-│  - ws (WebSocket)       │     │  - aws-sdk (SQS, Lambda)     │
-│  - http                 │     │  - http                      │
-│       │                 │     │  - ioredis                   │
-│  OTLPExporter ──────────┼──┐  │       │                      │
-│                         │  │  │  OTLPExporter ───────────────┼──┐
-└─────────────────────────┘  │  └──────────────────────────────┘  │
-                             │                                     │
-                             ▼                                     ▼
-                    ┌────────────────────────────┐
-                    │  OTel Collector            │
-                    │                            │
-                    │  ┌─ Span Metrics Connector  │
-                    │  │  (generates histograms   │
-                    │  │   & call counts)         │
-                    │  │                          │
-                    │  ├──→ Prometheus (metrics)  │──→ Grafana (dashboards)
-                    │  │     (existing)           │        │
-                    │  │                          │        │ click spike
-                    │  └──→ Grafana Tempo (traces)│──→─────┘ → see traces
-                    │        (S3 backend)         │
-                    └────────────────────────────┘
+```mermaid
+graph TD
+    subgraph sources ["Application Layer"]
+        subgraph daemon ["Daemon (K8s Pod)"]
+            D_SDK["tracing.ts (SDK init)"]
+            D_AUTO["Auto-instrumentation:<br/>mysql2, ws, http"]
+            D_SDK --> D_AUTO
+        end
+
+        subgraph lambdas ["Wallet-Service (Lambda)"]
+            L_ADOT["ADOT Lambda Layer"]
+            L_AUTO["Auto-instrumentation:<br/>mysql2, aws-sdk, http, ioredis"]
+            L_ADOT --> L_AUTO
+        end
+    end
+
+    subgraph collector ["OTel Collector"]
+        OTLP_IN["OTLP Receiver"]
+        SMC["Span Metrics Connector<br/>(generates histograms & call counts)"]
+        OTLP_IN --> SMC
+    end
+
+    subgraph backends ["Backend Layer"]
+        TEMPO["Grafana Tempo<br/>(S3 storage)"]
+        PROM["Prometheus<br/>(existing)"]
+    end
+
+    subgraph viz ["Visualization"]
+        GRAFANA["Grafana<br/>(existing)"]
+    end
+
+    D_AUTO -->|OTLP| OTLP_IN
+    L_AUTO -->|OTLP| OTLP_IN
+
+    SMC -->|traces| TEMPO
+    SMC -->|span metrics| PROM
+
+    TEMPO -->|Tempo data source| GRAFANA
+    PROM -->|Prometheus data source| GRAFANA
+
+    GRAFANA -.->|"click latency spike<br/>→ jump to traces"| GRAFANA
 ```
 
 Since we already run Grafana and Prometheus, the only new infrastructure component is **Grafana Tempo**. Tempo stores traces in S3 (cost-effective, no dedicated database) and integrates natively with Grafana as a data source. The OTel Collector's **Span Metrics Connector** automatically generates latency histograms and call count metrics from traces, which are scraped by our existing Prometheus. This gives us:
