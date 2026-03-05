@@ -323,12 +323,12 @@ This keeps storage costs manageable while ensuring we never miss problematic tra
 
 ## Rollout plan
 
-1. **Phase 1 — Infrastructure (1-2 days):** Deploy Grafana Tempo (backed by S3) and configure it as a data source in our existing Grafana. Deploy OTel Collector with Span Metrics Connector and Prometheus exporter. Verify Prometheus scrapes span-derived metrics.
-2. **Phase 2 — Daemon tracing (2-3 days):** Add `tracing.ts`, deploy with OTLP exporter pointing to the collector. Validate spans appear in Tempo via Grafana. No code changes to handlers.
-3. **Phase 3 — Lambda tracing (2-3 days):** Add ADOT layer to staging Lambdas. Validate traces for API calls. Measure cold start impact.
-4. **Phase 4 — Grafana dashboards (2-3 days):** Build dashboards using span-derived metrics from Prometheus: p50/p95/p99 latencies per endpoint, DB query duration distributions, error rates. Configure trace-to-metrics links so clicking a spike opens the relevant traces in Tempo.
-5. **Phase 5 — Custom spans (1 week):** Add manual spans to critical paths: `handleVoidedTx`, `handleVertexAccepted`, balance validation, reorg handling.
-6. **Phase 6 — Production rollout:** Enable in production with tail-based sampling. Set up alerting on SLO breaches. Monitor overhead.
+1. **Infrastructure:** Deploy Grafana Tempo (backed by S3) and configure it as a data source in our existing Grafana. Deploy OTel Collector with Span Metrics Connector and Prometheus exporter.
+2. **Daemon tracing:** Add `tracing.ts`, deploy with OTLP exporter pointing to the collector. Validate spans appear in Tempo via Grafana.
+3. **Lambda tracing:** Add ADOT layer to staging Lambdas. Validate traces for API calls. Measure cold start impact.
+4. **Grafana dashboards:** Build dashboards using span-derived metrics from Prometheus: p50/p95/p99 latencies per endpoint, DB query duration distributions, error rates. Configure trace-to-metrics links.
+5. **Custom spans:** Add manual spans to critical paths: `handleVoidedTx`, `handleVertexAccepted`, balance validation, reorg handling.
+6. **Production rollout:** Enable in production with tail-based sampling. Set up alerting on SLO breaches. Monitor overhead.
 
 Each phase can be rolled back independently by removing the layer/import.
 
