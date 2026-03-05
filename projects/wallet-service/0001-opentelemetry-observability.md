@@ -95,7 +95,7 @@ graph TD
 
         subgraph lambdas ["Wallet-Service (Lambda)"]
             L_ADOT["ADOT Lambda Layer"]
-            L_AUTO["Auto-instrumentation:<br/>mysql2, aws-sdk, http, ioredis"]
+            L_AUTO["Auto-instrumentation:<br/>mysql, @aws-sdk/*, http, redis"]
             L_ADOT --> L_AUTO
         end
     end
@@ -142,7 +142,7 @@ All packages are from the `@opentelemetry` namespace (JS SDK 2.0, stable tracing
 - `@opentelemetry/sdk-node` — SDK initialization, span processors, resource detection
 
 **Auto-instrumentation:**
-- `@opentelemetry/auto-instrumentations-node` — meta-package that includes instrumentations for mysql2, http, ioredis, aws-sdk, and more
+- `@opentelemetry/auto-instrumentations-node` — meta-package that includes instrumentations for mysql2, mysql, http, redis, `@aws-sdk/*` (v3), and more
 
 **Exporters:**
 - `@opentelemetry/exporter-trace-otlp-http` — sends spans to the OTel Collector (which forwards to Tempo)
@@ -151,6 +151,8 @@ All packages are from the `@opentelemetry` namespace (JS SDK 2.0, stable tracing
 **Lambda-specific:**
 - AWS ADOT Lambda layer (managed by AWS, no npm dependency needed)
 - `disableAwsContextPropagation: true` must be set unless using X-Ray as the backend
+
+**Note on DB drivers:** The daemon uses `mysql2` directly. The wallet-service uses `serverless-mysql` (wraps the `mysql` driver). OTel auto-instrumentation covers both `mysql` and `mysql2`.
 
 ## Daemon instrumentation
 
@@ -426,7 +428,7 @@ Each phase can be rolled back independently by removing the layer/import.
 
 - **CNCF graduated** (same level as Kubernetes, Prometheus) — not going away.
 - **Vendor-neutral** — we can switch backends (X-Ray → Tempo → Jaeger) without changing application code.
-- **Auto-instrumentation** — mysql2, ioredis, aws-sdk, http are all covered out of the box. This means 80% of the value (DB query durations, HTTP call latencies) requires zero code changes.
+- **Auto-instrumentation** — mysql2, mysql, redis, `@aws-sdk/*` (v3), http are all covered out of the box. This means 80% of the value (DB query durations, HTTP call latencies) requires zero code changes.
 - **Industry standard** — OTel has become the de facto standard for observability. AWS, GCP, Azure, Datadog, Grafana, and others all support it natively.
 
 **Alternatives considered:**
@@ -458,7 +460,7 @@ We continue operating blind. Incident response remains slow (hours of log-greppi
 
 - **Sampling rates for production.** 10% baseline sampling is a starting point. The right rate depends on our trace volume and storage budget, which we will learn after the staging rollout.
 
-- **Trace context propagation between daemon and Lambdas.** The daemon calls Lambdas via AWS SDK (SQS, direct invoke). OTel auto-instruments aws-sdk, but we need to verify that trace context propagates correctly through SQS messages so that daemon traces connect to Lambda traces.
+- **Trace context propagation between daemon and Lambdas.** The daemon calls Lambdas via AWS SDK (SQS, direct invoke). OTel auto-instruments `@aws-sdk/*` (v3), but we need to verify that trace context propagates correctly through SQS messages so that daemon traces connect to Lambda traces.
 
 - **Should we replace Winston with OTel Logs?** OTel Logs in the JS SDK are still experimental. For now, keep Winston and correlate logs with traces via trace IDs injected into log lines. Revisit when OTel Logs stabilize.
 
