@@ -431,6 +431,9 @@ None
   pool depth, funding latency, and refill frequency to support CI
   performance monitoring.
 
-- **Miner wallet management**: some tests also require interacting with 
+- **Miner wallet management**: some tests also require interacting with
   the miner rewards, and access its wallet directly. This service could
   provide the same benefits to multiple tests that need to access this wallet.
+
+- **On-Chain Blueprints wallet management**: same idea from the above, but for
+  managing the OCB Wallet, with blueprint-specific methods and endpoints.
