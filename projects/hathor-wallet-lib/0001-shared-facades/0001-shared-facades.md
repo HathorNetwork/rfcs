@@ -252,7 +252,7 @@ The main proposal of this RFC is to bring this interface up-to-date with the cur
 
 An effort could be made to break the facade files into multiple pieces with common group responsibilities that could be shared between the two facades. This would make it easier for LLMs to interact with those files, instead of having two facades with over 3k lines that do not fit their context windows.
 
-We could also re-think of the facades themselves to make managing the connections better, taking advantage of the breaking changes being implemented on the `beta` branch to improve on more parts of the code that would cause those breaks.
+We could also re-think the facades themselves to make managing the connections better, taking advantage of the breaking changes being implemented on the `beta` branch to improve on more parts of the code that would cause those breaks.
 
 # Annex
 
