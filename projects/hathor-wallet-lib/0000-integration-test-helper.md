@@ -95,9 +95,9 @@ transaction ID. No two tests ever attempt to receive funds from the same UTXO.
 1. Start infrastructure:  fullnode + tx-mining-service + test-helper
 2. Wait for /status to return { ready: true }
 3. For each parallel test:
-   a. GET  /simpleWallet         → { words, addresses }
+   a. GET  /simpleWallet  (X-Test-Name: "test-name")  → { words, addresses }
    b. Start wallet with pre-calculated addresses (no derivation)
-   c. POST /fund { address, amount }  → { txId }
+   c. POST /fund { address, amount }  (X-Test-Name: "test-name")  → { txId }
    d. Wait for wallet to sync the funding tx
    e. Run test assertions
 ```
@@ -113,6 +113,9 @@ UTXO.
   error from a race condition with another test.
 - **The service is stateless from the test's perspective** — no
   registration, no sessions, no cleanup needed.
+- **Send your test name** — include the `X-Test-Name` header on all
+  requests. The service logs it alongside every operation, making it
+  easy to search logs by test name when debugging failures.
 
 # Reference-level explanation
 
@@ -312,6 +315,40 @@ All error responses follow a consistent JSON structure:
 Retryable errors indicate transient conditions. Test harnesses can implement
 automatic retry with backoff for these cases, while non-retryable errors
 signal issues that require intervention, as in the case of invalid parameters.
+
+## Request correlation via test name
+
+All endpoints accept an optional `X-Test-Name` HTTP header. When
+present, the service includes the test name in every log line produced
+while handling that request, including any background operations the
+request triggers (UTXO rescans, pool refills).
+
+```
+# Request
+GET /simpleWallet
+X-Test-Name: token-transfer-parallel-3
+
+# Service logs
+[token-transfer-parallel-3] Serving simple wallet from cache (remaining: 7)
+
+# Request
+POST /fund
+X-Test-Name: token-transfer-parallel-3
+
+# Service logs
+[token-transfer-parallel-3] Reserved testUtxo idx=12 (amount=1000)
+[token-transfer-parallel-3] Funding tx abc123 broadcast successfully
+[token-transfer-parallel-3] Pool below threshold, triggering refill
+```
+
+When the header is omitted, logs display `[unknown]` as the test
+identifier. The header is optional to maintain backward compatibility
+and to keep the `/status` healthcheck simple.
+
+This enables searching all service-side activity for a specific test
+by filtering on its name, which is especially valuable when debugging
+failures in parallel test runs where log lines from dozens of tests
+are interleaved.
 
 ## Stale UTXO recovery
 
