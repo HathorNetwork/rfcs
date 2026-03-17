@@ -229,14 +229,14 @@ UTXOs are categorized by amount relative to the configured split amount:
 For amounts ≤ `UTXO_SPLIT_AMOUNT`:
 1. Dequeue from `testUtxos` (FIFO)
 2. Fallback: find first sufficient UTXO in `leftoverUtxos`
-3. If both empty: return HTTP 409
+3. If both empty: return `POOL_EXHAUSTED` (HTTP 409, retryable)
 
 For amounts > `UTXO_SPLIT_AMOUNT`:
 1. Claim `largeUtxo` if sufficient
 2. Otherwise: queue the request with a timeout
    (`FUND_TIMEOUT_MS`, default 30s)
 3. Request resolves when a large UTXO becomes available (e.g., after
-   a refill), or times out with HTTP 409
+   a refill), or times out with `FUND_TIMEOUT` (HTTP 409, retryable)
 
 ### Auto-refill
 
@@ -279,6 +279,39 @@ On startup (when `GENESIS_SEED_WORDS` is configured):
 The wallet overrides wallet-lib's hardcoded `TX_WEIGHT_CONSTANTS`
 when `TX_MIN_WEIGHT` is set, producing minimal-weight transactions
 suitable for private testnets running with `--test-mode-tx-weight`.
+
+## Error response schema
+
+All error responses follow a consistent JSON structure:
+
+```json
+{
+  "error": "POOL_EXHAUSTED",
+  "message": "No UTXOs available for the requested amount",
+  "retryable": true
+}
+```
+
+| Field       | Type    | Description                                        |
+|-------------|---------|----------------------------------------------------|
+| `error`     | string  | Machine-readable error code (see table below)      |
+| `message`   | string  | Human-readable description of the failure          |
+| `retryable` | boolean | Whether the client should retry the request        |
+
+### Error codes
+
+| Code                | HTTP | Retryable | When                                              |
+|---------------------|------|-----------|---------------------------------------------------|
+| `POOL_EXHAUSTED`    | 409  | true      | No test or leftover UTXOs available               |
+| `SPLIT_IN_PROGRESS` | 409  | true      | UTXO split is running; pool will refill shortly   |
+| `UTXO_STALE`        | 409  | true      | Reserved UTXO was already spent; rescan triggered |
+| `FUND_TIMEOUT`      | 409  | true      | Large UTXO request timed out waiting for a refill |
+| `INVALID_REQUEST`   | 400  | false     | Missing or invalid parameters                     |
+| `SERVICE_NOT_READY` | 503  | true      | Genesis wallet not yet initialized                |
+
+Retryable errors indicate transient conditions. Test harnesses can implement
+automatic retry with backoff for these cases, while non-retryable errors
+signal issues that require intervention, as in the case of invalid parameters.
 
 ## Stale UTXO recovery
 
