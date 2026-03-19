@@ -100,10 +100,16 @@ graph TD
         end
     end
 
-    subgraph collector ["OTel Collector"]
+    subgraph collector ["OTel Collector (K8s sidecar)"]
         OTLP_IN["OTLP Receiver"]
         SMC["Span Metrics Connector<br/>(generates histograms & call counts)"]
         OTLP_IN --> SMC
+    end
+
+    subgraph lambda_collector ["ADOT Embedded Collector (Lambda)"]
+        L_OTLP["OTLP Receiver"]
+        L_SMC["Span Metrics Connector"]
+        L_OTLP --> L_SMC
     end
 
     subgraph backends ["Backend Layer"]
@@ -116,10 +122,11 @@ graph TD
     end
 
     D_AUTO -->|OTLP| OTLP_IN
-    L_AUTO -->|OTLP| OTLP_IN
+    L_AUTO -->|OTLP| L_OTLP
 
     SMC -->|traces| TEMPO
     SMC -->|span metrics| PROM
+    L_SMC -->|traces| TEMPO
 
     TEMPO -->|Tempo data source| GRAFANA
     PROM -->|Prometheus data source| GRAFANA
@@ -127,7 +134,7 @@ graph TD
     GRAFANA -.->|"click latency spike<br/>→ jump to traces"| GRAFANA
 ```
 
-Since we already run Grafana and Prometheus, the only new infrastructure component is **Grafana Tempo**. Tempo stores traces in S3 (cost-effective, no dedicated database) and integrates natively with Grafana as a data source. The OTel Collector's **Span Metrics Connector** automatically generates latency histograms and call count metrics from traces, which are scraped by our existing Prometheus. This gives us:
+Since we already run Grafana and Prometheus, the only new infrastructure component is **Grafana Tempo**. Tempo stores traces in S3 (cost-effective, no dedicated database) and integrates natively with Grafana as a data source. **Tempo does not need to be exposed to the internet** — both the Lambdas and Kubernetes workloads live in the same VPC, so Tempo is exposed only internally (same pattern as Grafana and Prometheus). The OTel Collector's **Span Metrics Connector** automatically generates latency histograms and call count metrics from traces, which are scraped by our existing Prometheus. This gives us:
 
 - **Metrics** (Prometheus → Grafana): aggregate p50/p95/p99 latencies, error rates, throughput — generated automatically from traces.
 - **Traces** (Tempo → Grafana): per-request drill-down with full span breakdown.
@@ -300,6 +307,8 @@ Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` and traces appear at `ht
 
 ## Grafana dashboards
 
+There may be pre-built community dashboards for standard OTel metrics that we can use as a starting point (e.g., from the Grafana dashboard marketplace). We should evaluate those before building from scratch.
+
 ### Dashboard 1: API Overview
 
 High-level health of the wallet-service Lambda endpoints.
@@ -355,18 +364,20 @@ Redis, SQS, and other outbound calls.
 
 ### Alerts
 
-All alerts use Grafana Alerting, evaluated against Prometheus metrics.
+All alerts are defined as Alertmanager rules (following the existing pattern in `ops-tools/kubernetes/infrastructure/kube-prometheus/alerts`), evaluated against Prometheus metrics. This integrates with our existing on-call setup.
+
+Severity levels follow the [on-call severity guide](https://github.com/HathorNetwork/ops-tools/blob/master/docs/on-call/guide.md#alert-severitypriority):
 
 | Alert | Condition | Severity |
 |---|---|---|
-| API latency SLO breach | p99 > 5s for any endpoint over 5 min | Critical |
-| High error rate | Error rate > 5% for any endpoint over 5 min | Critical |
-| Slow DB queries | p95 query duration > 2s over 5 min | Warning |
-| Daemon sync lag | Sync lag > 100 blocks for 10 min | Critical |
-| Daemon event processing stuck | p99 processing duration > 60s over 5 min | Warning |
-| Lambda cold start regression | Avg cold start > 2s over 15 min | Info |
+| API latency SLO breach | p99 > 5s for any endpoint over 5 min | Medium |
+| High error rate | Error rate > 5% for any endpoint over 5 min | Medium |
+| Slow DB queries | p95 query duration > 2s over 5 min | Low |
+| Daemon sync lag | Sync lag > 100 blocks for 10 min | Major |
+| Daemon event processing stuck | p99 processing duration > 60s over 5 min | Low |
+| Lambda cold start regression | Avg cold start > 2s over 15 min | Low |
 
-All alerts link to the relevant dashboard panel for immediate drill-down. Critical alerts route to PagerDuty/Slack; warnings and info route to Slack only.
+All alerts link to the relevant dashboard panel for immediate drill-down. Alert routing (Slack, on-call pages) is handled by the existing Alertmanager configuration.
 
 ## Sampling strategy
 
@@ -376,11 +387,13 @@ For production, use a **tail-based sampling** strategy at the collector level:
 - Sample 10% of successful, fast traces.
 - Always keep traces from critical paths (void handling, reorgs).
 
-This keeps storage costs manageable while ensuring we never miss problematic traces.
+This keeps storage costs manageable while ensuring we never miss problematic traces. Trace retention is configured via Tempo's `compactor.block_retention` setting — **14 days** (the default) should be sufficient since traces are primarily used for debugging recent issues. We can adjust if needed.
 
 ## Infrastructure changes
 
 Changes required in `ops-tools`:
+
+**0. Create S3 bucket and IAM permissions** — create a new S3 bucket for Tempo trace storage. The OTel Collector sidecar inherits the daemon pod's IAM role via Pod Workload Identity, so we need to add S3 permissions (PutObject, GetObject, ListBucket, DeleteObject) for the new bucket to the existing role definition at `terraform/AWS/kubernetes_iam_roles/hathor_wallet_service.tf`.
 
 **1. Deploy Grafana Tempo** — new Flux HelmRelease (same pattern as `kube-prometheus`):
 - `kubernetes/infrastructure/tempo/helm-repo.yml` — Grafana Helm repo
