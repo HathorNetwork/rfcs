@@ -14,6 +14,8 @@ This document describes the design for adding [x402](https://www.x402.org/) paym
 
 x402 is an open protocol (by the x402 Foundation, co-founded by Coinbase and Cloudflare) that repurposes the HTTP 402 "Payment Required" status code to enable instant, programmatic payments over HTTP. It currently supports Base, Polygon, and Solana. This design adds Hathor as a supported network.
 
+A proof-of-concept implementation is available at [hathornetwork/x402-poc](https://github.com/hathornetwork/x402-poc).
+
 ### 1.1 Design Philosophy
 
 **Everything maps to existing Hathor infrastructure.** No generic components — every x402 role is fulfilled by a specific Hathor service:
