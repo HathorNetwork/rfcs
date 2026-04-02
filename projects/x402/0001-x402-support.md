@@ -441,7 +441,7 @@ sequenceDiagram
 
     C->>S: GET /resource + PAYMENT-SIGNATURE {ncId}
 
-    S->>F: POST /x402/verify {ncId, amount, seller, tokenUid}
+    S->>F: POST /x402/verify {ncId, amount, seller, asset}
     F->>H: GET /nano_contract/state?id={ncId}
     H-->>F: {phase: LOCKED, amount: 100, seller: Wxxxx}
     F-->>S: {valid: true}
@@ -491,18 +491,35 @@ For repeat clients, the flow can be optimized: pre-funded escrows, payment chann
 
 ### 5.1 PAYMENT-REQUIRED Header (Server -> Client on 402)
 
+A server can accept **multiple tokens** by including multiple entries in the `accepts` array. The client picks whichever it can pay with:
+
 ```json
 {
   "accepts": [
     {
       "scheme": "hathor-escrow",
       "network": "hathor:mainnet",
-      "maxAmountRequired": "100",
+      "asset": "00",
+      "amount": "100",
       "resource": "https://api.example.com/data",
       "description": "Pay 1.00 HTR to access weather data",
       "mimeType": "application/json",
       "payTo": "WXf4xPLBn7HUC7F1U2vY4J5zwpsDS12bT6",
-      "tokenUid": "00",
+      "maxTimeoutSeconds": 300,
+      "extra": {
+        "facilitatorUrl": "https://facilitator.hathor.network",
+        "facilitatorAddress": "WYyy...",
+        "blueprintId": "0000abc123...",
+        "deadlineSeconds": 300
+      }
+    },
+    {
+      "scheme": "hathor-escrow",
+      "network": "hathor:mainnet",
+      "asset": "0000abc123def...",
+      "amount": "1000",
+      "description": "Or pay 10.00 hUSDC",
+      "payTo": "WXf4xPLBn7HUC7F1U2vY4J5zwpsDS12bT6",
       "maxTimeoutSeconds": 300,
       "extra": {
         "facilitatorUrl": "https://facilitator.hathor.network",
@@ -520,13 +537,15 @@ For repeat clients, the flow can be optimized: pre-funded escrows, payment chann
 |---|---|---|
 | `scheme` | string | `"hathor-escrow"` — Hathor's native x402 scheme |
 | `network` | string | `"hathor:mainnet"` or `"hathor:testnet"` |
-| `maxAmountRequired` | string | Amount in smallest unit (1 HTR = 100) |
+| `asset` | string | Hathor token UID — `"00"` for HTR, or custom token hash |
+| `amount` | string | Amount in smallest unit (1 HTR = 100) |
 | `payTo` | string | Seller's Hathor address (base58) |
-| `tokenUid` | string | `"00"` for HTR, or custom token UID |
 | `extra.facilitatorUrl` | string | URL of the facilitator service |
 | `extra.facilitatorAddress` | string | Facilitator's Hathor address (for escrow) |
 | `extra.blueprintId` | string | X402Escrow blueprint ID on-chain |
 | `extra.deadlineSeconds` | number | How long the escrow is valid |
+
+> **Note on `asset` field:** The x402 spec uses `asset` (not `tokenUid`). For Hathor, the asset value is the token UID — `"00"` for HTR or the hex hash of a custom token. The escrow blueprint is token-agnostic and works with any Hathor token.
 
 ### 5.2 PAYMENT-SIGNATURE Header (Client -> Server on retry)
 
@@ -572,7 +591,7 @@ POST /x402/verify
     "network": "hathor:mainnet",
     "maxAmountRequired": "100",
     "payTo": "WXf4xPLBn7HUC7F1U2vY4J5zwpsDS12bT6",
-    "tokenUid": "00"
+    "asset": "00"
   }
 }
 ```
@@ -589,7 +608,7 @@ POST /x402/verify
    - phase == "LOCKED"
    - amount >= maxAmountRequired
    - seller == payTo
-   - token_uid == tokenUid
+   - token_uid == asset
    - facilitator == self (facilitatorAddress)
    - deadline > now
 
@@ -825,7 +844,7 @@ const HEADLESS_URL = 'http://localhost:8000';
 const WALLET_ID = 'my-agent-wallet';
 
 async function payForResource(paymentRequired) {
-  const { amount, tokenUid, payTo, extra } = paymentRequired;
+  const { amount, asset, payTo, extra } = paymentRequired;
   const { facilitatorAddress, blueprintId, deadlineSeconds } = extra;
 
   const deadline = Math.floor(Date.now() / 1000) + deadlineSeconds;
@@ -835,8 +854,8 @@ async function payForResource(paymentRequired) {
     blueprint_id: blueprintId,
     address: clientAddress,
     data: {
-      args: [payTo, facilitatorAddress, tokenUid, deadline, resourceUrl, requestHash],
-      actions: [{ type: 'deposit', token: tokenUid, amount: parseInt(amount) }],
+      args: [payTo, facilitatorAddress, asset, deadline, resourceUrl, requestHash],
+      actions: [{ type: 'deposit', token: asset, amount: parseInt(amount) }],
     },
   }, {
     headers: { 'x-wallet-id': WALLET_ID },
@@ -886,12 +905,12 @@ app.use(hathorPaymentMiddleware({
   routes: {
     'GET /weather': {
       amount: '100',         // 1.00 HTR
-      tokenUid: '00',
+      asset: '00',       // HTR (or any custom token UID)
       description: 'Real-time weather data',
     },
     'GET /premium/*': {
       amount: '500',         // 5.00 HTR
-      tokenUid: '00',
+      asset: '00',       // HTR (or any custom token UID)
       description: 'Premium content',
     },
   },
@@ -1007,7 +1026,7 @@ HTR uses 2 decimal places (1 HTR = 100 smallest units). All amounts in the proto
 
 ### 11.6 Multi-Token Support
 
-The escrow blueprint is token-agnostic -- it works with any Hathor token (HTR or custom). The `tokenUid` field specifies which token to accept. This enables stablecoin payments out of the box once a stablecoin exists on Hathor.
+The escrow blueprint is **token-agnostic** — it works with any Hathor token (HTR or custom). The `asset` field in the payment requirements maps to the `token_uid` in the escrow contract. A server can accept multiple tokens by listing multiple entries in the `accepts` array, each with a different `asset` and `amount`. This means stablecoin payments work out of the box once a stablecoin exists on Hathor — no protocol changes needed.
 
 ---
 
