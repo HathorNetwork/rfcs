@@ -89,7 +89,7 @@ User → OAuth provider → Web3Auth SDK (client-side)
     wallet starts; UI shows one address, uses existing tx flow
 ```
 
-No BIP32 derivation. No seed. No xpub. Everything downstream of the raw key is handled by the single-key wallet mode defined in internal-rfcs#46 and implemented in hathor-wallet-lib#1062.
+No BIP32 derivation. No seed. No xpub. Everything downstream of the raw key is handled by the single-key wallet mode defined in [internal-rfcs#46](https://github.com/HathorNetwork/internal-rfcs/pull/46) and implemented in [hathor-wallet-lib#1062](https://github.com/HathorNetwork/hathor-wallet-lib/pull/1062).
 
 ## SDK choice
 
@@ -104,7 +104,7 @@ No BIP32 derivation. No seed. No xpub. Everything downstream of the raw key is h
 | MPC-TSS available | yes (Enterprise) | yes (Enterprise) |
 
 Per-platform SDKs:
-- **Mobile** (phase 1 target): `@web3auth/react-native-sdk` — integration details in internal-rfcs#46.
+- **Mobile** (phase 1 target): `@web3auth/react-native-sdk` — integration details in [internal-rfcs#46](https://github.com/HathorNetwork/internal-rfcs/pull/46).
 - **Desktop** (future): `@web3auth/modal` (web build running in Electron). Electron's `safeStorage` API for the device share instead of localStorage.
 - **Web** (future): `@web3auth/modal` again, device share in IndexedDB.
 
@@ -227,14 +227,14 @@ Once started, a Web3Auth wallet and an HD wallet produce identical downstream be
 
 ## Alternatives rejected
 
-- **Magic (magic.link)** — uses AWS KMS; effectively custodial. Incompatible with our non-custodial stance.
-- **Privy** — strong EVM focus, weak non-EVM support.
-- **Dynamic** — primarily EVM, MPC roadmap not yet shipped.
-- **Custom MPC (tss-lib)** — extreme engineering and audit cost for a non-differentiating capability.
+- **[Magic](https://magic.link)** — uses AWS KMS; effectively custodial. Incompatible with our non-custodial stance.
+- **[Privy](https://www.privy.io)** — strong EVM focus, weak non-EVM support.
+- **[Dynamic](https://www.dynamic.xyz)** — primarily EVM, MPC roadmap not yet shipped.
+- **Custom MPC** (using libraries like [tss-lib](https://github.com/bnb-chain/tss-lib)) — extreme engineering and audit cost for a non-differentiating capability.
 
 ## Why single-key mode, not HD-from-raw-key
 
-Covered in internal-rfcs#46's "Rationale and alternatives" section. Summary: fabricating a chain code for BIP32 breaks cross-app portability (a selling point of Web3Auth), is a non-standard crypto construction, and doesn't simplify signing or fix wallet-service compatibility.
+Covered in [internal-rfcs#46](https://github.com/HathorNetwork/internal-rfcs/pull/46)'s "Rationale and alternatives" section. Summary: fabricating a chain code for BIP32 breaks cross-app portability (a selling point of Web3Auth), is a non-standard crypto construction, and doesn't simplify signing or fix wallet-service compatibility.
 
 # Open decisions
 [open-decisions]: #open-decisions
@@ -251,10 +251,10 @@ These need answers before Phase 1 ships. None are research questions — they ar
 # Prior art
 [prior-art]: #prior-art
 
-- **MetaMask Embedded Wallets** — MetaMask's production deployment of Web3Auth. The reference integration.
-- **Binance Web3 Wallet** — similar 3-share model (cloud / device / recovery password). Proprietary but validates the market.
-- **Argent** — social recovery on Ethereum via guardian contracts. Different mechanism, same UX goal.
-- **Phantom (Solana)** — explored seedless flows; kept seed phrases as primary. Cautionary tale about UX complexity.
+- **[MetaMask Embedded Wallets](https://web3auth.io)** — MetaMask's production deployment of Web3Auth (same technology under the rebrand). The reference integration.
+- **[Binance Web3 Wallet](https://www.binance.com/en/web3wallet)** — similar 3-share model (cloud / device / recovery password). Proprietary but validates the market.
+- **[Argent](https://www.argent.xyz)** — social recovery on Ethereum via guardian contracts. Different mechanism, same UX goal.
+- **[Phantom](https://phantom.app) (Solana)** — explored seedless flows; kept seed phrases as primary. Cautionary tale about UX complexity.
 
 Lesson across all: users prefer social login, but the security model must be communicated clearly or they develop false expectations about recoverability.
 
