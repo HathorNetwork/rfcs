@@ -1,6 +1,6 @@
 - Feature Name: automated-test-suite
 - Start Date: 2026-04-17
-- RFC PR: (leave this empty)
+- RFC PR: https://github.com/HathorNetwork/rfcs/pull/110
 - Hathor Issue: (leave this empty)
 - Author: Tulio Miranda <tulio@hathor.network>
 
