@@ -50,7 +50,7 @@ x402 is **machines paying machines**. The client is always code — an AI agent,
 
 Real use cases today:
 - **AI agents paying for API calls** — Agent needs weather data, pays $0.001 per request in stablecoin, no API keys or billing accounts needed
-- **MCP tool calls** — Claude Code / AI assistants pay for tool invocations
+- **MCP tool calls** — Claude Code / AI assistants pay for tool invocations (see `examples/mcp-server/` in the POC repo)
 - **Pay-per-crawl** — AI crawlers pay website owners to scrape content
 - **API monetization without accounts** — One middleware line, get paid per request
 
@@ -372,18 +372,18 @@ sequenceDiagram
     Client->>Hathor: 1. initialize() + deposit action
     Hathor-->>Client: nc_id (funds now locked in contract)
 
-    Client->>Server: 2. GET /resource + PAYMENT-SIGNATURE {ncId}
+    Client->>Server: 2. GET /resource + PAYMENT-SIGNATURE: Base64({x402Version: 2, ncId})
     Server->>Facilitator: POST /x402/verify
     Facilitator->>Hathor: GET /nano_contract/state
     Hathor-->>Facilitator: {phase: LOCKED, amount, seller}
-    Facilitator-->>Server: {valid: true}
+    Facilitator-->>Server: {x402Version: 2, valid: true}
 
-    Server-->>Client: 3. 200 + resource
+    Server-->>Client: 3. 200 + resource + PAYMENT-RESPONSE: Base64({x402Version: 2, txId})
 
     Server->>Facilitator: POST /x402/settle {ncId}
     Facilitator->>Hathor: 4. release() + withdrawal to seller
     Hathor-->>Facilitator: {txId}
-    Facilitator-->>Server: {success: true, txId}
+    Facilitator-->>Server: {x402Version: 2, success: true, txId}
 
     Note over Client,Facilitator: Timeout / Cancel Path
     Client->>Hathor: 4b. refund() + withdrawal to buyer
@@ -432,26 +432,26 @@ sequenceDiagram
     participant H as Hathor<br/>(full node)
 
     C->>S: GET /resource
-    S-->>C: 402 + PAYMENT-REQUIRED header<br/>{scheme, amount, seller, facilitator, blueprintId}
+    S-->>C: 402 + PAYMENT-REQUIRED header<br/>{x402Version: 2, scheme, price, seller, facilitator, blueprintId}
 
     Note over C: Build nano contract tx:<br/>initialize() + deposit action<br/>sign + mine PoW
 
     C->>H: Submit escrow deposit tx
     H-->>C: tx confirmed (nc_id = tx hash)
 
-    C->>S: GET /resource + PAYMENT-SIGNATURE {ncId}
+    C->>S: GET /resource + PAYMENT-SIGNATURE: Base64({x402Version: 2, ncId})
 
-    S->>F: POST /x402/verify {ncId, amount, seller, asset}
+    S->>F: POST /x402/verify {ncId, price, seller, asset}
     F->>H: GET /nano_contract/state?id={ncId}
     H-->>F: {phase: LOCKED, amount: 100, seller: Wxxxx}
-    F-->>S: {valid: true}
+    F-->>S: {x402Version: 2, valid: true}
 
-    S-->>C: 200 + resource + PAYMENT-RESPONSE {ncId}
+    S-->>C: 200 + resource + PAYMENT-RESPONSE: Base64({x402Version: 2, success, txId})
 
     S->>F: POST /x402/settle {ncId}
     F->>H: release() + withdrawal to seller address
     H-->>F: {txId}
-    F-->>S: {success: true, txId}
+    F-->>S: {x402Version: 2, success: true, txId}
 ```
 
 ### 4.2 Key Difference from EVM x402
@@ -495,12 +495,13 @@ A server can accept **multiple tokens** by including multiple entries in the `ac
 
 ```json
 {
+  "x402Version": 2,
   "accepts": [
     {
       "scheme": "hathor-escrow",
       "network": "hathor:mainnet",
       "asset": "00",
-      "amount": "100",
+      "price": "100",
       "resource": "https://api.example.com/data",
       "description": "Pay 1.00 HTR to access weather data",
       "mimeType": "application/json",
@@ -517,7 +518,7 @@ A server can accept **multiple tokens** by including multiple entries in the `ac
       "scheme": "hathor-escrow",
       "network": "hathor:mainnet",
       "asset": "0000abc123def...",
-      "amount": "1000",
+      "price": "1000",
       "description": "Or pay 10.00 hUSDC",
       "payTo": "WXf4xPLBn7HUC7F1U2vY4J5zwpsDS12bT6",
       "maxTimeoutSeconds": 300,
@@ -528,8 +529,7 @@ A server can accept **multiple tokens** by including multiple entries in the `ac
         "deadlineSeconds": 300
       }
     }
-  ],
-  "version": "1"
+  ]
 }
 ```
 
@@ -537,8 +537,9 @@ A server can accept **multiple tokens** by including multiple entries in the `ac
 |---|---|---|
 | `scheme` | string | `"hathor-escrow"` — Hathor's native x402 scheme |
 | `network` | string | `"hathor:mainnet"` or `"hathor:testnet"` |
+| `x402Version` | number | Protocol version — `2` for current |
 | `asset` | string | Hathor token UID — `"00"` for HTR, or custom token hash |
-| `amount` | string | Amount in smallest unit (1 HTR = 100) |
+| `price` | string | Price in smallest unit (1 HTR = 100) |
 | `payTo` | string | Seller's Hathor address (base58) |
 | `extra.facilitatorUrl` | string | URL of the facilitator service |
 | `extra.facilitatorAddress` | string | Facilitator's Hathor address (for escrow) |
@@ -549,8 +550,17 @@ A server can accept **multiple tokens** by including multiple entries in the `ac
 
 ### 5.2 PAYMENT-SIGNATURE Header (Client -> Server on retry)
 
+The `PAYMENT-SIGNATURE` header value is the **Base64 encoding** of the JSON payment payload:
+
+```
+PAYMENT-SIGNATURE: Base64(JSON(paymentPayload))
+```
+
+Decoded JSON:
+
 ```json
 {
+  "x402Version": 2,
   "scheme": "hathor-escrow",
   "network": "hathor:mainnet",
   "payload": {
@@ -563,11 +573,14 @@ A server can accept **multiple tokens** by including multiple entries in the `ac
 
 | Field | Type | Description |
 |---|---|---|
+| `x402Version` | number | Protocol version — `2` |
 | `payload.ncId` | string | Nano contract ID (= deposit tx hash) |
 | `payload.depositTxId` | string | Transaction ID of the escrow deposit |
 | `payload.buyerAddress` | string | Buyer's address (for refund tracking) |
 
 Note: On Hathor, `ncId` equals `depositTxId` because the contract is created by the deposit transaction.
+
+> **Backwards compatibility:** Servers SHOULD also accept `x-payment` as a fallback header name (used by some x402 V1 clients). The server reads `payment-signature` first, then falls back to `x-payment`.
 
 ### 5.3 Facilitator Verify Request / Response
 
@@ -612,7 +625,7 @@ POST /x402/verify
    - facilitator == self (facilitatorAddress)
    - deadline > now
 
-3. Return: { "valid": true } or { "valid": false, "invalidReason": "..." }
+3. Return: { "x402Version": 2, "valid": true } or { "x402Version": 2, "valid": false, "invalidReason": "..." }
 ```
 
 ### 5.4 Facilitator Settle Request / Response
@@ -653,13 +666,22 @@ POST /x402/settle
      }
    }
 
-2. Return: { "success": true, "txId": "...", "network": "hathor:mainnet" }
+2. Return: { "x402Version": 2, "success": true, "txId": "...", "network": "hathor:mainnet" }
 ```
 
 ### 5.5 PAYMENT-RESPONSE Header (Server -> Client on 200)
 
+The `PAYMENT-RESPONSE` header value is the **Base64 encoding** of the JSON settlement result:
+
+```
+PAYMENT-RESPONSE: Base64(JSON(settlementResult))
+```
+
+Decoded JSON:
+
 ```json
 {
+  "x402Version": 2,
   "success": true,
   "scheme": "hathor-escrow",
   "network": "hathor:mainnet",
@@ -718,11 +740,12 @@ graph LR
 
 ### 6.2 Plugin Responsibilities
 
-1. **HTTP Server** (port 8402): Exposes `/x402/verify` and `/x402/settle`
+1. **HTTP Server** (port 8402): Exposes `/x402/verify`, `/x402/settle`, and `/health`
 2. **Verify**: Queries nano contract state from full node, validates escrow
-3. **Settle**: Calls `release()` on the escrow via headless wallet API
-4. **Refund Monitor**: Background job that watches for expired escrows and triggers `refund()`
-5. **Event Listener**: Subscribes to `wallet:new-tx` events to track incoming escrow deposits
+3. **Settle**: Calls `release()` on the escrow via headless wallet API. Includes **idempotency cache** — repeated settle calls for the same escrow `ncId` return the cached result instead of re-executing. Note: idempotency caching applies only to escrows (one contract per payment); payment channels are NOT cached since the same channel serves multiple payments.
+4. **Health Check** (`GET /health`): Reports wallet connectivity status and auto-recovers disconnected wallets by restarting them with their seed. Runs periodic checks (every 30s) to detect and recover from wallet-headless connection drops.
+5. **Refund Monitor**: Background job that watches for expired escrows and triggers `refund()`
+6. **Event Listener**: Subscribes to `wallet:new-tx` events to track incoming escrow deposits
 
 ### 6.3 Plugin Implementation Outline
 
@@ -777,7 +800,10 @@ async function init(eventBus) {
       }
     });
 
-    res.json({ success: true, txId: result.hash, network: config.network });
+    const response = { x402Version: 2, success: true, txId: result.hash, network: config.network };
+    // Cache successful settlements for idempotency (keyed by ncId)
+    settlementCache.set(ncId, response);
+    res.json(response);
   });
 
   // Refund monitor (background)
@@ -844,7 +870,7 @@ const HEADLESS_URL = 'http://localhost:8000';
 const WALLET_ID = 'my-agent-wallet';
 
 async function payForResource(paymentRequired) {
-  const { amount, asset, payTo, extra } = paymentRequired;
+  const { price, asset, payTo, extra } = paymentRequired;
   const { facilitatorAddress, blueprintId, deadlineSeconds } = extra;
 
   const deadline = Math.floor(Date.now() / 1000) + deadlineSeconds;
@@ -855,7 +881,7 @@ async function payForResource(paymentRequired) {
     address: clientAddress,
     data: {
       args: [payTo, facilitatorAddress, asset, deadline, resourceUrl, requestHash],
-      actions: [{ type: 'deposit', token: asset, amount: parseInt(amount) }],
+      actions: [{ type: 'deposit', token: asset, amount: parseInt(price) }],
     },
   }, {
     headers: { 'x-wallet-id': WALLET_ID },
@@ -904,12 +930,12 @@ app.use(hathorPaymentMiddleware({
   network: 'hathor:mainnet',
   routes: {
     'GET /weather': {
-      amount: '100',         // 1.00 HTR
+      price: '100',          // 1.00 HTR
       asset: '00',       // HTR (or any custom token UID)
       description: 'Real-time weather data',
     },
     'GET /premium/*': {
-      amount: '500',         // 5.00 HTR
+      price: '500',          // 5.00 HTR
       asset: '00',       // HTR (or any custom token UID)
       description: 'Premium content',
     },
@@ -926,7 +952,7 @@ flowchart TD
     B -->|Yes| D{Has PAYMENT-SIGNATURE header?}
 
     D -->|No| E[Return 402 +<br/>PAYMENT-REQUIRED header]
-    D -->|Yes| F[Decode header, extract ncId]
+    D -->|Yes| F[Base64-decode header, extract ncId]
 
     F --> G[POST facilitatorUrl/x402/verify]
     G --> H{Valid?}
@@ -934,7 +960,7 @@ flowchart TD
     H -->|No| I[Return 402 + error details]
     H -->|Yes| J[next&#40;&#41; — serve resource]
 
-    J --> K[Return 200 + resource +<br/>PAYMENT-RESPONSE header]
+    J --> K[Return 200 + resource +<br/>PAYMENT-RESPONSE: Base64 header]
     K --> L[POST facilitatorUrl/x402/settle<br/>async, non-blocking]
 
     style E fill:#f66,color:#fff
@@ -1092,6 +1118,6 @@ The escrow blueprint is **token-agnostic** — it works with any Hathor token (H
 
 3. **Facilitator economics:** Should facilitators charge a fee? If so, add a `facilitatorFee` field to the escrow and a fee output on release.
 
-4. **Batch escrows:** For high-frequency clients, should we support a "channel" pattern where the client pre-funds a large escrow and makes multiple requests against it?
+4. ~~**Batch escrows:**~~ **Resolved.** Payment channels (`hathor-channel` scheme) are now implemented — see RFC 0004. Clients can pre-fund a channel and make multiple requests against it without creating a new escrow per call.
 
 5. **CAIP-2 registration:** Formally register `hathor:mainnet` / `hathor:testnet` with ChainAgnostic?
