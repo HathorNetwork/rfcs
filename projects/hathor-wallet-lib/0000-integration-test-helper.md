@@ -1,0 +1,573 @@
+- Feature Name: integration-test-helper
+- Start Date: 2026-02-24
+- Author: Tulio <tulio@hathor.network>)
+
+# Summary
+
+The [Integration Test Helper](https://github.com/tuliomir/hathor-integration-test-helper)
+is a dockerized HTTP service that provides race-condition-free wallet
+generation and funding for
+[hathor-wallet-lib](https://github.com/HathorNetwork/hathor-wallet-lib)
+integration tests. It pre-generates BIP39 wallets with derived addresses
+outside the test runtime (avoiding
+[prohibitive address derivation costs under Jest](https://github.com/HathorNetwork/hathor-wallet-headless/issues/173))
+and splits the genesis block's single UTXO into a pool of independent,
+readily-available UTXOs so that parallel test executions never compete
+for funds.
+
+# Motivation
+
+The [hathor-wallet-lib](https://github.com/HathorNetwork/hathor-wallet-lib)
+integration test suite currently has two structural blockers that prevent
+test parallelization:
+
+## 1. Wallet generation is prohibitively slow under Jest
+
+Deriving addresses from BIP39 seeds under Jest's execution wrapper takes
+7 seconds for simple wallets and up to 60 seconds for multisig wallets,
+compared to under 500 ms when running outside Jest
+([hathor-wallet-headless#173](https://github.com/HathorNetwork/hathor-wallet-headless/issues/173)).
+The current workaround is a
+[static JSON file with 100 pre-calculated wallets](https://github.com/HathorNetwork/hathor-wallet-lib/blob/master/__tests__/integration/helpers/wallet-precalculation.helper.ts)
+that are consumed serially. This works for sequential execution but
+breaks under parallelization: concurrent tests drawing from the same
+file race to consume wallets, leading to duplicates and test failures.
+
+## 2. All funding derives from a single genesis UTXO
+
+Every integration test that needs funds must ultimately spend from the
+same genesis block UTXO. When tests run in parallel, multiple funding
+transactions attempt to spend the same UTXO simultaneously, causing
+race-condition failures. There is no built-in mechanism in
+[hathor-wallet-lib](https://github.com/HathorNetwork/hathor-wallet-lib)
+to coordinate UTXO selection across independent test processes.
+
+## Expected outcome
+
+With this service running alongside the test infrastructure, integration
+tests can:
+
+- Instantly obtain unique, ready-to-use wallets with pre-derived
+  addresses (no Jest-side derivation).
+- Request funding without coordinating with other tests — each request
+  gets its own dedicated UTXO, eliminating race conditions.
+- Run fully in parallel, reducing total suite execution time
+  proportionally to the number of parallel workers.
+
+# Guide-level explanation
+
+## Overview
+
+The Integration Test Helper is a lightweight HTTP service that runs as a
+Docker container alongside the existing test infrastructure
+([hathor-core](https://github.com/HathorNetwork/hathor-core) fullnode +
+[tx-mining-service](https://github.com/HathorNetwork/tx-mining-service)).
+It exposes four endpoints:
+
+| Method | Path             | Purpose                                    |
+|--------|------------------|--------------------------------------------|
+| GET    | `/simpleWallet`  | Get a new simple wallet (seed + addresses) |
+| GET    | `/multisigWallet`| Get N-of-M multisig wallets                |
+| POST   | `/fund`          | Fund a test wallet address with HTR        |
+| GET    | `/status`        | Pool health and readiness                  |
+
+## Wallet generation
+
+When a test needs a wallet, it makes a `GET /simpleWallet` request. The
+service returns a 24-word BIP39 seed and 22 pre-derived addresses. Since
+address derivation happens inside the service (not under Jest), it
+completes in milliseconds. Wallets are pre-generated and cached, so
+responses are near-instant.
+
+For multisig tests, `GET /multisigWallet?participants=N&numSignatures=M`
+generates N participant wallets that share the same P2SH addresses.
+
+## Funding
+
+When a test needs HTR, it makes a `POST /fund` request with the target
+address and optional amount. The service atomically reserves a UTXO from
+its internal pool, builds and broadcasts a transaction, and returns the
+transaction ID. No two tests ever attempt to receive funds from the same UTXO.
+
+## Typical test workflow
+
+```
+1. Start infrastructure:  fullnode + tx-mining-service + test-helper
+2. Wait for /status to return { ready: true }
+3. For each parallel test:
+   a. GET  /simpleWallet  (X-Test-Name: "test-name")  → { words, addresses }
+   b. Start wallet with pre-calculated addresses (no derivation)
+   c. POST /fund { address, amount }  (X-Test-Name: "test-name")  → { txId }
+   d. Wait for wallet to sync the funding tx
+   e. Run test assertions
+```
+
+Tests are fully isolated: each gets its own wallet and its own funding
+UTXO.
+
+## How test developers should think about this
+
+- **Wallet generation is free** — request as many as you need, the cache
+  auto-refills.
+- **Funding is atomic** — you will never get a "UTXO already spent"
+  error from a race condition with another test.
+- **The service is stateless from the test's perspective** — no
+  registration, no sessions, no cleanup needed.
+- **Send your test name** — include the `X-Test-Name` header on all
+  requests. The service logs it alongside every operation, making it
+  easy to search logs by test name when debugging failures.
+
+# Reference-level explanation
+
+## Architecture
+
+The [service](https://github.com/tuliomir/hathor-integration-test-helper)
+is built with [Bun](https://bun.sh/) and
+[hathor-wallet-lib](https://github.com/HathorNetwork/hathor-wallet-lib)
+and is deployed as a Docker container. It connects to a
+[hathor-core](https://github.com/HathorNetwork/hathor-core) fullnode
+and a [tx-mining-service](https://github.com/HathorNetwork/tx-mining-service)
+instance for transaction PoW.
+
+```
+┌─────────────────┐     ┌──────────────┐     ┌───────────────────┐
+│  Test Process 1  │────▶│              │────▶│  Hathor Fullnode   │
+├─────────────────┤     │  Test Helper │     └───────────────────┘
+│  Test Process 2  │────▶│   Service    │           │
+├─────────────────┤     │              │     ┌─────▼─────────────┐
+│  Test Process N  │────▶│  :3020       │────▶│ TX Mining Service │
+└─────────────────┘     └──────────────┘     └───────────────────┘
+```
+
+## Wallet generation subsystem
+
+### Seed generation
+
+Uses
+[wallet-lib](https://github.com/HathorNetwork/hathor-wallet-lib)'s
+`walletUtils.generateWalletWords()` (BIP39) to produce 24-word seeds.
+Addresses are derived at the standard Hathor path `m/44'/280'/0'/0` for
+simple wallets. For multisig wallets, each participant gets their own
+seed; xpubs are sorted deterministically before deriving shared P2SH
+addresses.
+
+Each generated wallet provides 22 pre-derived addresses, enough for
+typical test scenarios.
+
+### Caching
+
+Simple wallets are pre-generated at startup (configurable via
+`SIMPLE_WALLET_CACHE_SIZE`, default 10) and served from an in-memory
+FIFO cache. When the cache is consumed, it refills asynchronously in the
+background.
+
+Multisig wallets are generated on-demand since the parameter space
+(participants × signatures) is too wide to pre-cache effectively.
+
+## UTXO pool subsystem
+
+### The problem in detail
+
+On a private testnet, the genesis block creates a single large UTXO
+(e.g., 1 billion HTR). All test funding must ultimately derive from
+this UTXO. If two tests try to spend it simultaneously, one succeeds
+and the other fails — a classic double-spend race condition.
+
+### Three-bucket pool design
+
+The service maintains an in-memory pool with three buckets:
+
+1. **testUtxos** (FIFO queue): Fixed-amount UTXOs (~1000 HTR each),
+   one per test funding request. This is the primary bucket.
+2. **largeUtxo** (single slot): One large UTXO reserved for splitting
+   into more test UTXOs or for funding requests that exceed the
+   standard amount.
+3. **leftoverUtxos** (list): Variable-amount change UTXOs from
+   partial funding operations.
+
+### UTXO lifecycle
+
+```
+Genesis UTXO (1B HTR)
+    │
+    ▼ splitUtxo()
+┌───────────────────────────────────────┐
+│  testUtxos[0]  = 1000 HTR            │
+│  testUtxos[1]  = 1000 HTR            │
+│  ...                                  │
+│  testUtxos[99] = 1000 HTR            │
+│  largeUtxo     = remaining (~1B)   │
+└───────────────────────────────────────┘
+    │
+    ▼ fundAddress() consumes testUtxos[0]
+┌───────────────────────────────────────┐
+│  TX: testUtxos[0] → target + change  │
+│  change → leftoverUtxos (if any)     │
+└───────────────────────────────────────┘
+    │
+    ▼ needsRefill() triggers when testUtxos < threshold
+┌───────────────────────────────────────┐
+│  splitUtxo(largeUtxo) → 100 more     │
+│  testUtxos + new largeUtxo           │
+└───────────────────────────────────────┘
+```
+
+### Race-condition freedom
+
+`reserveUtxo()` performs a synchronous array `shift()` — the dequeue
+itself is atomic in the JS event loop, with no locks needed. But
+`fundAddress` does not end at the dequeue: it spans two async
+boundaries (`buildTxTemplate` and `runFromMining`). During those
+yields, any other request handler — including `rescanUtxoPool` — can
+run. Atomicity of the dequeue alone is not sufficient.
+
+The following invariants close that gap and make the helper's
+correctness independent of wallet-lib internals:
+
+1. **Reserved set.** A UTXO returned by `reserveUtxo` is added to a
+   helper-owned `reservedSet` in the same synchronous tick as the
+   dequeue. The set is keyed by `txId:index`.
+2. **Rescan exclusion.** `rescanUtxoPool` MUST exclude any UTXO in
+   `reservedSet` when repopulating buckets from
+   `wallet.getAvailableUtxos()`. This prevents an in-flight UTXO
+   (already dequeued by one request, but not yet hidden by wallet-lib
+   on the wallet side) from being re-added to a bucket and handed to
+   a second request.
+3. **Observed-then-released cleanup.** A reservation is cleared only
+   after the consuming tx is observed as confirmed by the wallet —
+   i.e., the spending tx appears in `wallet.getTx(txId)` (or arrives
+   via the `'new-tx'` event) — **not** merely after `runFromMining`
+   resolves. On non-stale failure paths the UTXO is returned to its
+   bucket and the reservation is released in the same tick. On
+   stale-utxo retry, the reservation is released before the
+   recursive `attemptFund` call so the next reservation is not
+   blocked.
+4. **Bounded fallback.** Observation is bounded by
+   `OBSERVATION_TIMEOUT_MS` (default 30s). On timeout the reservation
+   is released with a warn-level log; the pool's correctness still
+   holds because `wallet.getAvailableUtxos()` will not list the
+   spent UTXO from that point forward.
+
+These invariants make correctness independent of
+`utxosSelectedAsInput`, `SELECT_OUTPUTS_TIMEOUT`, the mine-vs-sign
+timing inside `mineTx`, and WS propagation latency — all wallet-lib
+internals (see "Dependencies on wallet-lib internals" below).
+
+### Dependencies on wallet-lib internals
+
+The helper depends only on the following **public** API surface of
+[hathor-wallet-lib](https://github.com/HathorNetwork/hathor-wallet-lib):
+
+- `wallet.getAvailableUtxos({ token })` — async iterator used by the
+  rescan path.
+- `wallet.buildTxTemplate(template, options)` — builds and signs the
+  funding/split transaction.
+- `wallet.getTx(txId)` and the `'new-tx'` event on the wallet's
+  EventEmitter — used to confirm the consuming tx has been observed
+  before clearing a reservation.
+- `SendTransaction#runFromMining()` — broadcasts the transaction.
+
+The helper deliberately does **not** rely on the following private
+wallet-lib internals, even though they incidentally protect against
+some races:
+
+- `Storage.utxosSelectedAsInput` (the in-memory transient lock map).
+- `SELECT_OUTPUTS_TIMEOUT` (the 60-second auto-release on the
+  transient lock).
+- The exact moment within `SendTransaction#runFromMining` at which
+  `updateOutputSelected(true)` is called (currently inside `mineTx`,
+  not at signing).
+- The asynchronous, fire-and-forget propagation from `enqueueOnNewTx`
+  to the eventual `spent_by` write.
+
+Each of these could change in a minor wallet-lib version bump.
+With the `reservedSet` invariants above in place, no such change can
+silently break helper correctness.
+
+### UTXO classification
+
+UTXOs are categorized by amount relative to the configured split amount:
+- **Test-sized**: within ±10% of `UTXO_SPLIT_AMOUNT` → `testUtxos`
+- **Large**: the biggest non-test UTXO → `largeUtxo`
+- **Leftover**: everything else → `leftoverUtxos`
+
+### Reserve logic
+
+For amounts ≤ `UTXO_SPLIT_AMOUNT`:
+1. Dequeue from `testUtxos` (FIFO)
+2. Fallback: find first sufficient UTXO in `leftoverUtxos`
+3. If both empty: return `POOL_EXHAUSTED` (HTTP 409, retryable)
+
+For amounts > `UTXO_SPLIT_AMOUNT`:
+1. Claim `largeUtxo` if sufficient
+2. Otherwise: queue the request with a timeout
+   (`FUND_TIMEOUT_MS`, default 30s)
+3. Request resolves when a large UTXO becomes available (e.g., after
+   a refill), or times out with `FUND_TIMEOUT` (HTTP 409, retryable)
+
+### Auto-refill
+
+When `testUtxos.length` drops below `REFILL_THRESHOLD` (default 10)
+after a funding operation, the service triggers a background split of
+the current `largeUtxo`. The split is delayed by 1.5 seconds to avoid
+timestamp collisions with the parent transaction (fullnode requires
+`tx.timestamp > parent.timestamp`).
+
+Only one split runs at a time (`splitInProgress` flag).
+
+## Transaction building
+
+All transactions use
+[wallet-lib](https://github.com/HathorNetwork/hathor-wallet-lib)'s
+`TransactionTemplateBuilder` API:
+
+1. Create template with explicit raw input (reserved UTXO)
+2. Add outputs (target address + optional change to genesis address)
+3. Build and sign with configured PIN
+4. Broadcast via `SendTransaction.runFromMining()`, which delegates
+   PoW to the
+   [tx-mining-service](https://github.com/HathorNetwork/tx-mining-service)
+
+The `wallet` instance (not just `storage`) is passed to
+`SendTransaction` to ensure `handlePushTx()` calls
+`enqueueOnNewTx()`, keeping wallet-lib's internal state in sync.
+
+## Genesis wallet lifecycle
+
+On startup (when `GENESIS_SEED_WORDS` is configured):
+
+1. Connect to fullnode via wallet-lib's `WalletConnection`
+2. Start `HathorWallet` instance, poll until ready
+3. Scan existing UTXOs and populate the pool
+4. If no test UTXOs exist: wait for genesis block reward lock to
+   expire (`REWARD_SPEND_MIN_BLOCKS`), then perform initial split
+5. Begin serving `/fund` requests
+
+The wallet overrides wallet-lib's hardcoded `TX_WEIGHT_CONSTANTS`
+when `TX_MIN_WEIGHT` is set, producing minimal-weight transactions
+suitable for private testnets running with `--test-mode-tx-weight`.
+
+## Error response schema
+
+All error responses follow a consistent JSON structure:
+
+```json
+{
+  "error": "POOL_EXHAUSTED",
+  "message": "No UTXOs available for the requested amount",
+  "retryable": true
+}
+```
+
+| Field       | Type    | Description                                        |
+|-------------|---------|----------------------------------------------------|
+| `error`     | string  | Machine-readable error code (see table below)      |
+| `message`   | string  | Human-readable description of the failure          |
+| `retryable` | boolean | Whether the client should retry the request        |
+
+### Error codes
+
+| Code                | HTTP | Retryable | When                                              |
+|---------------------|------|-----------|---------------------------------------------------|
+| `POOL_EXHAUSTED`    | 409  | true      | No test or leftover UTXOs available               |
+| `SPLIT_IN_PROGRESS` | 409  | true      | UTXO split is running; pool will refill shortly   |
+| `UTXO_STALE`        | 409  | true      | Reserved UTXO was already spent; rescan triggered |
+| `FUND_TIMEOUT`      | 409  | true      | Large UTXO request timed out waiting for a refill |
+| `INVALID_REQUEST`   | 400  | false     | Missing or invalid parameters                     |
+| `SERVICE_NOT_READY` | 503  | true      | Genesis wallet not yet initialized                |
+
+Retryable errors indicate transient conditions. Test harnesses can implement
+automatic retry with backoff for these cases, while non-retryable errors
+signal issues that require intervention, as in the case of invalid parameters.
+
+## Request correlation via test name
+
+All endpoints accept an optional `X-Test-Name` HTTP header. When
+present, the service includes the test name in every log line produced
+while handling that request, including any background operations the
+request triggers (UTXO rescans, pool refills).
+
+```
+# Request
+GET /simpleWallet
+X-Test-Name: token-transfer-parallel-3
+
+# Service logs
+[token-transfer-parallel-3] Serving simple wallet from cache (remaining: 7)
+
+# Request
+POST /fund
+X-Test-Name: token-transfer-parallel-3
+
+# Service logs
+[token-transfer-parallel-3] Reserved testUtxo idx=12 (amount=1000)
+[token-transfer-parallel-3] Funding tx abc123 broadcast successfully
+[token-transfer-parallel-3] Pool below threshold, triggering refill
+```
+
+When the header is omitted, logs display `[unknown]` as the test
+identifier. The header is optional to maintain backward compatibility
+and to keep the `/status` healthcheck simple.
+
+This enables searching all service-side activity for a specific test
+by filtering on its name, which is especially valuable when debugging
+failures in parallel test runs where log lines from dozens of tests
+are interleaved.
+
+## Stale UTXO recovery
+
+External code (e.g., a test spending a UTXO directly on the fullnode)
+may invalidate a reserved UTXO. When `runFromMining()` fails with
+"already been spent":
+
+1. Trigger `rescanUtxoPool()`: re-query `wallet.getAvailableUtxos()`
+2. Repopulate all three buckets from the fresh UTXO set
+3. Retry the funding operation once
+
+Concurrent rescans are coalesced into a single query. Incoming fund
+requests wait for the rescan to complete before proceeding.
+
+## Docker deployment
+
+The service is packaged as a multi-stage Docker image
+(`oven/bun:1` → `oven/bun:1-slim`). A reference `docker-compose.yml`
+runs it alongside the fullnode and tx-mining-service with health
+checks that gate test execution until the pool is ready.
+
+The service's Docker healthcheck polls `GET /status` and waits for
+`{ ready: true }`, which is only returned after the initial UTXO
+split completes.
+
+## Dependency on dev-miner mode
+
+This service's reliability on private testnets depends on the
+[tx-mining-service](https://github.com/HathorNetwork/tx-mining-service)'s
+`--dev-miner` mode, proposed in
+[RFC PR #102: Dev Miner for Integration Tests](https://github.com/HathorNetwork/rfcs/pull/102).
+The dev-miner mode provides deterministic block mining without a
+separate cpuminer process, eliminating timing-dependent test failures
+caused by blocks being mined at dozens per second during the initialization of the blockchain.
+
+This condition happens only once per blockchain, but in such short-lived disposable test environments it is a
+frequent source of failures that must be fixed.
+
+## Configuration
+
+| Variable               | Default                      | Purpose                               |
+|------------------------|------------------------------|---------------------------------------|
+| `GENESIS_SEED_WORDS`   | —                            | 24-word BIP39 seed (required for /fund) |
+| `HATHOR_NODE_URL`      | `http://localhost:8083/v1a/` | Fullnode REST API                     |
+| `TX_MINING_URL`        | `http://localhost:8035/`     | TX mining service URL                 |
+| `TX_MIN_WEIGHT`        | —                            | Override wallet-lib weight constants  |
+| `PORT`                 | `3020`                       | Server listen port                    |
+| `SIMPLE_WALLET_CACHE_SIZE` | `10`                     | Pre-generated wallet cache size       |
+| `UTXO_SPLIT_AMOUNT`   | `1000`                       | HTR per test UTXO                     |
+| `UTXO_SPLIT_COUNT`    | `100`                        | Max UTXOs per split batch             |
+| `REFILL_THRESHOLD`     | `10`                         | Auto-refill trigger threshold         |
+| `FUND_TIMEOUT_MS`      | `30000`                      | Large UTXO request queue timeout      |
+| `WALLET_PASSWORD`      | `test-password`              | Wallet-lib storage encryption         |
+| `WALLET_PIN_CODE`      | `123456`                     | Transaction signing PIN               |
+
+# Drawbacks
+
+- **New infrastructure dependency**: integration tests now require an
+  additional Docker service.
+
+- **Single point of failure**: the service is a centralized
+  intermediary. If it crashes or becomes unresponsive, all parallel
+  tests lose access to new wallets and funding simultaneously.
+
+- **Genesis wallet coupling**: the service must hold the genesis
+  wallet's seed, concentrating fund access. This is acceptable for
+  testing but reinforces that this tool must never be used in
+  production-like environments.
+
+# Rationale and alternatives
+
+## Why this design
+
+- **External service vs. in-process library**: the core problem (Jest
+  slowness for address derivation) cannot be solved inside the test
+  process. An external service is the only architecture that moves
+  derivation outside Jest.
+
+- **UTXO pre-splitting vs. on-demand funding**: pre-splitting
+  eliminates race conditions by construction. On-demand funding from
+  a shared UTXO would require distributed locking, which is fragile
+  and adds latency.
+
+- **Single-threaded JS for atomicity**: rather than introducing
+  external coordination (Redis, database locks), the design exploits
+  JavaScript's event loop for lock-free atomic UTXO reservation.
+
+## Alternatives considered
+
+1. **Expand the static JSON wallet file**: generate more wallets and
+   use file-based locking to coordinate access. Rejected because
+   file locking is unreliable across platforms and test frameworks.
+
+2. **In-process UTXO pool**: each test process maintains its own UTXO
+   pool. Rejected because it still requires cross-process UTXO
+   coordination for the initial split.
+
+3. **Database-backed UTXO ledger**: use SQLite or Redis to track UTXO
+   assignments. Rejected as over-engineered for the test environment
+   — adds operational complexity without meaningful benefit over the
+   single-threaded approach.
+
+## Impact of not doing this
+
+Without this service, test parallelization remains blocked. The test
+suite will continue running serially, limiting CI throughput and developer feedback loops.
+
+# Prior art
+
+- **The current
+  [WalletPrecalculationHelper](https://github.com/HathorNetwork/hathor-wallet-lib/blob/master/__tests__/integration/helpers/wallet-precalculation.helper.ts)**:
+  a static JSON file of 100 pre-generated wallets consumed serially.
+  This works for sequential tests but breaks under parallelization.
+  The Integration Test Helper replaces and generalizes this approach.
+
+- **[hathor-wallet-headless#173](https://github.com/HathorNetwork/hathor-wallet-headless/issues/173)**:
+  the original investigation into Jest performance that identified
+  the address derivation bottleneck and motivated external
+  pre-calculation.
+
+- **Bitcoin's `regtest` funding pattern**: Bitcoin Core's regtest mode
+  uses `generatetoaddress` to create block rewards for test wallets.
+  The Integration Test Helper follows a similar philosophy — provide
+  a simple, test-oriented funding mechanism — but adapted to Hathor's
+  UTXO and mining model.
+
+# Unresolved questions
+
+None
+
+# Future possibilities
+
+- **Custom token support**: extend `/fund` to accept a token UID and
+  handle token creation + minting in the UTXO pool.
+
+- **Wallet-lib native integration**: if Jest performance is eventually
+  fixed (e.g., via native crypto modules), the wallet generation
+  aspect could be folded back into
+  [wallet-lib](https://github.com/HathorNetwork/hathor-wallet-lib)
+  as a test utility.
+
+- **Multi-node support**: for stress testing scenarios, the service
+  could manage UTXO pools across multiple fullnodes.
+
+- **Cached MultiSig wallets**: The Wallet Lib test suite could determine
+  a list of desired N and M parameters to preemptively generate and cache,
+  further reducing eventual wait times
+
+- **Metrics and observability**: expose Prometheus-like metrics for UTXO
+  pool depth, funding latency, and refill frequency to support CI
+  performance monitoring.
+
+- **Miner wallet management**: some tests also require interacting with
+  the miner rewards, and access its wallet directly. This service could
+  provide the same benefits to multiple tests that need to access this wallet.
+
+- **On-Chain Blueprints wallet management**: same idea from the above, but for
+  managing the OCB Wallet, with blueprint-specific methods and endpoints.
