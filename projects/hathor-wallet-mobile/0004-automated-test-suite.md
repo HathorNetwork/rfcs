@@ -100,21 +100,25 @@ Human QA remains essential for the right column. E2E automation takes over the r
 
 ## Production code changes
 
-The app requires three classes of changes to work with E2E automation tools on React Native 0.77 + New Architecture (Fabric):
+The app requires changes to work with E2E automation tools on React Native 0.77 + New Architecture (Fabric). **Three independent issues** must each be addressed; fixing only one or two is not enough. This was discovered the hard way: an earlier iteration applied only the doc-prescribed accessibility fix and the Maestro flow silently failed at the very first button tap. The hierarchy dump showed the button as a clean isolated accessibility node — XCUITest found it — yet the synthetic tap never reached the JS `onPress`. Two more layers of fix were needed to bridge the gap.
 
-1. A canonical accessibility-tree pattern (`accessible={false}` on layout Views) that resolves the broadest class of XCUITest tap-delivery failures **without altering layout**.
-2. A custom `ToggleSwitch` component, replacing the native `<Switch>`, which has a Fabric-specific bug that prevents `onValueChange` from firing.
-3. Stable `testID` props on key interactive elements.
+The full list of fixes:
 
-These are **framework-agnostic** — the same pattern is required by any XCUITest-based tool (Maestro, Detox, Appium).
+1. **Accessibility tree:** `accessible={false}` on non-interactive layout Views.
+2. **Pressable migration:** `Pressable` instead of `TouchableOpacity` for app buttons, with a JS-level `disabled` guard.
+3. **Flex-container layout:** buttons rendered as siblings of, not inside, `flex: 1, justifyContent: 'flex-end'` containers.
+4. **Custom `ToggleSwitch`** replacing the native `<Switch>` (a separate Fabric bug).
+5. **`testID` props** on key interactive elements.
 
-### 1. Canonical pattern: `accessible={false}` on layout Views
+These are **framework-agnostic** — every XCUITest-based tool (Maestro, Detox, Appium) hits the same three iOS issues.
 
-**Problem.** On iOS, when a non-interactive `View` (used purely for layout — flex spacing, rows, wrappers) does not opt out of accessibility, VoiceOver/XCUITest aggregates all of its descendants' accessibility text into a single accessibility node attached to that View. The View becomes a "monolithic" tappable region that intercepts taps meant for the interactive children inside it. Symptoms: a button inside a flex container appears in the accessibility tree, but tapping it does nothing — the parent View "swallows" the event.
+### 1. Accessibility tree: `accessible={false}` on layout Views
 
-**Solution (community standard).** Mark every non-interactive layout View with `accessible={false}`. This tells iOS: this is a layout box, not a tappable region. Children retain their own accessibility identity and become directly targetable.
+**Problem.** On iOS, when a non-interactive `View` (flex spacing, rows, wrappers) does not opt out of accessibility, VoiceOver/XCUITest aggregates all of its descendants' accessibility text into a single accessibility node attached to that View. The View becomes a "monolithic" tappable region whose `accessibilityText` reads "Welcome to Hathor Wallet! ... I agree with Terms of Service ... START" — a giant blob that swallows queries for individual children.
 
-This is the canonical fix prescribed by both Maestro's official React Native guide and React Native's own accessibility documentation:
+**Solution.** Mark every non-interactive layout View with `accessible={false}`. This tells iOS: this is a layout box, not a tappable region. Children retain their own accessibility identity and become directly queryable by `testID`.
+
+Documented by Maestro and React Native themselves:
 
 > *"You can resolve these issues by enabling accessibility for the inner component and disabling it for the outer container."* — [Maestro React Native docs](https://docs.maestro.dev/get-started/supported-platform/react-native)
 
@@ -124,27 +128,61 @@ Related upstream issues:
 - [facebook/react-native#24515](https://github.com/facebook/react-native/issues/24515) — Nested accessibility items are not respected on iOS
 - [mobile-dev-inc/Maestro#3056](https://github.com/mobile-dev-inc/Maestro/issues/3056) — RN iOS elements disappear from accessibility tree
 
-**The rule of thumb (lift this verbatim into CLAUDE.md / a skill file):**
+**Verification.** After this fix the hierarchy dump shows the START button as a discrete `accessibilityText: "STARTˮ` node. Without it, every parent View aggregates the entire screen's text. **But the synthetic tap still doesn't reach JS without fixes #2 and #3.** This is the trap that the docs alone don't warn about.
 
-> On iOS React Native, every non-interactive `View` used for layout (flex spacers, rows, wrappers, decorative containers) **must** have `accessible={false}`. Interactive elements (`Pressable`, `TouchableOpacity`, `TouchableHighlight`, `Switch`, custom controls) inherit `accessible={true}` from their role and need no annotation. Container Views that intentionally group content for screen readers (e.g., a card with a single combined label) get `accessible={true}` plus an explicit `accessibilityLabel`.
+### 2. Pressable migration with JS-level disabled guard
+
+**Problem.** Even with the accessibility tree clean, `TouchableOpacity.onPress` does not fire under Fabric + XCUITest. The button is found by `testID`, the synthetic tap is dispatched, and the touch is observed in iOS-level instrumentation — but Fabric's event pipeline does not deliver it as a press to the JS layer. The button visually unrelated, but its callback never runs.
+
+**Solution.** Replace `TouchableOpacity` with `Pressable`. Pressable's gesture path is implemented differently and does deliver synthetic taps to JS. **Caveat:** Pressable's native `disabled` prop also blocks XCUITest from registering taps, even after the prop transitions from `true` to `false`. The disabled state must be implemented as a JS-level guard:
+
+```jsx
+<Pressable
+  testID={props.testID}
+  onPress={props.disabled ? undefined : props.onPress}
+  // ...
 >
-> This is good a11y hygiene independent of testing — it prevents VoiceOver from announcing redundant layout boxes and keeps the accessibility tree flat.
+```
 
-**Why this replaces earlier workarounds.** A previous iteration of this PoC moved buttons out of `flex: 1` containers to make them reachable by XCUITest. That was a layout-level workaround for a problem that the accessibility tree exposes. The canonical pattern keeps the original layout intact — buttons stay inside their `buttonView` flex container — and resolves the issue at the accessibility layer where it belongs. Production layout choices should not be driven by E2E framework quirks when the framework itself documents an escape hatch.
+Related upstream issues:
+- [facebook/react-native#44610](https://github.com/facebook/react-native/issues/44610) — Pressable gets stuck under new architecture
+- [facebook/react-native#34999](https://github.com/facebook/react-native/issues/34999) — onPress not firing occasionally
+- [software-mansion/react-native-screens#2219](https://github.com/software-mansion/react-native-screens/issues/2219) — Pressable elements not working with new architecture on native-stack
 
-**A previous iteration also migrated `NewHathorButton` from `TouchableOpacity` to `Pressable` with a JS-level disabled guard.** That migration was a workaround for symptoms caused by the same accessibility-tree aggregation. With `accessible={false}` applied correctly to the parent layout Views, `TouchableOpacity` and the native `disabled` prop work as expected. The button has been kept on `TouchableOpacity` accordingly.
+### 3. Flex-container layout
 
-### 2. Custom ToggleSwitch component
+**Problem.** A button placed inside a `<View style={{ flex: 1, justifyContent: 'flex-end' }}>` container is unreachable by XCUITest synthetic touches even when both the container is `accessible={false}` and the button is `Pressable`. The empty flex space above the button intercepts the synthetic tap somewhere in the gesture-handler stack, before it reaches the button's Pressable. This is a hit-test issue, not an accessibility issue.
 
-**Problem.** React Native's native `<Switch>` (UISwitch on iOS) does not fire `onValueChange` when tapped programmatically by XCUITest-based tools under Fabric. The native control receives the tap but Fabric's event pipeline does not dispatch the value change to the JS layer. This is independent of the accessibility-tree issue above. Related issues:
+**Solution.** Render the button as a sibling of the flex spacer, not nested inside it:
+
+```jsx
+// Before — button is inside the flex spacer, unreachable
+<View accessible={false} style={style.buttonView}>
+  <NewHathorButton onPress={handlePress} title="Start" />
+</View>
+
+// After — button is a sibling, spacer is empty
+<NewHathorButton onPress={handlePress} title="Start" />
+<View accessible={false} style={style.buttonView} />
+```
+
+The visual layout is identical (the spacer still pushes the button toward the bottom of the screen because `flex: 1, justifyContent: 'flex-end'` on the spacer combined with sibling order achieves the same effect). The hit-test difference: the button is now a peer of the spacer in the layout, not nested inside its tap-intercepting region.
+
+### 4. Custom `ToggleSwitch` component
+
+**Problem.** React Native's native `<Switch>` (UISwitch on iOS) does not fire `onValueChange` when tapped programmatically by XCUITest-based tools under Fabric. The native control receives the tap but Fabric's event pipeline does not dispatch the value change to the JS layer. This is independent of all three issues above. Related:
 - [facebook/react-native#43648](https://github.com/facebook/react-native/issues/43648) — Missing accessibilityLabel on iOS for Switch in Fabric
 - [wix/Detox#4803](https://github.com/wix/Detox/issues/4803) — isReady timeout with RN 0.76+
 
 **Solution.** A small `ToggleSwitch` component built with `Pressable` that visually mimics the native switch. Props are API-compatible with the native Switch (`value`, `onValueChange`, `trackColor`, `testID`). Inner decorative `View`s (track, thumb) carry `accessible={false}`, so only the outer `Pressable` exposes accessibility identity.
 
-### 3. testID props
+### 5. testID props
 
 `testID` props added to: terms agreement switch, Start button, seed-words data element, backup step number display, and NumPad buttons. These enable E2E tools to target elements by stable identifier instead of fragile text matching that breaks when copy is changed or localized.
+
+### Combined effect
+
+With all four code fixes applied, the full Maestro `walletCreation.yaml` flow passes 30+ steps end-to-end on iPhone 17 / iOS 26.4 / Xcode 26.4.1: WelcomeScreen → InitialScreen → NewWordsScreen → BackupWords (5-step validation) → ChoosePinScreen (PIN + confirm) → wallet started. Removing any one of fixes 1, 2, or 3 causes the very first button tap (`welcome-start-button`) to silently fail.
 
 ## Wallet creation E2E flow
 
@@ -190,7 +228,7 @@ Enforce coverage thresholds in Jest config to prevent regression.
 # Drawbacks
 [drawbacks]: #drawbacks
 
-1. **Minor production code changes for testability.** Three classes of changes are added: `accessible={false}` on layout Views, a custom `ToggleSwitch` replacing the native one, and `testID` props on key interactive elements. The first is defensible as a11y hygiene independent of testing; the second is required to work around a Fabric/UISwitch bug regardless of which test framework is used; the third is a stable identifier with no UX impact. Crucially, **no layout patterns are altered** for testability — the original component tree and flex hierarchy are preserved.
+1. **Production code changes for testability.** Five classes of changes are added: `accessible={false}` on layout Views, `Pressable` instead of `TouchableOpacity` (with a JS-level disabled guard), buttons rendered as siblings of `flex: 1` spacers rather than nested inside them, a custom `ToggleSwitch` replacing the native one, and `testID` props. The first is defensible as a11y hygiene; the second through fourth are workarounds for distinct Fabric / XCUITest bugs that hit any RN 0.77+ project regardless of test framework; the fifth has no UX impact. The layout change (#3) is the most invasive — it mildly inverts the conventional "button nested inside its container" pattern, which a developer not aware of the rationale could easily "clean up" back to the broken state. This risk is mitigated by the AI-agent guidance described in [Future Possibilities #7](#future-possibilities) and a code comment near each affected layout pointing to this RFC.
 
 2. **Maestro is a younger tool.** The community is smaller, documentation is less comprehensive for React Native edge cases, and YAML is less expressive than TypeScript for complex test logic (e.g., the BackupWords word lookup requires external JS scripts).
 
@@ -269,7 +307,7 @@ Without automated tests, every feature addition, dependency update, and refactor
 
 4. **Flakiness management.** E2E tests are inherently more flaky than unit tests. How many retries before a test is considered failing? Should flaky tests block merges?
 
-5. **End-to-end re-verification of the canonical accessibility pattern.** The `accessible={false}` pattern was applied after the original PoC's layout-based workaround (and its accompanying `Pressable` migration) had already proven the wallet-creation flow could pass under Maestro. The pattern is the documented standard prescribed by Maestro itself, and all Jest/component tests pass with the new code. A full Maestro run of `walletCreation.yaml` against the canonical-pattern code is the remaining verification step before this PoC is shipped to CI.
+5. **(Resolved.)** Maestro re-verification on iPhone 17 / iOS 26.4 / Xcode 26.4.1 confirmed that the `accessible={false}` pattern by itself is **necessary but not sufficient**. The full Pressable-migration and flex-container-layout fixes are also required; reverting either causes the first button tap to silently fail despite XCUITest finding the button correctly. This was not obvious from Maestro's documentation, which addresses only the accessibility-tree issue. The current production code applies all three fixes and the full `walletCreation.yaml` flow passes end-to-end (30+ steps).
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
@@ -290,13 +328,27 @@ Without automated tests, every feature addition, dependency update, and refactor
 
    ### `CLAUDE.md` section (brief, authoritative)
 
-   This is the rule set the agent always sees. Keep it under ~30 lines:
+   This is the rule set the agent always sees. Keep it under ~40 lines:
+
+   ```markdown
+   ## Testing rules
 
    - **TDD by default.** Every new feature includes: unit tests for logic, component tests for UI screens, and an E2E flow update if the feature touches a critical user journey (wallet creation, send/receive, backup/restore, PIN handling).
    - **Adapting existing tests.** When modifying a screen or component that has existing tests, update or rewrite those tests to match the new behavior. Never delete a test without a replacement that covers the same scenarios.
-   - **Removing tests.** Only when the tested feature is removed. Document the removal reason in the commit message.
-   - **Testability boundary.** Production code changes for testability are limited to: (a) `accessible={false}` on non-interactive layout Views, (b) `testID` props, (c) the existing `ToggleSwitch` component. **Do not** introduce layout changes, replace `TouchableOpacity` with `Pressable`, or move components in the component tree to make E2E tests work — those are symptoms of accessibility-tree issues, not problems to solve at the layout level.
-   - **For deeper testing guidance:** load the testing skill file (e.g., `docs/testing-guide.md` or `.claude/skills/wallet-testing.md`).
+   - **Removing tests.** Only when the tested feature is removed entirely. Document the removal reason in the commit message.
+
+   ## iOS Fabric / XCUITest workarounds — DO NOT remove
+
+   Three production-code patterns exist because of independent React Native 0.77 / New Architecture / XCUITest bugs. Removing any one breaks E2E silently (XCUITest still finds the element, but the synthetic tap never reaches JS). All three are documented in RFC 0004 §"Production code changes":
+
+   1. **`accessible={false}` on layout Views.** Every non-interactive `View` (flex spacer, row, wrapper) must have `accessible={false}`. Interactive elements (`Pressable`, `TouchableOpacity`, `Switch`) inherit `accessible={true}` from their role and need no annotation.
+   2. **`Pressable`, not `TouchableOpacity`, for app buttons.** With a JS-level disabled guard: `onPress={disabled ? undefined : handler}`, NOT the native `disabled` prop. The native prop blocks XCUITest taps.
+   3. **Buttons are siblings of `flex: 1` spacers, not children.** A button inside `<View style={{ flex: 1, justifyContent: 'flex-end' }}>` is unreachable by synthetic taps. Render the button first and the empty `<View style={buttonView} />` after — visual layout is identical.
+
+   Plus: the custom `ToggleSwitch` replaces the native `<Switch>` (separate Fabric bug). Do not "modernize" it back. `testID` props on interactive elements are required for stable element targeting.
+
+   For deeper guidance: load the testing skill file (`docs/testing-guide.md` or `.claude/skills/wallet-testing.md`).
+   ```
 
    ### Skill / knowledge file content (depth, loaded on demand)
 
@@ -304,11 +356,19 @@ Without automated tests, every feature addition, dependency update, and refactor
 
    1. **Test pyramid layout** — file paths, what each layer covers, how to run each (`npm test`, `npm test -- --testPathPattern=...`, `maestro test ...`).
    2. **Test patterns** — `renderWithProviders`, `createTestStore`, mock conventions for `@hathor/wallet-lib`, navigation mocks, image asset mocks.
-   3. **The iOS accessibility-tree rule** — the `accessible={false}` pattern, with the exact wording from the rule of thumb above. This is the single most common mistake an agent will make: writing a new screen with nested layout Views and then being unable to E2E-test it. The skill must surface this rule prominently.
-   4. **The Fabric workarounds catalogue** — the existing `ToggleSwitch` exists because of [facebook/react-native#43648](https://github.com/facebook/react-native/issues/43648); document it so an agent doesn't try to "modernize" it back to the native `<Switch>`.
+   3. **The three-issue iOS XCUITest catalogue** — the exact rules above, with examples of each broken state and how to detect them. The most common agent mistake is "fixing" workaround #2 or #3 because they look like code smells. The skill must explain WHY each exists with verifiable upstream issue links so an agent can confirm the bugs still exist before assuming they're stale.
+   4. **Diagnostic workflow** — when a Maestro tap reports `COMPLETED` but the app doesn't respond: dump `maestro hierarchy`, check the failing element's `accessibilityText` for aggregation (issue #1), check that the button is `Pressable` not `TouchableOpacity` (issue #2), check the parent layout for `flex: 1` interception (issue #3). One of those three is always the cause.
    5. **Maestro flow conventions** — how to structure `.maestro/flows/*.yaml` files, when to use `runScript` vs inline commands, how to capture and reuse data across steps (`copyTextFrom` + `output.X`), and the cleanup discipline (`.maestro/cleanup.sh` to manage simulator memory pressure).
-   6. **What NOT to test in E2E** — release-build behavior, real network conditions, OS permissions, visual regressions. These are explicitly out of scope for Maestro and belong to QA or other tooling.
+   6. **Build environment notes** — Xcode and macOS version compatibility (this PoC's verification was blocked for hours by a macOS-update / Xcode-version mismatch causing CoreSimulator's AssetCatalogSimulatorAgent to fail handshake; the fix was upgrading Xcode to match the macOS point release). Document the symptom + fix so future agents recognize it instantly.
+   7. **What NOT to test in E2E** — release-build behavior, real network conditions, OS permissions, visual regressions. These are explicitly out of scope for Maestro and belong to QA or other tooling.
 
    ### Why this matters
 
-   AI agents working on this codebase will frequently add new screens, modify existing ones, or refactor shared components. Without this guidance, a well-intentioned agent will: (a) skip writing tests because no one told it that's required, (b) write tests that pass locally but fail in E2E because new layout Views weren't marked `accessible={false}`, (c) "fix" Fabric workarounds it perceives as quirky, breaking E2E. The CLAUDE.md + skill file combination prevents all three failure modes by making the rules discoverable at the right level of detail for the task at hand.
+   AI agents working on this codebase will frequently add new screens, modify existing ones, or refactor shared components. Without this guidance, a well-intentioned agent will:
+   - Skip writing tests because no one told it that's required.
+   - Write tests that pass Jest but fail in E2E because new layout Views weren't marked `accessible={false}`.
+   - "Modernize" the `Pressable` button back to `TouchableOpacity` because that's what the rest of the React Native ecosystem uses.
+   - Re-nest buttons inside their flex containers because "that's the cleaner pattern."
+   - Replace the custom `ToggleSwitch` with the native `<Switch>` because the latter is "more idiomatic."
+
+   Each of those individually breaks E2E silently. The CLAUDE.md rules plus the skill file with the diagnostic workflow prevent all five failure modes by making the rules discoverable at the right level of detail and giving the agent a concrete way to verify, rather than relying on memorization.
