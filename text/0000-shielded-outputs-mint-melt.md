@@ -190,7 +190,8 @@ between the two shielded outputs or who the recipients are.
 Token `TF` is `FEE`-version. The issuer mints 50,000 TF into one transparent
 output of 30,000 TF (paid to a public counterparty) plus one shielded output
 of 20,000 TF (treasury). `FEE`-version tokens have no HTR deposit; per-output
-fees apply instead.
+fees apply instead, plus one extra `FEE_PER_OUTPUT` per `MintHeader` /
+`MeltHeader` entry on a `FEE`-version token (see Rule M4).
 
 ```
 Inputs:
@@ -211,20 +212,33 @@ Headers:
   - MintHeader: [(token_index=1, amount=50000)]
 
 Verifier:
-  - No deposit/withdraw on HTR (FEE-version tokens skip the 1% rule).
+  - No HTR deposit/withdraw on the 1% rule (FEE-version tokens skip it).
+  - Each MintHeader / MeltHeader entry on a FEE-version token contributes
+    one FEE_PER_OUTPUT charge to the output side of the augmented balance
+    equation (paid by the user from HTR transparent inputs). Like the 1%
+    deposit for DEPOSIT-version tokens, this charge is folded into the
+    balance equation directly — it is NOT declared in FeeHeader, which
+    continues to cover only chargeable transparent outputs and shielded
+    outputs.
   - Augmented balance:
       sum(C_in) + 50,000·H_TF
-        == sum(C_out) + total_fee·H_HTR
+        == sum(C_out) + 1·FEE_PER_OUTPUT·H_HTR + total_fee·H_HTR
     where the TF side balances 50,000 newly-minted units against
-    30,000 (transparent) + 20,000 (shielded committed).
+    30,000 (transparent) + 20,000 (shielded committed); the
+    1·FEE_PER_OUTPUT term reflects the MintHeader entry charge; and
+    total_fee is the FeeHeader sum.
   - Total fee in FeeHeader must match exactly:
-      FEE_PER_OUTPUT × 1 + FEE_PER_AMOUNT_SHIELDED_OUTPUT × 2.
+      FEE_PER_OUTPUT × 1 (transparent TF output)
+      + FEE_PER_AMOUNT_SHIELDED_OUTPUT × 2 (two shielded outputs).
 ```
 
 What observers learn: 50,000 TF were minted; 30,000 TF went to a publicly
 visible transparent output; the remaining 20,000 TF entered the shielded
 pool. They do not learn the recipient of the shielded output or the issuer's
-HTR change.
+HTR change. The per-entry FEE_PER_OUTPUT charge is visible (it's part of the
+public balance equation), but it leaks no per-recipient information — every
+MintHeader entry on a FEE-version token pays exactly one FEE_PER_OUTPUT
+regardless of how many shielded recipients the entry is split across.
 
 ### 3.6 DEPOSIT-version token: melt with HTR withdraw
 
@@ -412,6 +426,7 @@ The shielded balance equation (parent §4.4) is augmented:
 sum(C_in) + sum_T(mint_T · H_T)  ==
     sum(C_out) + sum_T(melt_T · H_T) + sum(C_fee_entries) +
     deposit · H_HTR  −  withdraw · H_HTR
+    + fee_token_charge · H_HTR
 ```
 
 Where:
@@ -426,14 +441,26 @@ Where:
   entries whose token is `DEPOSIT`-version.
 - `withdraw = Σ get_deposit_token_withdraw_amount(amount)` over `MeltHeader`
   entries whose token is `DEPOSIT`-version.
+- `fee_token_charge = FEE_PER_OUTPUT × N_FEE_entries`, where `N_FEE_entries`
+  is the count of `MintHeader` plus `MeltHeader` entries whose token is
+  `FEE`-version. This charge is always paid by the user (it lands on the
+  output side regardless of mint vs. melt).
 
 The `deposit` and `withdraw` terms move HTR through the equation in the same
 way the existing transparent verifier handles them
 (`_check_token_permissions_and_deposits`), but now sourced from the public
 header amounts instead of inferred from transparent value flows.
 
-`FEE`-version tokens contribute neither deposit nor withdraw (matching current
-behavior).
+`FEE`-version tokens skip the 1% deposit/withdraw rule but pay
+`FEE_PER_OUTPUT` per `MintHeader` / `MeltHeader` entry (the
+`fee_token_charge` term above). This matches the spirit of the transparent
+per-output rule — every declared mint/melt action of a `FEE`-version token
+costs the issuer one chargeable-output-equivalent — without leaking
+recipient counts: the charge is per header entry, not per shielded
+recipient. An `AmountShieldedOutput` of a `FEE`-version token does not also
+incur a per-shielded-recipient `FEE_PER_OUTPUT` charge; only the generic
+`FEE_PER_AMOUNT_SHIELDED_OUTPUT` (and `FEE_PER_FULL_SHIELDED_OUTPUT` for
+`FullShieldedOutput`) applies on top of the per-entry charge.
 
 ### Rule M5: Trivial commitment protection still applies
 
@@ -447,7 +474,10 @@ provides no entropy that would otherwise mask a single shielded output.
 A shielded mint/melt transaction MUST carry a `FeeHeader` (parent Rule 2).
 Deposit and withdraw amounts derived from `MintHeader`/`MeltHeader` are NOT
 declared in the FeeHeader — they are folded into the balance equation
-separately as Rule M4 specifies.
+separately as Rule M4 specifies. The per-entry `FEE_PER_OUTPUT` charge for
+`FEE`-version `MintHeader`/`MeltHeader` entries is also handled in the
+balance equation (not in FeeHeader); FeeHeader continues to cover only
+chargeable transparent outputs and shielded outputs.
 
 ## 4.3 Surjection-domain extension
 
@@ -687,10 +717,12 @@ equation.
    deposit equals 1% of the committed amount); (b) loss of the public
    "supply auditor" property that lets any node compute total supply per
    token; (c) divergent behavior between `DEPOSIT`- and `FEE`-version tokens
-   (the latter is straightforward to shield since fees are per-output). The
-   choice is a business decision about how much auditability to trade away.
-   This RFC's plaintext design can be retrofitted later via a new feature
-   flag without invalidating already-issued tokens.
+   (this RFC charges `FEE`-version entries one `FEE_PER_OUTPUT` per
+   `MintHeader`/`MeltHeader` entry rather than per shielded recipient, so
+   the per-entry charge is preserved without leaking the recipient count).
+   The choice is a business decision about how much auditability to trade
+   away. This RFC's plaintext design can be retrofitted later via a new
+   feature flag without invalidating already-issued tokens.
 5. **Authority-output presence requirement.** Rule M2 requires an authority
    *input* but does not require the transaction to produce a corresponding
    authority *output*. Should we additionally require authority retention by
