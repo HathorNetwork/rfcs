@@ -214,11 +214,75 @@ Genesis UTXO (1B HTR)
 
 ### Race-condition freedom
 
-The pool achieves race-condition freedom through JavaScript's
-single-threaded event loop. `reserveUtxo()` performs a synchronous
-array `shift()` — the dequeue completes atomically before any other
-request handler can execute. No locks, mutexes, or compare-and-swap
-operations are needed.
+`reserveUtxo()` performs a synchronous array `shift()` — the dequeue
+itself is atomic in the JS event loop, with no locks needed. But
+`fundAddress` does not end at the dequeue: it spans two async
+boundaries (`buildTxTemplate` and `runFromMining`). During those
+yields, any other request handler — including `rescanUtxoPool` — can
+run. Atomicity of the dequeue alone is not sufficient.
+
+The following invariants close that gap and make the helper's
+correctness independent of wallet-lib internals:
+
+1. **Reserved set.** A UTXO returned by `reserveUtxo` is added to a
+   helper-owned `reservedSet` in the same synchronous tick as the
+   dequeue. The set is keyed by `txId:index`.
+2. **Rescan exclusion.** `rescanUtxoPool` MUST exclude any UTXO in
+   `reservedSet` when repopulating buckets from
+   `wallet.getAvailableUtxos()`. This prevents an in-flight UTXO
+   (already dequeued by one request, but not yet hidden by wallet-lib
+   on the wallet side) from being re-added to a bucket and handed to
+   a second request.
+3. **Observed-then-released cleanup.** A reservation is cleared only
+   after the consuming tx is observed as confirmed by the wallet —
+   i.e., the spending tx appears in `wallet.getTx(txId)` (or arrives
+   via the `'new-tx'` event) — **not** merely after `runFromMining`
+   resolves. On non-stale failure paths the UTXO is returned to its
+   bucket and the reservation is released in the same tick. On
+   stale-utxo retry, the reservation is released before the
+   recursive `attemptFund` call so the next reservation is not
+   blocked.
+4. **Bounded fallback.** Observation is bounded by
+   `OBSERVATION_TIMEOUT_MS` (default 30s). On timeout the reservation
+   is released with a warn-level log; the pool's correctness still
+   holds because `wallet.getAvailableUtxos()` will not list the
+   spent UTXO from that point forward.
+
+These invariants make correctness independent of
+`utxosSelectedAsInput`, `SELECT_OUTPUTS_TIMEOUT`, the mine-vs-sign
+timing inside `mineTx`, and WS propagation latency — all wallet-lib
+internals (see "Dependencies on wallet-lib internals" below).
+
+### Dependencies on wallet-lib internals
+
+The helper depends only on the following **public** API surface of
+[hathor-wallet-lib](https://github.com/HathorNetwork/hathor-wallet-lib):
+
+- `wallet.getAvailableUtxos({ token })` — async iterator used by the
+  rescan path.
+- `wallet.buildTxTemplate(template, options)` — builds and signs the
+  funding/split transaction.
+- `wallet.getTx(txId)` and the `'new-tx'` event on the wallet's
+  EventEmitter — used to confirm the consuming tx has been observed
+  before clearing a reservation.
+- `SendTransaction#runFromMining()` — broadcasts the transaction.
+
+The helper deliberately does **not** rely on the following private
+wallet-lib internals, even though they incidentally protect against
+some races:
+
+- `Storage.utxosSelectedAsInput` (the in-memory transient lock map).
+- `SELECT_OUTPUTS_TIMEOUT` (the 60-second auto-release on the
+  transient lock).
+- The exact moment within `SendTransaction#runFromMining` at which
+  `updateOutputSelected(true)` is called (currently inside `mineTx`,
+  not at signing).
+- The asynchronous, fire-and-forget propagation from `enqueueOnNewTx`
+  to the eventual `spent_by` write.
+
+Each of these could change in a minor wallet-lib version bump.
+With the `reservedSet` invariants above in place, no such change can
+silently break helper correctness.
 
 ### UTXO classification
 
