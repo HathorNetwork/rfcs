@@ -60,7 +60,12 @@ Both are required only for shielded transactions. Transparent-only mint/melt
 transactions (no shielded inputs and no shielded outputs) continue to use the
 existing implicit amount-balance equation — no header needed.
 
-A given token may appear in at most one entry across both headers.
+A given token may appear in **either** `MintHeader` **or** `MeltHeader` in a
+single transaction, never both (see Rule M3).
+
+Concrete worked examples for `DEPOSIT`-version tokens (with HTR deposit/withdraw
+math) appear in §3.4 and §3.6; an example for `FEE`-version tokens (with
+per-output fee math) appears in §3.5.
 
 ## 2. Token creation can now be shielded
 
@@ -145,6 +150,113 @@ Headers:
 
 The melted amount is public; the input commitment is opaque on-chain.
 
+### 3.4 DEPOSIT-version token: mint with HTR deposit
+
+Token `TD` is `DEPOSIT`-version. The issuer mints 100,000 TD across two
+shielded outputs. The Hathor 1% deposit rule applies: minting 100,000 TD costs
+1,000 HTR. Assume the standard per-output fee is 1 HTR and shielded outputs
+cost 1 HTR each (`FEE_PER_AMOUNT_SHIELDED_OUTPUT`).
+
+```
+Inputs:
+  - mint authority of TD (transparent)
+  - HTR (transparent), 1,002 HTR available
+
+Outputs:
+  - mint authority of TD (transparent, retained)
+  - 2 shielded TD outputs (totals 100,000 TD)
+
+Headers:
+  - FeeHeader: 2 HTR fee (2 × FEE_PER_AMOUNT_SHIELDED_OUTPUT)
+  - ShieldedOutputsHeader: 2 shielded outputs
+  - MintHeader: [(token_index=1, amount=100000)]
+
+Verifier:
+  - deposit = 0.01 × 100,000 = 1,000 HTR (derived from MintHeader, applied
+    as a public output term on H_HTR).
+  - Augmented balance:
+      sum(C_in) + 100,000·H_TD
+        == sum(C_out) + 1,000·H_HTR + 2·H_HTR
+  - HTR side reduces to: 1,002·H_HTR (input) == 1,000·H_HTR (deposit) + 2·H_HTR (fee).
+  - TD side: 0·H_TD (no input of TD) + 100,000·H_TD == sum(shielded TD commitments).
+```
+
+What observers learn: 100,000 TD were minted; 1,000 HTR were burned for
+deposit; 2 HTR fee was paid. They do not learn how the 100,000 TD were split
+between the two shielded outputs or who the recipients are.
+
+### 3.5 FEE-version token: mint paying per-output fees
+
+Token `TF` is `FEE`-version. The issuer mints 50,000 TF into one transparent
+output of 30,000 TF (paid to a public counterparty) plus one shielded output
+of 20,000 TF (treasury). `FEE`-version tokens have no HTR deposit; per-output
+fees apply instead.
+
+```
+Inputs:
+  - mint authority of TF (transparent)
+  - HTR (shielded), enough for fees
+
+Outputs:
+  - mint authority of TF (transparent, retained)
+  - transparent TF output: 30,000 TF (chargeable)
+  - shielded TF output: 20,000 TF
+  - shielded HTR change
+
+Headers:
+  - FeeHeader:
+      1 × FEE_PER_OUTPUT (one chargeable transparent TF output)
+      + 2 × FEE_PER_AMOUNT_SHIELDED_OUTPUT (two shielded outputs)
+  - ShieldedOutputsHeader: 2 shielded outputs
+  - MintHeader: [(token_index=1, amount=50000)]
+
+Verifier:
+  - No deposit/withdraw on HTR (FEE-version tokens skip the 1% rule).
+  - Augmented balance:
+      sum(C_in) + 50,000·H_TF
+        == sum(C_out) + total_fee·H_HTR
+    where the TF side balances 50,000 newly-minted units against
+    30,000 (transparent) + 20,000 (shielded committed).
+  - Total fee in FeeHeader must match exactly:
+      FEE_PER_OUTPUT × 1 + FEE_PER_AMOUNT_SHIELDED_OUTPUT × 2.
+```
+
+What observers learn: 50,000 TF were minted; 30,000 TF went to a publicly
+visible transparent output; the remaining 20,000 TF entered the shielded
+pool. They do not learn the recipient of the shielded output or the issuer's
+HTR change.
+
+### 3.6 DEPOSIT-version token: melt with HTR withdraw
+
+Token `TD` is `DEPOSIT`-version. The treasurer melts 80,000 TD; this releases
+800 HTR back from the deposit pool to the spender (1% withdraw rule).
+
+```
+Inputs:
+  - melt authority of TD (transparent)
+  - shielded TD input (shielded, holds at least 80,000 TD plus optional change)
+
+Outputs:
+  - melt authority of TD (transparent, retained)
+  - shielded HTR output (carries the 800 HTR withdraw + any change)
+  - optional shielded TD change (if input held more than 80,000)
+
+Headers:
+  - FeeHeader: shielded fees only
+  - ShieldedOutputsHeader
+  - MeltHeader: [(token_index=1, amount=80000)]
+
+Verifier:
+  - withdraw = 0.01 × 80,000 = 800 HTR.
+  - Augmented balance:
+      sum(C_in) + 800·H_HTR
+        == sum(C_out) + 80,000·H_TD + fee·H_HTR
+  - TD side: input commitment holds X TD; output side holds (X − 80,000) TD
+    (in optional change) plus 80,000·H_TD as a public melt term.
+  - HTR side: 800·H_HTR (input from withdraw) is balanced by the recipient's
+    shielded HTR output(s).
+```
+
 ## 4. What remains visible
 
 For every shielded mint/melt transaction, the following remains public:
@@ -225,6 +337,43 @@ entries) is included in the transaction sighash. Mutating any entry invalidates
 all signatures over the transaction. This is required because the declared
 amounts directly affect the verified balance equation.
 
+### Disclosure model
+
+Each entry in `MintHeader` or `MeltHeader` discloses two things: the **token
+reference** (`token_index`) and the **amount**. Their visibility differs.
+
+**Token reference: always transparent.** The token reference is plaintext for
+two reasons that together rule out hiding it:
+
+1. The mint or melt authority output is itself transparent (parent Rule 7) and
+   exposes the token UID via its `token_data`. Hiding the token in the header
+   would leak nothing additional but provide no privacy benefit.
+2. The verifier must read the token's version (`NATIVE` / `DEPOSIT` / `FEE`) to
+   apply the correct deposit-or-fee logic. A hidden token would block this
+   lookup, requiring an unbounded ZK proof of "I am applying the right rule for
+   the right version".
+
+**Amount: transparent in this RFC; shielded amounts are a pending business
+decision.** The headers in this RFC carry plaintext `u64` amounts. The
+trade-off is auditability vs. privacy:
+
+- *Transparent amounts (this RFC's choice).* Total token supply is publicly
+  computable per token by summing `MintHeader` and `MeltHeader` entries across
+  the chain. Compatible with light-client supply auditors. **Required** for
+  `DEPOSIT`-version tokens because the HTR deposit is `0.01 × amount` and must
+  be verifiable against the public amount.
+- *Shielded amounts (alternative, deferred).* The header carries a Pedersen
+  commitment to the amount plus a range proof. Total supply becomes opaque on
+  chain. Feasible for `FEE`-version tokens (fees are per-output, not
+  per-amount). For `DEPOSIT`-version tokens this requires an additional ZK
+  proof binding the HTR deposit to 1% of the committed amount, which is
+  substantially more machinery than the rest of this RFC.
+
+Because the choice has direct consequences for auditability — and because the
+two token versions admit different complexity for shielded amounts — the RFC
+treats this as a pending business decision (see [Unresolved
+Questions](#unresolved-questions)).
+
 ## 4.2 Verification rules
 
 Six new rules govern shielded mint/melt. All rules from the parent RFC
@@ -244,11 +393,16 @@ at least one mint authority input for `tx.tokens[token_index − 1]`.
 Symmetric for `MeltHeader` and melt authority. Authority inputs and outputs
 remain transparent (parent Rule 7).
 
-### Rule M3: No cross-token offsetting
+### Rule M3: One direction per token
 
-A given token MUST NOT appear in both `MintHeader` and `MeltHeader` of the
-same transaction. Such offsetting is meaningless (the same net effect is
-achieved by adjusting the amounts) and would complicate supply accounting.
+For any given token, a single transaction may declare **either** a mint
+**or** a melt, never both. Concretely: a `token_index` that appears in
+`MintHeader` MUST NOT appear in `MeltHeader`, and vice versa.
+
+Self-offsetting (mint X and melt Y of the same token in one tx) is meaningless
+because the same net supply effect is achievable by adjusting amounts.
+Permitting it would also complicate per-token supply accounting on the
+indexer side without delivering any user-visible capability.
 
 ### Rule M4: Augmented homomorphic balance
 
@@ -525,9 +679,18 @@ equation.
    `NanoHeader` and be a shielded mint/melt? Phase-1 simplification: forbid
    the combination; reconsider when shielded Nano Contracts are designed
    (parent RFC §4.8).
-4. **Per-entry amount caps.** Should `amount` be bounded below `2^64` (e.g.,
-   `2^53` for safe JSON serialization in clients)? Current parent RFC range
-   proofs already cover `[1, 2^64)`; aligning is the simplest choice.
+4. **Transparent vs. shielded mint/melt amounts.** This RFC declares amounts
+   as plaintext `u64` (see [Disclosure model](#disclosure-model)). The
+   alternative — Pedersen commitments with range proofs — would hide token
+   supply entirely from public observers, at the cost of: (a) substantial
+   extra ZK machinery for `DEPOSIT`-version tokens (a proof that the HTR
+   deposit equals 1% of the committed amount); (b) loss of the public
+   "supply auditor" property that lets any node compute total supply per
+   token; (c) divergent behavior between `DEPOSIT`- and `FEE`-version tokens
+   (the latter is straightforward to shield since fees are per-output). The
+   choice is a business decision about how much auditability to trade away.
+   This RFC's plaintext design can be retrofitted later via a new feature
+   flag without invalidating already-issued tokens.
 5. **Authority-output presence requirement.** Rule M2 requires an authority
    *input* but does not require the transaction to produce a corresponding
    authority *output*. Should we additionally require authority retention by
