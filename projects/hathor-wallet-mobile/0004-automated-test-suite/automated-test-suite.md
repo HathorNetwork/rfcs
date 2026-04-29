@@ -76,14 +76,9 @@ The PoC includes component tests for the BackupWords screen that validate **both
 
 ### Layer 4: E2E tests (Maestro)
 
-Full user flows executed on a running iOS or Android simulator. Maestro interacts with the app through the OS accessibility layer — the same API used by screen readers — and never injects code into the app's JavaScript runtime.
+Full user flows executed on a running iOS or Android simulator. Maestro drives the app through the OS accessibility layer (the same API used by screen readers) and never injects code into the JavaScript runtime, so it stays compatible with the app's LavaMoat/SES hardening.
 
-```bash
-# Requires: simulator running + Metro bundler serving the app
-maestro test .maestro/flows/walletCreation.yaml
-```
-
-This is the layer with the most implementation complexity: making React Native 0.77 + New Architecture (Fabric) reliably tappable from XCUITest-based tools requires three independent production-code workarounds plus a custom switch component and `testID` props. See the [Phase 4 E2E deep-dive annex](./phase-4-e2e-deep-dive.md) for the full per-issue reasoning, upstream-issue links, code examples, and end-to-end verification.
+The implementation is non-trivial on React Native 0.77 + New Architecture (Fabric): three independent production-code workarounds plus a custom switch component and `testID` props are required to make the app reliably tappable from XCUITest-based tools. The full reasoning, upstream-issue links, code examples, end-to-end verification, and the wallet-creation flow walkthrough all live in the [Phase 4 E2E deep-dive annex](./phase-4-e2e-deep-dive.md).
 
 ## What the E2E covers and what it doesn't
 
@@ -100,27 +95,26 @@ Human QA remains essential for the right column. E2E automation takes over the r
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-## Production code changes (Phase 4 summary)
+## Production code changes
 
-The app requires changes to work with E2E automation tools on React Native 0.77 + New Architecture (Fabric). **Three independent issues** must each be addressed; fixing only one or two is not enough — XCUITest can find the element by `testID` and even register the synthetic tap, yet the tap never reaches the JS `onPress`. Two further changes round out the set:
-
-1. **Accessibility tree:** `accessible={false}` on non-interactive layout Views.
-2. **Pressable migration:** `Pressable` instead of `TouchableOpacity` for app buttons, with a JS-level `disabled` guard.
-3. **Flex-container layout:** buttons rendered as siblings of, not inside, `flex: 1, justifyContent: 'flex-end'` containers.
-4. **Custom `ToggleSwitch`** replacing the native `<Switch>` (a separate Fabric bug).
-5. **`testID` props** on key interactive elements.
-
-The first three are **framework-agnostic** — every XCUITest-based tool (Maestro, Detox, Appium) hits the same iOS issues. With all changes applied, the full Maestro `walletCreation.yaml` flow passes 30+ steps end-to-end on iPhone 17 / iOS 26.4 / Xcode 26.4.1; removing any one of fixes 1, 2, or 3 causes the very first button tap (`welcome-start-button`) to silently fail.
+Phase 4 (E2E) requires five classes of production-code changes — three iOS Fabric/XCUITest workarounds, a custom `ToggleSwitch` replacing the native `<Switch>`, and `testID` props on key interactive elements. Per-issue reasoning, upstream-issue links, code examples, and verification all live in the annex: [Phase 4 deep-dive — Production code changes](./phase-4-e2e-deep-dive.md#production-code-changes).
 
 Layers 1-3 add **one** production-code line: a `clearLoadingLocksForTesting` named export from `src/sagas/nanoContract.js` that resets module-level lock state between integration tests. The `ForTesting` suffix marks it as test-only by convention.
 
-This material is too dense to belong inline: each fix has its own problem statement, upstream-issue references, code example, and verification. The full per-issue treatment lives in the annex — see [Phase 4 E2E deep-dive annex — Production code changes](./phase-4-e2e-deep-dive.md#production-code-changes).
+### Accessibility impact for end users
 
-## Wallet creation E2E flow (Phase 4 summary)
+The Phase 4 changes are **mostly testing-only**, with one genuine accessibility win:
 
-The PoC implements the complete wallet creation journey across five screens — WelcomeScreen → InitialScreen → NewWordsScreen → BackupWords (5-step word validation) → ChoosePinScreen — covering 30+ steps end-to-end. The BackupWords validation uses Maestro's `runScript` command with external JavaScript files to read the step number from the accessibility tree, look up the corresponding seed word, and tap the correct option. The component-level tests (Layer 3) additionally cover the **wrong word error path**: selecting an incorrect word shows a failure modal and navigates back.
+- **`accessible={false}` on layout Views — improves accessibility.** The same iOS bug that aggregates a screen's text into one XCUITest-unreachable blob also collapses the screen into a single VoiceOver focus node. Marking layout Views as non-accessible restores per-element focus for screen-reader users. This is the [canonical pattern recommended by Apple and React Native](https://reactnative.dev/docs/accessibility#nested-elements).
+- **Pressable migration & flex-container layout — testing-only, no user impact.** Visually and behaviorally identical to the previous code for human finger taps; only synthetic-tap dispatch is affected.
+- **Custom `ToggleSwitch` — neutral, by design.** The component carries `accessibilityRole="switch"` on its outer `Pressable`, so VoiceOver announces it as a switch the same way UISwitch would. Inner decorative Views are `accessible={false}`.
+- **`testID` props — invisible to end users.**
 
-For the full step-by-step walkthrough, see [Phase 4 E2E deep-dive annex — Wallet creation E2E flow](./phase-4-e2e-deep-dive.md#wallet-creation-e2e-flow).
+In short: Phase 4 trades a small, mostly invisible code-shape cost for testability *and* a non-trivial VoiceOver improvement; nothing in it regresses accessibility.
+
+## Wallet creation E2E flow
+
+The PoC covers the full wallet-creation journey across five screens (Welcome → Initial → NewWords → BackupWords → ChoosePin), 30+ steps end-to-end. Component tests (Layer 3) additionally cover the **wrong word error path** on BackupWords. For the step-by-step walkthrough see [Phase 4 deep-dive — Wallet creation E2E flow](./phase-4-e2e-deep-dive.md#wallet-creation-e2e-flow).
 
 ## Test dependencies (devDependencies only)
 
@@ -170,7 +164,7 @@ Enforce coverage thresholds in Jest config to prevent regression.
 # Drawbacks
 [drawbacks]: #drawbacks
 
-1. **Production code changes for testability.** Five classes of changes are added: `accessible={false}` on layout Views, `Pressable` instead of `TouchableOpacity` (with a JS-level disabled guard), buttons rendered as siblings of `flex: 1` spacers rather than nested inside them, a custom `ToggleSwitch` replacing the native one, and `testID` props. The first is defensible as a11y hygiene; the second through fourth are workarounds for distinct Fabric / XCUITest bugs that hit any RN 0.77+ project regardless of test framework; the fifth has no UX impact. The layout change (#3) is the most invasive — it mildly inverts the conventional "button nested inside its container" pattern, which a developer not aware of the rationale could easily "clean up" back to the broken state. This risk is mitigated by the AI-agent guidance described in [Future Possibilities #7](#future-possibilities) and a code comment near each affected layout pointing to this RFC.
+1. **Production code changes for testability.** Phase 4 adds five classes of changes: one is genuine a11y hygiene that also benefits VoiceOver users (`accessible={false}` on layout Views), three are workarounds for distinct Fabric / XCUITest bugs that hit any RN 0.77+ project regardless of test framework, and one (`testID` props) has no UX impact. See the [Phase 4 deep-dive annex](./phase-4-e2e-deep-dive.md#production-code-changes) for the per-issue rationale. The flex-container layout change is the most invasive — it mildly inverts the conventional "button nested inside its container" pattern, which a developer not aware of the rationale could easily "clean up" back to the broken state. This risk is mitigated by the AI-agent guidance described in [Future Possibilities #7](#future-possibilities) and a code comment near each affected layout pointing to this RFC.
 
 2. **Maestro is a younger tool.** The community is smaller, documentation is less comprehensive for React Native edge cases, and YAML is less expressive than TypeScript for complex test logic (e.g., the BackupWords word lookup requires external JS scripts).
 

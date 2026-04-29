@@ -47,6 +47,8 @@ Related upstream issues:
 
 **Verification.** After this fix the hierarchy dump shows the START button as a discrete `accessibilityText: "STARTˮ` node. Without it, every parent View aggregates the entire screen's text. **But the synthetic tap still doesn't reach JS without fixes #2 and #3.** This is the trap that the docs alone don't warn about.
 
+**Accessibility note.** This is the only Phase 4 change that improves the experience for end users. The same aggregation that breaks XCUITest also collapses the screen into a single VoiceOver focus node, so screen-reader users hear the entire screen as one chunk and cannot focus individual buttons. Marking layout Views as non-accessible restores per-element focus. Fixes #2 (`Pressable` migration), #3 (flex-container layout), #4 (`ToggleSwitch`), and #5 (`testID`) are testing-only — visually and behaviorally identical for human input, with the `ToggleSwitch` carrying `accessibilityRole="switch"` so VoiceOver announces it the same way the native `<Switch>` would.
+
 ### 2. Pressable migration with JS-level disabled guard
 
 **Problem.** Even with the accessibility tree clean, `TouchableOpacity.onPress` does not fire under Fabric + XCUITest. The button is found by `testID`, the synthetic tap is dispatched, and the touch is observed in iOS-level instrumentation — but Fabric's event pipeline does not deliver it as a press to the JS layer. The button visually unrelated, but its callback never runs.
