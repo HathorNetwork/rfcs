@@ -155,7 +155,7 @@ Notes:
 - `spend_partial_address` is PK because it is what the daemon hot path looks up. Lookup is one indexed equality on `VARBINARY(20)`.
 - `shielded_address` (the long base58 string) is **also** indexed because the wallet API needs to resolve "is this string mine" for incoming pay-to-shielded-address requests.
 - `scan_privkey` is stored in plaintext. Encryption-at-rest is out of scope for this design.
-- `catchup_state` is the daemon's per-row marker for whether an upgrading wallet's historical re-scan has visited this address yet; it lets a long-running catch-up resume cleanly across restarts. It has no semantic meaning to the daemon's live ingest path. The full re-scan flow is described in design doc 2.
+- `catchup_state` is the daemon's per-row marker for whether an upgrading wallet's historical re-scan has visited this address yet; it lets a long-running catch-up resume cleanly across restarts. It has no semantic meaning to the daemon's live ingest path. The full re-scan flow is described in the wallet-registration design document.
 - The pair `(wallet_id, shielded_index)` is unique — the same wallet cannot register two shielded keys at the same BIP32 index.
 
 ### `shielded_address_balance` and `shielded_wallet_balance`
@@ -464,7 +464,7 @@ The wire-format and library-stability questions raised during early design have 
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-- **Background batch rewind for catch-up.** When an existing wallet upgrades (the catch-up flow described in design doc 2), the catch-up scan is naturally async and parallel; this design's synchronous-on-the-hot-path choice does not preclude an out-of-band batch worker, it merely declines to use one for the main pipeline.
+- **Background batch rewind for catch-up.** When an existing wallet upgrades (the catch-up flow described in the wallet-registration design document), the catch-up scan is naturally async and parallel; this design's synchronous-on-the-hot-path choice does not preclude an out-of-band batch worker, it merely declines to use one for the main pipeline.
 - **Indexing for view-key delegation.** If the upstream RFC's "view key delegation" feature lands, the indexer is naturally positioned to act as the delegated viewer. The schema accommodates this (the per-row `scan_privkey` is already the only secret needed) without further migrations.
 - **Nullifier-based consumption tracking.** If phase C of the upstream RFC lands nullifiers, `shielded_tx_output` gains an indexed `nullifier` column and the input-parser changes; the rest of the design is unaffected.
 - **Range-proof verification by the indexer.** Currently delegated to the fullnode. If we ever want defense-in-depth, the rewind path can call `verify_range_proof` after rewind for a small extra cost.
