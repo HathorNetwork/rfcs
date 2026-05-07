@@ -70,6 +70,9 @@ in.
 | MR-3   | [Nano Contracts: Oracles](https://github.com/HathorNetwork/rfcs/blob/1st-nano-contract/0000-nano-contracts.md) | Draft | |
 | MR-2   | [Summarize Blocks](https://github.com/HathorNetwork/rfcs/blob/summarizing-blocks/text/0000-summarizing-blocks.md) | Draft | |
 | 25  | [Peer-to-peer Protocol: Sync v2](https://github.com/HathorNetwork/rfcs/blob/master/text/0025-p2p-sync-v2.md) | Draft | - |
+| x402-1 | [x402 Protocol Support](https://github.com/HathorNetwork/rfcs/blob/feat/x402-support/projects/x402/0001-x402-support.md) | Draft | mainnet |
+| x402-2 | [x402 Client SDK (`@hathor/x402-client`)](https://github.com/HathorNetwork/rfcs/blob/feat/x402-support/projects/x402/0002-x402-client-sdk.md) | Draft | mainnet |
+| x402-3 | [x402 Server Middleware (`@hathor/x402-server`)](https://github.com/HathorNetwork/rfcs/blob/feat/x402-support/projects/x402/0003-x402-server-middleware.md) | Draft | mainnet |
 
 
 
