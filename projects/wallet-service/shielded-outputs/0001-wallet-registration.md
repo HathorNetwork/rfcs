@@ -1,5 +1,5 @@
 - Feature Name: `wallet_service_shielded_outputs_registration`
-- Start Date: 2026-05-04
+- Start Date: 2026-05-12
 - RFC PR: (to be filled)
 - Hathor Issue: (to be filled)
 - Author: André Carneiro
@@ -7,18 +7,20 @@
 # Summary
 [summary]: #summary
 
-Extend the wallet-service registration flow so a wallet can attach **scan and spend keys for shielded outputs** either at creation or later. New wallets register with `{ xpubkey, auth_xpubkey, scan_xpriv, spend_xpub }` in a single call; existing transparent-only wallets attach the shielded keys via a dedicated upgrade endpoint that triggers a historical re-scan. Shielded address derivation is BIP32 with a gap-limit policy (default 20, matching transparent), but driven by **two paths in lockstep** — `m/44'/280'/1'/0/{i}` (scan) and `m/44'/280'/2'/0/{i}` (spend) at the same `shielded_index`. The scan HD privkey and every per-index `scan_privkey` are stored **in plaintext**; encryption-at-rest is out of scope and described in § *Future possibilities*.
+Extend the wallet-service registration flow so a wallet can attach **scan and spend keys for shielded outputs** either at creation or later. New wallets register with `{ xpubkey, auth_xpubkey, scan_xpriv, spend_xpub }` in a single call; existing transparent-only wallets attach the shielded keys later through the same load endpoint, which triggers a historical re-scan. Shielded address derivation is BIP32 with a gap-limit policy (default 20, matching transparent), driven by **two paths in lockstep** — `m/44'/280'/1'/0/{i}` (scan) and `m/44'/280'/2'/0/{i}` (spend) at the same `shielded_index`. The scan HD privkey and every per-index `scan_privkey` are stored **in plaintext**; encryption-at-rest is out of scope and described in § *Future possibilities*.
+
+Wallet registration interacts with the `shielded_address` table defined in [`0000-daemon-and-database.md`](0000-daemon-and-database.md). That table already holds rows for every spend_address the daemon has observed (with NULL ownership fields), so registration is an UPSERT that **fills in** the ownership fields on existing rows and inserts new rows where the wallet's derived spend_addresses have not been seen on-chain yet.
 
 # Motivation
 [motivation]: #motivation
 
-The [daemon and database design](0000-daemon-and-database.md) establishes that the daemon ingests every shielded output observed on chain and matches owned ones via `spend_partial_address`. That match table (`shielded_address`) has to be populated by *something*. This document specifies that "something":
+The [daemon and database design](0000-daemon-and-database.md) establishes that the daemon ingests every shielded output observed on chain and matches owned ones via the `address` column on `tx_output` against `shielded_address.wallet_id IS NOT NULL`. That match table has to be populated by *something*. This document specifies that "something":
 
 - The API surface a wallet uses to declare its shielded keys (at creation or upgrade).
-- The on-server derivation that turns those keys into `shielded_address` rows.
+- The on-server derivation that turns those keys into ownership rows in `shielded_address`.
 - The historical re-scan that lets an upgrading wallet retroactively claim the shielded outputs it received before it was registered as shielded-enabled.
 
-A second motivation is operational: the wallet-service runs a Lambda-deployed API where CPU per request is cost-sensitive. Doing BIP32 child derivation on every API call is significantly more expensive than reading a cached row. Pre-derivation at gap-limit-extension time is the only design that keeps the read path cheap.
+A second motivation is operational: the wallet-service runs a Lambda-deployed API where CPU per request is cost-sensitive. Doing BIP32 child derivation on every API call is significantly more expensive than reading a cached row. Pre-derivation at gap-limit-extension time keeps the read path cheap.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -32,7 +34,7 @@ Address gap-extension is **not** a client-driven operation. It happens automatic
 The contributor must hold three concepts:
 
 - **Shielded index.** A single integer that drives **both** scan and spend derivations at the same position. There is no scenario in this design where `shielded_index` differs between scan and spend; they advance together.
-- **Pre-derivation.** When the API generates `shielded_address` row N, it derives `scan_pubkey[N]`, `spend_pubkey[N]`, and `scan_privkey[N]` synchronously, and writes all three to the row. Once inserted, no further derivation is needed at read time.
+- **Pre-derivation as UPSERT.** When the API generates an ownership row for shielded index N, the daemon (or the API on registration) computes `spend_address` (the on-chain base58 spend address) for that index and runs an `INSERT … ON DUPLICATE KEY UPDATE` against `shielded_address`. If the row exists with NULL ownership (the daemon observed the spend_address on-chain before the wallet claimed it), the UPDATE fills in `wallet_id`, `shielded_index`, `shielded_address` (long-form), `scan_privkey`, `catchup_state`. If the row does not exist, the INSERT creates it. Either way, the row is ready for the daemon's hot path. `scan_pubkey` and `spend_pubkey` are computed as intermediates during derivation but are not stored — they are recoverable on demand from `scan_privkey` (point multiplication) and `wallet.spend_xpub` (BIP32 derivation).
 - **Catch-up scan.** A bounded job that runs once per upgrade or gap-extension. It is **idempotent** (re-running it does not double-credit balances) so it can be retried safely on failure.
 
 ## Worked example: client adds shielded support
@@ -46,7 +48,7 @@ POST /wallet/init
   "authXpubkey":          "...",
   "xpubkeySignature":     "...",
   "authXpubkeySignature": "...",
-  "timestamp":            1746384000,
+  "timestamp":            1746816000,
   "firstAddress":         "...",
 
   "scanXpriv":            "...",
@@ -64,23 +66,40 @@ The server reconciles. It looks up `wallet_alice` and finds it exists with `stat
 2. Validates `scanXprivSignature` and `spendXpubSignature` against `auth_xpubkey/0` to confirm the caller has authority over both new keys.
 3. Confirms the `wallet` row has no `scan_xpriv` stored (this is the upgrade case, not a key-mismatch case).
 4. Sets `wallet.scan_xpriv`, `wallet.spend_xpub`, `shielded_max_gap = 20`, `shielded_status = 'catching-up'`.
-5. Pre-derives 20 shielded addresses (indexes 0..19) and inserts them into `shielded_address` with their `scan_privkey`, `scan_pubkey`, and `spend_pubkey` columns populated.
+5. Pre-derives 20 shielded addresses (indexes 0..19). For each, runs `INSERT … ON DUPLICATE KEY UPDATE` against `shielded_address` to either fill in ownership on a row the daemon had already observed, or insert a new owned row. (`scan_pubkey` and `spend_pubkey` are computed during derivation but not stored.) New ownership rows are written with `catchup_state = 'pending'`.
 6. Enqueues a catch-up job for `wallet_alice`.
 7. Returns 200 with the wallet's status payload, including `shielded_status: 'catching-up'`. The client then polls the existing wallet-status endpoint until `shielded_status` reaches `'ready'`.
 
 The catch-up job (running on the daemon, see § *Re-scan procedure*):
 
-1. Reads the 20 `spend_partial_address` values just inserted for `wallet_alice`.
-2. Issues `SELECT ... FROM shielded_tx_output WHERE spend_partial_address IN (...) AND voided = FALSE` paginated.
-3. For each match, runs the same recovery logic as the live ingest path (rewind, validate, write `recovered_value` / `recovered_token_id`, apply to balance/history).
+1. Reads the spend_addresses just claimed by `wallet_alice` with `catchup_state = 'pending'`.
+2. Issues a paginated query against `tx_output` joined to `shielded_tx_output_data`:
+   ```sql
+   SELECT t.tx_id, t.index, t.mode, t.address, t.token_id,
+          d.commitment, d.range_proof, d.ephemeral_pubkey,
+          d.token_data, d.asset_commitment, d.surjection_proof,
+          t.voided, t.first_block, s.scan_privkey
+   FROM tx_output t
+   INNER JOIN shielded_tx_output_data d
+     ON (d.tx_id, d.output_index) = (t.tx_id, t.index)
+   INNER JOIN shielded_address s ON s.address = t.address
+   WHERE s.wallet_id = :wallet_id
+     AND s.catchup_state = 'pending'
+     AND t.mode IN (1, 2)
+     AND t.voided = FALSE
+     AND t.recovery_state = 'unowned'
+   ORDER BY t.first_block ASC, t.tx_id ASC
+   LIMIT :M
+   ```
+3. For each row, runs the same recovery logic as the live ingest path (rewind, validate, `UPDATE tx_output SET value=…, token_id=…, recovery_state='recovered' WHERE … AND recovery_state='unowned'`), then calls `updateAddressTablesWithTx`/`updateWalletTablesWithTx` to apply the recovered amount to `address_balance` / `wallet_balance` / `wallet_tx_history` with the appropriate columns.
 4. Emits a `'shielded-catchup-progress'` event per page so the wallet client can render progress.
-5. On completion, transitions `shielded_status` to `'ready'`.
+5. On completion, transitions `shielded_status` to `'ready'` and `shielded_address.catchup_state` to `'done'` for the processed addresses.
 
-If the catch-up surfaces shielded receives at high indices, the catch-up algorithm itself extends the gap (see § *Re-scan procedure* — the algorithm is a fixpoint loop that repeats with newly-derived addresses until `shielded_max_gap` consecutive unused trailing addresses remain). Once Alice's wallet is `shielded_status = 'ready'`, ongoing gap-extension during normal ingest mirrors the transparent path: as the daemon processes a new shielded output that uses a high-index address, it derives more `shielded_address` rows to keep the gap stable.
+If the catch-up surfaces shielded receives at high indices, the catch-up algorithm itself extends the gap (see § *Re-scan procedure* — the algorithm is a fixpoint loop that repeats with newly-derived addresses until `shielded_max_gap` consecutive unused trailing addresses remain). Once Alice's wallet is `shielded_status = 'ready'`, ongoing gap-extension during normal ingest mirrors the transparent path: as the daemon processes a new shielded output that uses a high-index address, it derives more `shielded_address` ownership rows to keep the gap stable.
 
 ### Variant: completely new wallet with shielded support
 
-The client calls the same load endpoint with the full set of keys. The server finds no existing `wallet_alice`, runs the existing transparent creation path (sets `status = 'creating'`), and **in the same atomic step** sets `shielded_status = 'catching-up'`, derives the initial 20 shielded addresses, and enqueues both the transparent and shielded async initialisers. Both halves run in parallel. The client polls until both `status = 'ready'` and `shielded_status = 'ready'`.
+The client calls the same load endpoint with the full set of keys. The server finds no existing `wallet_alice`, runs the existing transparent creation path (sets `status = 'creating'`), and **in the same atomic step** sets `shielded_status = 'catching-up'`, derives the initial 20 shielded ownership rows (each via the UPSERT described above), and enqueues both the transparent and shielded async initialisers. Both halves run in parallel. The client polls until both `status = 'ready'` and `shielded_status = 'ready'`.
 
 ### Variant: client without shielded support
 
@@ -121,7 +140,7 @@ The existing endpoint that creates-or-resumes a wallet (handler `wallet.load` in
   "authXpubkey":          "...",
   "xpubkeySignature":     "...",
   "authXpubkeySignature": "...",
-  "timestamp":            1746384000,
+  "timestamp":            1746816000,
   "firstAddress":         "...",
 
   // Optional. All-or-none — if any is provided, all must be.
@@ -135,7 +154,7 @@ The existing endpoint that creates-or-resumes a wallet (handler `wallet.load` in
 Validation of the shielded fields:
 
 - All-or-none: if any of `scanXpriv`, `spendXpub`, `scanXprivSignature`, `spendXpubSignature` is present, all must be (`400 Bad Request` otherwise).
-- Both signatures verified against `authXpubkey/0` using the existing `verifySignature` helper (the same primitive used for `xpubkeySignature` and `authXpubkeySignature`).
+- Both signatures verified against `authXpubkey/0` using the existing `verifySignature` helper.
 - Server confirms the spend xpub is a real BIP32 xpub (parses without error). No equivalent check on `scanXpriv` is necessary beyond signature validation.
 
 #### Reconciliation table
@@ -145,9 +164,9 @@ The handler reconciles its stored state against the submitted body. The matrix i
 | Wallet exists? | `wallet.scan_xpriv` already stored? | Shielded fields in request? | Server behaviour |
 |---|---|---|---|
 | No | n/a | No | Existing transparent creation path. `shielded_status = 'none'`. |
-| No | n/a | Yes | Transparent creation path **and** shielded init in the same atomic step: set `scan_xpriv`, `spend_xpub`, `shielded_max_gap = 20`; pre-derive 20 shielded addresses; `shielded_status = 'catching-up'`; enqueue catch-up job. |
+| No | n/a | Yes | Transparent creation path **and** shielded init in the same atomic step: set `scan_xpriv`, `spend_xpub`, `shielded_max_gap = 20`; pre-derive 20 shielded ownership rows via UPSERT against `shielded_address`; `shielded_status = 'catching-up'`; enqueue catch-up job. |
 | Yes | No | No | Existing transparent already-loaded behaviour: return current status. |
-| Yes | No | Yes | **Upgrade case.** Verify shielded signatures; set `scan_xpriv`, `spend_xpub`, `shielded_max_gap = 20`; pre-derive 20 shielded addresses; `shielded_status = 'catching-up'`; enqueue catch-up job; return current status. |
+| Yes | No | Yes | **Upgrade case.** Verify shielded signatures; set `scan_xpriv`, `spend_xpub`, `shielded_max_gap = 20`; pre-derive 20 shielded ownership rows via UPSERT against `shielded_address`; `shielded_status = 'catching-up'`; enqueue catch-up job; return current status. |
 | Yes | Yes (same as submitted) | Yes | No-op for the shielded half. Return current status. |
 | Yes | Yes (different from submitted) | Yes | **Reject (`409 Conflict`).** Silently overwriting registered shielded keys is a security violation. |
 | Yes | Yes | No | No-op. The client did not provide shielded data; this is **never** treated as a request to disable shielded. |
@@ -180,7 +199,7 @@ Clients poll the existing `GET wallet/status` endpoint to observe both `status` 
 
 There is **no** client-facing gap-extension endpoint. The transparent path doesn't have one (gap-extension is a daemon-side side-effect of `addNewAddresses` in `packages/daemon/src/services/index.ts` whenever `last_used_address_index` advances within `max_gap` of the highest-derived index), and the shielded path mirrors it.
 
-Concretely: when the daemon's shielded ingest flow recovers an output at `shielded_index = N`, it updates `wallet.last_used_shielded_index = max(N, current)` and, if `last_used_shielded_index + shielded_max_gap > highest_derived_shielded_index`, derives additional `shielded_address` rows in the same DB transaction. The reused helper is the `generateAddresses` library function (already used for transparent), parametrised with the spend xpub and scan xpriv.
+Concretely: when the daemon's shielded ingest flow recovers an output at `shielded_index = N`, it updates `wallet.last_used_shielded_index = max(N, current)` and, if `last_used_shielded_index + shielded_max_gap > highest_derived_shielded_index`, derives additional ownership rows in the same DB transaction via UPSERT against `shielded_address`. The reused helper is the `generateAddresses` library function (already used for transparent), parametrised with the spend xpub and scan xpriv.
 
 The client requests "the next available shielded address" via the same endpoint that exists for transparent (`GET wallet/addresses/new`), extended to take an optional `kind=shielded` query parameter. That endpoint never derives — it only reads from the pool the daemon maintains.
 
@@ -196,22 +215,24 @@ const scanChild  = bip32.derive(scanXpriv, `0/${i}`);   // child of m/44'/280'/1
 const spendChild = bip32.derive(spendXpub,  `0/${i}`);  // child of m/44'/280'/2'
 
 const scanPriv   = scanChild.privateKey;     // 32 bytes
-const scanPub    = scanChild.publicKey;      // 33 bytes compressed
-const spendPub   = spendChild.publicKey;     // 33 bytes compressed
+const scanPub    = scanChild.publicKey;      // 33 bytes compressed (intermediate; not stored)
+const spendPub   = spendChild.publicKey;     // 33 bytes compressed (intermediate; not stored)
 
-const spendPartialAddress = hash160(spendPub);            // 20 bytes — match key
-const shieldedAddress     = encodeShieldedAddress(scanPub, spendPub);  // base58, ≤100 chars
+// On-chain spend address: base58(network_byte || hash160(spendPub) || checksum) — the match key.
+const spendAddress    = encodeSpendAddress(spendPub);         // base58, ≤34 chars
+const shieldedAddress = encodeShieldedAddress(scanPub, spendPub);  // base58, ≤100 chars
 
-await db.insertShieldedAddress({
-  spend_partial_address: spendPartialAddress,
-  wallet_id:             wallet.id,
-  shielded_index:        i,
-  shielded_address:      shieldedAddress,
-  scan_privkey:          scanPriv,
-  scan_pubkey:           scanPub,
-  spend_pubkey:          spendPub,
+await db.upsertShieldedAddressOwnership({
+  address:          spendAddress,
+  wallet_id:        wallet.id,
+  shielded_index:   i,
+  shielded_address: shieldedAddress,
+  scan_privkey:     scanPriv,
+  catchup_state:    'pending',
 });
 ```
+
+`upsertShieldedAddressOwnership` is `INSERT INTO shielded_address (address, wallet_id, shielded_index, shielded_address, scan_privkey, catchup_state, created_at) VALUES (?, ?, ?, ?, ?, 'pending', NOW()) ON DUPLICATE KEY UPDATE wallet_id = VALUES(wallet_id), shielded_index = VALUES(shielded_index), shielded_address = VALUES(shielded_address), scan_privkey = VALUES(scan_privkey), catchup_state = COALESCE(catchup_state, 'pending')`. The COALESCE on `catchup_state` is defensive: if for any reason the row already has `'done'` (e.g., a previous registration that was rolled back at a higher layer), we don't accidentally reset it to `'pending'` and re-run catch-up.
 
 `encodeShieldedAddress` produces the user-facing string:
 
@@ -225,7 +246,7 @@ The `network_byte` distinguishes shielded mainnet, shielded testnet, and any fut
 
 ## Re-scan procedure
 
-The catch-up job runs on the daemon (not in the Lambda API) because it is unbounded in duration and must not block API request capacity. The single trigger is the wallet-load endpoint reconciling a wallet that just received its first shielded keys (the upgrade case, or the new-shielded-wallet case). Catch-up starts with the freshly-derived initial gap of `shielded_max_gap` addresses (default 20).
+The catch-up job runs on the daemon (not in the Lambda API) because it is unbounded in duration and must not block API request capacity. The single trigger is the wallet-load endpoint reconciling a wallet that just received its first shielded keys (the upgrade case, or the new-shielded-wallet case). Catch-up starts with the freshly-derived initial gap of `shielded_max_gap` ownership rows (default 20).
 
 Catch-up must respect the BIP32 gap-limit invariant: it cannot stop until there are `shielded_max_gap` consecutive unused trailing shielded addresses. If the initial gap surfaces high-index receives, the algorithm derives more addresses and continues. This mirrors the transparent restoration loop in `generateAddresses` (`do { … } while (lastUsedAddressIndex + maxGap > highestCheckedIndex)`).
 
@@ -233,36 +254,42 @@ Job algorithm (idempotent, fixpoint loop):
 
 ```
 loop:
-  1. Read the candidate spend_partial_address set:
-       SELECT spend_partial_address, shielded_index, scan_privkey
-       FROM shielded_address
-       WHERE wallet_id = :wallet_id
-         AND catchup_state = 'pending'
+  1. Read the candidate ownership set:
+       SELECT s.address, s.shielded_index, s.scan_privkey
+       FROM shielded_address s
+       WHERE s.wallet_id = :wallet_id
+         AND s.catchup_state = 'pending'
 
      If empty → goto step 4.
 
-  2. Process each (spend_partial_address, scan_privkey) in batches of M:
-       a. SELECT tx_id, output_index, mode, ephemeral_pubkey, commitment,
-                 range_proof, asset_commitment, token_data, voided, first_block
-          FROM shielded_tx_output
-          WHERE spend_partial_address IN (...)
-            AND voided = FALSE
-            AND recovery_state = 'unowned'
-          ORDER BY first_block ASC, tx_id ASC
+  2. Process each (address, scan_privkey) in batches of M:
+       a. SELECT t.tx_id, t.index, t.mode, t.token_id,
+                 d.ephemeral_pubkey, d.commitment, d.range_proof,
+                 d.token_data, d.asset_commitment, t.first_block
+          FROM tx_output t
+          INNER JOIN shielded_tx_output_data d
+            ON (d.tx_id, d.output_index) = (t.tx_id, t.index)
+          WHERE t.address IN (...candidate addresses...)
+            AND t.mode IN (1, 2)
+            AND t.voided = FALSE
+            AND t.recovery_state = 'unowned'
+          ORDER BY t.first_block ASC, t.tx_id ASC
           LIMIT M
 
        b. For each row:
             - rewindAmount/FullShieldedOutput
-            - on success: UPDATE shielded_tx_output SET recovery_state='recovered',
-                          recovered_value=..., recovered_token_id=...
-                          WHERE tx_id=... AND output_index=...
+            - on success: UPDATE tx_output SET recovery_state='recovered',
+                          value=..., token_id=...
+                          WHERE tx_id=... AND index=...
                           AND recovery_state='unowned'
-            - apply to shielded_address_balance / shielded_wallet_balance / history
+            - apply to address_balance / wallet_balance / wallet_tx_history
+              via updateAddressTablesWithTx/updateWalletTablesWithTx (the same
+              helpers used by the live ingest path, dispatching on mode).
             - if this row matched a higher-index address than the wallet's current
               last_used_shielded_index, advance last_used_shielded_index.
 
        c. Mark progress: UPDATE shielded_address SET catchup_state='done'
-          WHERE spend_partial_address IN (...)
+          WHERE address IN (...processed addresses...) AND wallet_id = :wallet_id
 
   3. Gap-extension check (the fixpoint step):
        last_used   = wallet.last_used_shielded_index   (-1 if no address has received yet)
@@ -270,8 +297,8 @@ loop:
        max_gap     = wallet.shielded_max_gap
 
        If last_used + max_gap > highest:
-         - Derive shielded_address rows for indexes (highest+1)..(last_used+max_gap),
-           inserting them with catchup_state = 'pending'.
+         - Derive shielded_address ownership rows for indexes (highest+1)..(last_used+max_gap),
+           inserting via the UPSERT helper with catchup_state = 'pending'.
          - Update wallet.last_used_shielded_index if last_used was advanced in step 2.
          - goto step 1 — the loop will scan the freshly-derived addresses.
 
@@ -292,14 +319,14 @@ The balance update is **not** idempotent on its own — the algorithm relies on 
 
 Pagination size `M` is configurable; a reasonable default is 200 (~200 ms per batch at ~1 ms per rewind on commodity hardware).
 
-`catchup_state` is a column on `shielded_address` (defined in the [daemon and database design](0000-daemon-and-database.md) § *Schema additions*); it lets the job resume cleanly across restarts. Newly-derived rows from the gap-extension step are inserted with `catchup_state = 'pending'`, so a job that crashes between iterations resumes cleanly on the next run.
+`catchup_state` is a column on `shielded_address` (defined in the [daemon and database design](0000-daemon-and-database.md) § *Schema changes*); it lets the job resume cleanly across restarts. Newly-derived ownership rows from the gap-extension step are inserted with `catchup_state = 'pending'`, so a job that crashes between iterations resumes cleanly on the next run.
 
 ### Re-scan ordering and reorgs
 
-The catch-up job reads `shielded_tx_output` rows that the live ingest path is also writing to. Two interaction concerns:
+The catch-up job reads `tx_output` and `shielded_tx_output_data` rows that the live ingest path is also writing to. Two interaction concerns:
 
-- **Live writes during catch-up.** A new vertex containing a shielded output for a catching-up wallet is processed by the live path in the normal way (it sees the wallet's `shielded_address` row and recovers in-line). The catch-up job will then also see that row but the `recovery_state = 'unowned'` filter excludes already-recovered outputs. No double credit.
-- **Reorgs during catch-up.** A reorg that voids a tx the catch-up job already credited reverses the balance through the standard `voidShieldedOutputs` path. The catch-up job does not need special reorg handling.
+- **Live writes during catch-up.** A new vertex containing a shielded output for a catching-up wallet is processed by the live path in the normal way (it sees the wallet's `shielded_address` ownership row and recovers in-line). The catch-up job will then also see that row, but the `recovery_state = 'unowned'` filter excludes already-recovered outputs. No double credit.
+- **Reorgs during catch-up.** A reorg that voids a tx the catch-up job already credited reverses the balance through the unified void path (which dispatches on `tx_output.mode` to reverse the shielded balance columns). The catch-up job does not need special reorg handling.
 
 ## Storage of scan-side secrets
 
@@ -340,13 +367,17 @@ This behaviour is provisional pending ops-team review.
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
+## Why UPSERT on `shielded_address` instead of INSERT-only?
+
+`shielded_address` already contains rows for every spend_address the daemon has observed on-chain, with NULL ownership fields. When a wallet registers, its derived spend_addresses **may already be present** — Alice's wallet might be receiving shielded outputs before she upgrades her client. An INSERT-only would race with the daemon's observation writes; an UPSERT folds the two paths together: the daemon writes the row first if observation happens first, registration writes it first if registration happens first, and whichever runs second fills in the missing half.
+
 ## Why pre-derive scan privkeys instead of HD-derive on demand?
 
-Discussed in the [daemon and database design](0000-daemon-and-database.md) § *Why per-index pre-derived scan privkeys instead of HD-derive on demand?*. The Lambda environment makes per-request HD derivation a measurable cost; pre-derivation moves it to the gap-extension boundary which is rare. Storage cost of the per-index child privkeys is small.
+The Lambda environment makes per-request HD derivation a measurable cost; pre-derivation moves it to the gap-extension boundary which is rare. Storage cost of the per-index child privkeys is small.
 
 ## Why not store the spend privkey too?
 
-The wallet-service must never hold the spend privkey. This is the entire point of the scan/spend split (option B from the upstream RFC's address-format choice): the wallet-service can read but not steal. Spending is a client responsibility.
+The wallet-service must never hold the spend privkey. This is the entire point of the scan/spend split: the wallet-service can read but not steal. Spending is a client responsibility.
 
 ## Why a separate `shielded_status` instead of reusing `wallet.status`?
 
@@ -354,7 +385,7 @@ A wallet can be transparent-ready while shielded-catching-up. Conflating these i
 
 ## Why not let the client run the catch-up scan and POST results?
 
-Considered (Q5 option C). Rejected because it inverts the trust boundary — the wallet-service would believe the client about which historical outputs it owns, opening a balance-spoofing surface. With server-side catch-up, the wallet-service computes ownership against on-chain commitments it indexed itself.
+Rejected because it inverts the trust boundary — the wallet-service would believe the client about which historical outputs it owns, opening a balance-spoofing surface. With server-side catch-up, the wallet-service computes ownership against on-chain commitments it indexed itself.
 
 ## Why not register `scan_pubkey` (rather than `scan_privkey`) and let the client send rewind requests?
 
@@ -365,7 +396,7 @@ This was the very early "view-only delegation" sketch. It has two problems: (a) 
 
 1. **Catch-up rate limit / backpressure.** A single very active wallet upgrading should not starve other wallets' catch-ups. Likely a token-bucket per wallet plus a global max-concurrent-catchup-jobs setting. Detail deferred to implementation.
 2. **`network_byte` value(s) for the shielded address encoding.** Out of scope for the wallet-service design; must come from the on-chain address-format spec.
-3. **Wallet deletion / shielded-disable flow.** If a user wants to "forget" their shielded keys, what is the effect on `shielded_address`, `shielded_address_balance`, and history? Out of scope; the existing transparent wallet has no delete-key flow either.
+3. **Wallet deletion / shielded-disable flow.** If a user wants to "forget" their shielded keys, what is the effect on `shielded_address` ownership fields, `address_balance`, and history? Out of scope; the existing transparent wallet has no delete-key flow either.
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
@@ -437,5 +468,5 @@ The two pairs use **different** encryption contexts (additional authenticated da
 
 - **Auditor / view-key delegation API.** A wallet could supply scan keys for an auditor account. Architecturally identical to the current upgrade flow with a different policy boundary.
 - **Hardware-wallet-friendly upgrade.** The signature scheme on `scanXprivSignature` / `spendXpubSignature` could be exchanged for a more hardware-wallet-friendly one (e.g., a UR-encoded payload from an air-gapped device).
-- **Optimistic catch-up.** When a wallet is mostly empty (typical for a fresh upgrade), the catch-up scan can short-circuit by checking against a Bloom filter of `spend_partial_address` values that have *ever* received a shielded output. Future optimisation.
-- **Client-side scan key derivation verification.** A small endpoint could let the client verify the server derived the same `spend_partial_address` set as it would, catching integration bugs at registration time.
+- **Optimistic catch-up.** When a wallet is mostly empty (typical for a fresh upgrade), the catch-up scan can short-circuit by checking against a Bloom filter of `address` values that have *ever* received a shielded output (already tracked by the `shielded_address.transactions` counter). Future optimisation.
+- **Client-side scan key derivation verification.** A small endpoint could let the client verify the server derived the same spend-address set as it would, catching integration bugs at registration time.
