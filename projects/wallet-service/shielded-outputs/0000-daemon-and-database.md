@@ -91,6 +91,100 @@ User Alice's wallet has shielded keys registered. Bob sends Alice 1.5 HTR via an
 
 If the same vertex also had transparent outputs, those would be processed in the same loop and contribute to the **same** `wallet_tx_history` row (one row per `(wallet_id, tx_id, token_id)`), with `balance_delta` carrying the transparent delta and `shielded_balance_delta` carrying the shielded delta.
 
+## Worked example: mixed receive (transparent + shielded in one tx)
+
+Bob sends Alice 1.0 HTR via a transparent output **and** 1.5 HTR via an `AMOUNT_SHIELDED` output in the same transaction. Alice's wallet has shielded keys registered.
+
+1. Fullnode emits `NEW_VERTEX_ACCEPTED`. The vertex has `outputs[]` (one entry, 1.0 HTR transparent to Alice) and `shielded_outputs[]` (one entry, 1.5 HTR shielded to Alice).
+2. `handleVertexAccepted` builds the concatenated list and iterates:
+   - **`outputs[0]` (transparent, concatenated index 0).** INSERTs `tx_output` row with `mode = 0`, `address = Alice_transparent_address`, `value = 100`, `token_id = '00'`, `recovery_state = NULL`. The existing transparent ownership lookup against `address` finds `wallet_id = wallet_alice`. Marked for balance update with `kind = 'transparent'`.
+   - **`shielded_outputs[0]` (mode=1, concatenated index 1).** INSERTs `tx_output` row with `mode = 1`, `address = Alice_spend_address`, `value = NULL`, `token_id = '00'` (from `token_data`), `recovery_state = 'unowned'`. INSERTs satellite row with crypto bytes. UPSERTs `shielded_address` (already owned by `wallet_alice` at `shielded_index = 7`). Rewinds → `value = 150`. UPDATEs the `tx_output` row to `value = 150`, `recovery_state = 'recovered'`.
+3. `updateAddressTablesWithTx` runs over both rows in the same call, dispatching on `mode`:
+   - `address_balance` for `(Alice_transparent_address, '00')`: bump `unlocked_balance += 100`, `kind = 'transparent'`.
+   - `address_balance` for `(Alice_spend_address, '00')`: bump `unlocked_balance += 150`, `kind = 'shielded'`.
+4. `updateWalletTablesWithTx` aggregates per-token across both kinds:
+   - `wallet_balance` for `(wallet_alice, '00')`: `unlocked_balance += 100`, `unlocked_shielded_balance += 150`, `transactions += 1`.
+   - `wallet_tx_history`: **one row** for `(wallet_alice, tx_id, '00')` with `balance_delta = 100` and `shielded_balance_delta = 150`.
+5. Emits a single `'new-tx'` event with `balance_changes_by_token: [{ token_id: '00', balance_delta: 100, shielded_balance_delta: 150 }]`.
+6. The DB transaction commits.
+
+Note: the `wallet_tx_history` row is one row, not two. The API derives `output_kind = 'mixed'` from "both deltas non-zero" when it renders this entry.
+
+## Worked example: send a shielded UTXO with shielded change
+
+Alice spends a 4.0 HTR `AMOUNT_SHIELDED` UTXO to send 1.5 HTR shielded to Bob and 2.5 HTR shielded back to herself as change. Bob is not tracked by this wallet-service.
+
+The vertex looks like:
+
+- `inputs[0]`: `(prev_tx_id = T0, prev_index = 5)`, `spent_output = { mode: 1, decoded.address: Alice_spend_address, … }` (the full prior shielded output is on the wire).
+- `outputs[]`: empty.
+- `shielded_outputs[]`: two entries — `[0]` to Bob (1.5 HTR), `[1]` to Alice's change address (2.5 HTR).
+
+1. `handleVertexAccepted` iterates outputs first:
+   - **`shielded_outputs[0]` (Bob's, concatenated index 0).** INSERTs `tx_output` row with `mode = 1`, `address = Bob_spend_address`, `value = NULL`, `token_id = '00'`, `recovery_state = 'unowned'`. INSERTs satellite. UPSERTs `shielded_address` for `Bob_spend_address` — row didn't exist before (this is a brand-new observation), so an INSERT runs with `wallet_id = NULL`, `transactions = 1`. Ownership lookup: `wallet_id IS NULL` → unowned, no rewind, no balance update.
+   - **`shielded_outputs[1]` (Alice's change, concatenated index 1).** INSERTs `tx_output` with same shape as the prior example. UPSERTs `shielded_address` (Alice's change address is owned at `shielded_index = 12`, say). Rewinds → `value = 250`. UPDATEs `tx_output` to `value = 250`, `recovery_state = 'recovered'`.
+2. Then the input loop:
+   - **`inputs[0]`.** `markTxOutputSpent(tx_id=T0, index=5)` runs `UPDATE tx_output SET spent_by = <current_tx_id> WHERE tx_id = T0 AND index = 5`. The kind of the consumed output is read from `input.spent_output.mode = 1` directly — no second query.
+3. `updateAddressTablesWithTx` and `updateWalletTablesWithTx` aggregate every row touched by the vertex:
+   - From the spent input: `-400` shielded delta (Alice's old 4.0 HTR UTXO is now consumed).
+   - From the new owned output `shielded_outputs[1]`: `+250` shielded delta (Alice's change).
+   - From the new unowned output `shielded_outputs[0]`: no balance impact (unowned).
+4. Resulting writes:
+   - `address_balance` for `(Alice_spend_address_of_T0_index_5, '00')`: `unlocked_balance -= 400`, `kind = 'shielded'`.
+   - `address_balance` for `(Alice_change_spend_address, '00')`: `unlocked_balance += 250`, `kind = 'shielded'`.
+   - `wallet_balance` for `(wallet_alice, '00')`: `unlocked_shielded_balance += (-400 + 250) = -150`.
+   - `wallet_tx_history`: one row with `balance_delta = 0`, `shielded_balance_delta = -150`.
+5. Bob's wallet-service (if he uses one) sees the same vertex independently and runs the same flow against his own `shielded_address` table; for him, Bob's output is owned and recovered, and Alice's change is unowned.
+
+The point of this example: **the input's `spent_output.mode` is the only signal needed to dispatch the balance reversal**, and the `UPDATE tx_output SET spent_by = …` works on shielded rows with no special case.
+
+## Worked example: third-party shielded send (nobody on this wallet-service is involved)
+
+Charlie sends Dave a shielded output. Neither Charlie nor Dave has a wallet registered on this wallet-service. The daemon still observes and persists the data — this is how catch-up works when Dave (or Charlie) later registers.
+
+1. `handleVertexAccepted` iterates `shielded_outputs[]`:
+   - INSERTs `tx_output` with `mode = 1`, `address = Dave_spend_address`, `value = NULL`, `token_id = '00'`, `recovery_state = 'unowned'`.
+   - INSERTs satellite row with crypto bytes.
+   - UPSERTs `shielded_address` for `Dave_spend_address` (new row, `wallet_id = NULL`, `transactions = 1`).
+   - Ownership lookup: `wallet_id IS NULL` → no rewind, no balance update.
+2. The input loop processes Charlie's spent input the same way: `UPDATE tx_output SET spent_by = …` (Charlie's prior UTXO was observed by the daemon the same way, with NULL ownership).
+3. `updateAddressTablesWithTx` runs and finds nothing to do (no `wallet_id` owns any of the touched addresses on this service). No `address_balance` / `wallet_balance` writes.
+4. No `'new-tx'` event is emitted to any wallet (no subscriber).
+5. The DB transaction commits.
+
+A week later, Dave registers shielded keys. His registration UPSERTs `shielded_address` rows for his first 20 indexes; one of those addresses **is** the row already created at step 1 above, so the UPSERT fills in `wallet_id`, `scan_privkey`, etc., transitioning the row from "observed, unowned" to "owned, catchup pending". The catch-up job then scans `tx_output WHERE mode IN (1,2) AND recovery_state = 'unowned' AND address IN (Dave's claimed set)`, finds the row written at step 1, runs the rewind, and credits Dave's balance retroactively.
+
+## Worked example: FULLY_SHIELDED receive
+
+Alice receives 0.75 of token `T1` via a `FULLY_SHIELDED` output (mode = 2). The token type is also hidden on the wire.
+
+1. `handleVertexAccepted` iterates `shielded_outputs[]`:
+   - INSERTs `tx_output` with `mode = 2`, `address = Alice_spend_address`, `value = NULL`, `token_id = NULL` (token is hidden — no `token_data` to read), `recovery_state = 'unowned'`.
+   - INSERTs satellite row including `asset_commitment` and `surjection_proof` (the mode-2-only fields).
+   - UPSERTs `shielded_address` (Alice's address, owned).
+   - Ownership lookup hits. Calls `rewindFullShieldedOutput(scan_privkey, ephemeral_pubkey, commitment, range_proof, asset_commitment)`. Returns `{ value: 75, tokenUid: 'T1', assetBlindingFactor: … }`.
+   - Verifies the asset commitment against the recovered token (`verifyAssetCommitment`) — a mandatory step for mode 2.
+   - UPDATEs `tx_output`: `value = 75`, `token_id = 'T1'`, `recovery_state = 'recovered'`.
+2. `updateAddressTablesWithTx` updates `address_balance` for `(Alice_spend_address, 'T1')`, `kind = 'shielded'`, `unlocked_balance += 75`.
+3. `wallet_balance` for `(wallet_alice, 'T1')`: `unlocked_shielded_balance += 75`. If this is the first time wallet_alice has seen token T1, the row is created by the upsert.
+4. `wallet_tx_history` row written with `shielded_balance_delta = 75` for `(wallet_alice, tx_id, 'T1')`.
+
+The point of this example: `token_id` lives in `tx_output` and is filled in by recovery for mode 2, whereas for mode 1 it would have been filled at observe time. The handler dispatches on `mode` to know which.
+
+## Worked example: void of a recovered shielded receive
+
+Two days after the first worked example (Alice received 1.5 HTR shielded), the transaction is reorged out and gets voided.
+
+1. `handleVoidedTx` runs for the vertex.
+2. UPDATEs every `tx_output` row of the vertex: `voided = TRUE` (affects both transparent and shielded rows uniformly).
+3. UPDATEs `wallet_tx_history` and `address_tx_history` rows for the same `tx_id`: `voided = TRUE`.
+4. Reverses the balance deltas by re-running `updateAddressTablesWithTx` / `updateWalletTablesWithTx` with a reversing sign. For each `tx_output` row of the vertex:
+   - The row carries `mode = 1` and `recovery_state = 'recovered'` (it was recovered on receive).
+   - Dispatch on `mode` picks the shielded balance columns. `wallet_balance.unlocked_shielded_balance -= 150` for `(wallet_alice, '00')`. `address_balance.unlocked_balance -= 150` for `(Alice_spend_address, '00')` with `kind = 'shielded'`.
+5. Push notification or WebSocket event emitted to wallet_alice indicating the void.
+
+Crucially: this is the **same** `handleVoidedTx` that runs for a transparent void; the only kind-specific work is the column dispatch inside `updateAddressTablesWithTx`. There is no `voidShieldedOutputs` companion handler. The same observation applies to `handleUnvoidedTx` (re-applies) and `handleVertexRemoved` (delete, with FK cascading the satellite row).
+
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
