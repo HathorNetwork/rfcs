@@ -342,9 +342,8 @@ wallet_balance
   total_received             BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- existing authority columns unchanged
   -- new shielded columns
-  unlocked_shielded_balance  BIGINT          NOT NULL DEFAULT 0,
+  unlocked_shielded_balance  BIGINT UNSIGNED NOT NULL DEFAULT 0,
   locked_shielded_balance    BIGINT UNSIGNED NOT NULL DEFAULT 0,
-  shielded_timelock_expires  INT UNSIGNED    NULL,
   total_shielded_received    BIGINT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (wallet_id, token_id)
 ```
@@ -353,7 +352,7 @@ Notes:
 
 - `transactions` is a combined count. A single tx that touches both kinds for the same token increments by 1, not 2 — matching the natural reading of "transactions for this token in this wallet".
 - Authority bits stay (transparent only).
-- A separate `shielded_timelock_expires` is kept because the timelock-expiry sweep for the two kinds is independent (a transparent UTXO and a shielded UTXO of the same wallet+token can have unrelated unlock schedules).
+- `timelock_expires` stays a single column. The timelock-expiry sweep is unified (one SQL query across `tx_output` regardless of `mode`; see the handlers section below), so a per-kind "next expiry" cache has no consumer — the scheduler reads one row, no per-kind breakdown is exposed by the API, and a single `MIN(timelock)` aggregate over locked rows is the right cache value.
 
 ### `wallet_tx_history` — modified
 
@@ -371,6 +370,28 @@ wallet_tx_history
 ```
 
 One row per `(wallet_id, tx_id, token_id)` regardless of kind mix. The handler that emits the history row writes both columns from the totals computed by `updateWalletTablesWithTx`.
+
+### `token` — modified
+
+```
+token
+  id                     VARCHAR(64)     NOT NULL PRIMARY KEY,
+  name                   VARCHAR(30)     NOT NULL,
+  symbol                 VARCHAR(5)      NOT NULL,
+  -- existing metadata columns unchanged
+  total_supply           BIGINT UNSIGNED NOT NULL DEFAULT 0,             -- NEW
+```
+
+`SUM(tx_output.value)` is structurally wrong once a token has any shielded UTXOs (shielded values are encrypted on chain and held as NULL on `tx_output` until the wallet-service owns the scan key and recovers them). A denormalised `total_supply` on `token` is updated in-place via four independent supply-change paths:
+
+1. **Token creation** — `total_supply` is set to the initial mint amount when the token-creation tx is processed.
+2. **Block reward** (HTR only) — every accepted block increments `total_supply` for HTR by the block reward.
+3. **Mint / melt** — gated on the vertex containing no shielded outputs and at least one authority output. The signed delta is `sum(outputs[token].value) − sum(inputs[token].value)`, **including** burn-address outputs in the outputs sum so the authority-driven delta reflects the real supply change.
+4. **Burn sweep** — gated on the vertex containing no shielded outputs. Every transparent output sent to the burn address subtracts its `value` from that token's `total_supply`. The mint/melt math includes burns in its outputs sum, so the burn sweep handles destruction as a separate, additive correction (no double-count).
+
+The gate on `shielded_outputs.length === 0` is a v1 deferral: shielded mint/melt accounting requires a robust way to identify the authority-driven delta from blinded outputs, which is a follow-up. Until then, any vertex with shielded outputs leaves every involved token's `total_supply` untouched — `getTotalSupply` returns a stale (lower-bound) value for such tokens until the follow-up lands.
+
+Void/unvoid runs paths 2–4 with the sign reversed. Path 1 is reversed by `handleVertexRemoved` when the creation tx is removed during a reorg.
 
 ## Event ingestion
 
@@ -615,6 +636,7 @@ Each existing handler in `packages/daemon/src/services/index.ts` is extended in-
   1. UPDATE `tx_output` SET `voided = TRUE` WHERE `tx_id = ?` — affects both transparent and shielded rows uniformly.
   2. UPDATE `wallet_tx_history` and `address_tx_history` SET `voided = TRUE` for the same `tx_id`.
   3. Reverse the balance deltas by re-running `updateAddressTablesWithTx` / `updateWalletTablesWithTx` with a reversing sign. Inside those functions, `mode` dispatch picks the right columns.
+  4. On the wallet-service side, `rebuildAddressBalancesFromUtxos` recomputes `address_balance` rows for affected addresses. The recompute helper queries (including `getAffectedAddressTotalReceivedFromTxList`) are kind-agnostic at the SQL level: `SUM(value)` skips NULL for unrecovered shielded rows and contributes the recovered portion for recovered ones, and the per-`(address, token)` UPDATE hits the correct kind-discriminated row in `address_balance` (transparent and shielded address spaces are disjoint, so each row is unambiguously one kind).
 
 - `handleUnvoidedTx`: mirror of `handleVoidedTx` (sets `voided = FALSE`; re-applies deltas).
 
@@ -622,7 +644,11 @@ Each existing handler in `packages/daemon/src/services/index.ts` is extended in-
 
 - `handleReorgStarted`: no kind-specific logic; reorgs are realised by the per-vertex remove/void calls that follow.
 
-**Why this is the central argument for the design.** A parallel-tables alternative would add a `…ShieldedOutputs(vertex)` companion call to every one of the four handlers above, each performing the same arithmetic on parallel tables. Even with helpers that share an implementation, the *call sites* multiply, and every future change to the handlers would have to land in two places at once. With this design, the call sites stay the same; the **dispatch on `mode` lives inside the balance-update functions**, which is exactly the layer that already handles the per-row variance the transparent path requires (authority bits, locked vs unlocked, timelock expiry).
+- `unlockTimelockedUtxos` (the periodic timelock-expiry sweep): `getExpiredTimelocksUtxos(now)` returns expired rows from `tx_output` *regardless of `mode`*. `unlockUtxos(utxos)` then:
+  1. Batches a single `dbUnlockUtxos(utxos)` to flip `locked = FALSE` on every row.
+  2. Partitions the input by `(mode, recovery_state)` and runs two batched balance flows — one for transparent rows, one for recovered shielded rows — through the same kind-aware `updateAddressLockedBalance` / `updateWalletLockedBalance` helpers used by the receive/spend paths. Unowned (or recovery-failed) shielded rows get their row-level `locked = FALSE` flip but no balance write; when the wallet later registers and recovery succeeds, the recovery path reads the row's current `locked = FALSE` and credits `unlocked_shielded_balance` directly. No follow-up unlock is needed.
+
+**Why this is the central argument for the design.** A parallel-tables alternative would add a `…ShieldedOutputs(vertex)` companion call to every one of the four vertex handlers above *plus* a parallel `unlockShieldedTimelockedUtxos` sweep job, each performing the same arithmetic on parallel tables. Even with helpers that share an implementation, the *call sites* multiply, and every future change to the handlers would have to land in two places at once. With this design, the call sites stay the same; the **dispatch on `mode` lives inside the balance-update functions**, which is exactly the layer that already handles the per-row variance the transparent path requires (authority bits, locked vs unlocked, timelock expiry).
 
 ## Push notifications and WebSocket updates
 
