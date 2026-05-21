@@ -141,6 +141,11 @@ Scope:
 - Removal of the `cypress/` directory, `cypress.config.ts`, and Cypress devDependencies; explicit note that Cypress was a PoC, not an implementation.
 - Extensions to the agent docs landed in PR 1 — Playwright-specific patterns, `electronApp.evaluate()` conventions, Linux CI `xvfb-run` notes (see [AI agent / contributor documentation](#ai-agent--contributor-documentation)).
 
+Decisions deferred to PR 2:
+
+- **Electron `userData` isolation across Playwright test runs.** `_electron.launch()` accumulates `userData` state across launches unless each test points at an isolated temp dir. The exact fixture shape (per-test temp directory vs. per-suite + manual reset) is settled when the Playwright config is written.
+- **Final `qa/large-values-network/` layout.** The directory's docker-compose is the right shape, but its `checks.py` and `privnet.yml` are part of the legacy human-driven QA flow. Whether PR 2 carves out a sibling `qa/e2e-network/` or extends the existing directory in place is decided alongside the CI wiring.
+
 Out of scope for PR 2: any per-feature E2E coverage beyond the two reference flows.
 
 ### PRs 3..N — Feature-area suites
@@ -353,7 +358,7 @@ Replaces the `cypress-io/github-action` step. Linux-only initially (single `ubun
 
 ### Coverage thresholds
 
-PR 1 leaves the current 1–5% threshold placeholders in `package.json`. A ratchet to meaningful values — 25% overall and 90% on financial utilities is a sensible starting frame — is explicitly a future-possibilities item, gated on the first few feature-area PRs landing.
+PR 1 leaves the current 1–5% threshold placeholders in `package.json`. A ratchet to meaningful values is explicitly a future-possibilities item, gated on the first few feature-area PRs landing. **The exact percentages are decided in the first feature-area PR that enforces them** — 25% overall and 90% on financial utilities is a sensible starting frame, but the precise numbers wait until there is enough coverage data to know what is realistic without creating friction.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -425,9 +430,11 @@ Without automated tests, every feature addition, dependency update, and refactor
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-1. **Electron `userData` isolation across Playwright test runs.** `_electron.launch()` accumulates `userData` state across launches unless each test points at an isolated temp dir. Standard Playwright fixture pattern; the exact shape is decided in PR 2.
-2. **`qa/large-values-network/` long-term layout.** The directory's docker-compose is the right shape but its `checks.py` and `privnet.yml` are part of the legacy human-driven QA flow. Whether PR 2 carves out a sibling `qa/e2e-network/` or extends in place is a layout call left for PR 2.
-3. **Coverage thresholds for the eventual ratchet.** Specific percentages stay TBD and will be decided in the first feature-area PR that wants them enforced. The 25% overall / 90% on financial utilities frame is the starting point.
+No open questions block RFC approval. Three implementation-level choices are deliberately postponed to the PR that needs them and are documented inline:
+
+- Electron `userData` isolation between Playwright runs — decided in PR 2 (see [PR 2 — Reference smoke for Layer 4](#pr-2--reference-smoke-for-layer-4)).
+- Final `qa/large-values-network/` directory layout — decided in PR 2 (see [PR 2 — Reference smoke for Layer 4](#pr-2--reference-smoke-for-layer-4)).
+- Coverage-threshold percentages — decided in the first feature-area PR that enforces them (see [Coverage thresholds](#coverage-thresholds)).
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
