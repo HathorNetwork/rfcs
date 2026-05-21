@@ -20,7 +20,9 @@
 # Summary
 [summary]: #summary
 
-Introduce a multi-layered automated test suite for the Hathor Desktop Wallet ([HathorNetwork/hathor-wallet](https://github.com/HathorNetwork/hathor-wallet)), an Electron + React + Redux + redux-saga app. The suite has four layers — unit, integration, component, and end-to-end — mirroring the structure of the sibling mobile RFC ([HathorNetwork/rfcs#110](https://github.com/HathorNetwork/rfcs/pull/110)). The E2E layer uses Playwright driving Electron via the Chrome DevTools Protocol — the same path Chrome devtools use — which sidesteps the LavaMoat/SES concerns that drove the mobile RFC to Maestro. Work lands incrementally: a reference smoke-only PR for Layers 1–3, a second reference smoke-only PR for Layer 4, then one focused PR per feature area for full coverage.
+Introduce a multi-layered automated test suite for the Hathor Desktop Wallet ([HathorNetwork/hathor-wallet](https://github.com/HathorNetwork/hathor-wallet)), an Electron + React + Redux + redux-saga app. The suite has four layers — unit, integration, component, and end-to-end — mirroring the structure of the sibling mobile RFC ([HathorNetwork/rfcs#110](https://github.com/HathorNetwork/rfcs/pull/110)). The E2E layer uses Playwright driving Electron via the Chrome DevTools Protocol — the same path Chrome devtools use — which sidesteps the LavaMoat/SES concerns that drove the mobile RFC to Maestro.
+
+Work lands incrementally: a reference smoke-only PR for Layers 1–3, a second reference smoke-only PR for Layer 4, then one focused PR per feature area for full coverage.
 
 # Motivation
 [motivation]: #motivation
@@ -32,8 +34,6 @@ The desktop wallet currently has no enforced automated quality gate. Concretely:
 3. **Cypress was attempted as a PoC, never as a real testing layer.** A single welcome-flow spec exists under `cypress/e2e/00-welcome.cy.js`, exercised by `e2e.yml` against `npm start` (the React app served by webpack-dev-server). It does not test the Electron-packaged app, IPC, main-process code, native dialogs, the auto-updater, or hardware-wallet integration.
 4. **The release-validation surface is six Markdown checklists.** `QA.md`, `QA_LEDGER.md`, `QA_Nano.md`, `QA_LARGE_VALUES.md`, `QA_WALLET_SERVICE.md`, and `SHORT_QA.md` together describe a multi-hour manual run before each release. QA is the sole correctness signal.
 5. **Asymmetry with the mobile wallet.** The sibling mobile wallet's automated-test-suite RFC ([HathorNetwork/rfcs#110](https://github.com/HathorNetwork/rfcs/pull/110)) has the same motivation. Aligning the desktop wallet's testing structure with mobile's lets engineers cross-cut between repos and share patterns.
-
-The cost of not investing here grows with every feature added. The recent `fix/reset-hardware-crash` regression — a hardware-wallet reset path bug — is exactly the class of issue an automated suite catches before review.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -251,7 +251,7 @@ Speculos-based emulation (run the real `hathor-app.elf` binary inside a docker c
 `qa/large-values-network/docker-compose.yml` exists in the repo today (fullnode + tx-mining-service + cpuminer), but has never been wired into CI. PR 2 is its first CI exercise. Before becoming usable for the broader test suite it needs:
 
 - The `cpuminer` service replaced with `tx-mining-service`'s built-in `dev-miner` feature, mirroring the configuration the wallet-lib integration tests already use.
-- Integration with the [integration-test-helper](https://github.com/tuliomir/hathor-integration-test-helper) — the dockerized HTTP service specified in [RFC 0000 / hathor-wallet-lib](../../hathor-wallet-lib/0000-integration-test-helper.md) (landed in master at the time of writing). It provides race-condition-free wallet generation and pre-split UTXO pools so parallel test executions never compete for funds. Desktop E2E consumes it directly rather than re-inventing the primitive.
+- Integration with the [integration-test-helper](https://github.com/HathorNetwork/hathor-integration-test-helper) — the dockerized HTTP service specified in [RFC 103](../../hathor-wallet-lib/0000-integration-test-helper.md) (under development at the time of writing). It provides race-condition-free wallet generation and pre-split UTXO pools so parallel test executions never compete for funds. Desktop E2E consumes it directly rather than re-inventing the primitive.
 
 Assertions against the live network are made in JS in the test file itself, replacing the legacy `qa/large-values-network/checks.py` script. The python script was designed for a human-guided run where the network's exact transaction count was knowable and assertable; the JS replacement uses **targeted queries** ("is this specific transaction confirmed?", "what is this specific address's balance?") rather than whole-chain-state assertions, so the tests remain valid when the network is reused across runs or shared with parallel work.
 
@@ -274,7 +274,7 @@ Zero new infrastructure cost — runs on the existing `ubuntu-latest` runner.
 
 ```yaml
 - name: Boot local Hathor network
-  run: docker compose -f qa/large-values-network/docker-compose.yml up -d --wait
+  run: docker compose -f qa/large-values-network/docker-compose.yml up -d --wait # Sample path, will be a dedicated one later
 - name: Build wallet for Electron test
   run: npm run build
 - name: Run Playwright Electron E2E
@@ -294,7 +294,7 @@ PR 1 leaves the current 1–5% threshold placeholders in `package.json`. A ratch
 [drawbacks]: #drawbacks
 
 1. **JS-level Ledger mocks drift from real device behavior.** This is the explicit decision; Speculos was evaluated and deferred. Mitigation: `QA_LEDGER.md` remains the gating doc for releases touching Ledger code, and the writing-tests skill states explicitly that JS-mock tests certify wallet code's behavior **given a Ledger response shape**, not Ledger correctness itself. The two-place pointer to hathor-ledger-app (RFC and mock file) provides the contract-drift escape hatch.
-2. **The local docker network is not yet CI-tested.** `qa/large-values-network/` has never run on a hosted runner, uses `cpuminer` (slow; needs replacement with `dev-miner`), and depends on the integration-test-helper from [RFC 0000 / hathor-wallet-lib](../../hathor-wallet-lib/0000-integration-test-helper.md) being available in CI. PR 2's first CI exercise of the network is likely to expose flakiness. Mitigation: PR 2's Welcome flow does not need the network, so the framework lands even if the Large Values flow needs follow-up tuning.
+2. **The local docker network is not yet CI-tested.** `qa/large-values-network/` has never run on a hosted runner, uses `cpuminer` (slow; needs replacement with `dev-miner`), and depends on the integration-test-helper from [RFC 103](../../hathor-wallet-lib/0000-integration-test-helper.md) being available in CI. PR 2's first CI exercise of the network is likely to expose flakiness. Mitigation: PR 2's Welcome flow does not need the network, so the framework lands even if the Large Values flow needs follow-up tuning.
 3. **Smoke-tests-first defers real coverage.** Until feature-area PRs land, the safety net is mostly aspirational. A bug in `send tokens` is no more likely to be caught in PR 1 than today. Mitigation: this is the explicit trade against review-load — and the planned feature-area PRs are scoped from the most-incident-prone paths in the manual QA docs.
 4. **The 9 pre-existing tests have no documented contracts.** They were written ad-hoc and have been silent in CI for months. Migrating them in PR 1 should be a near-mechanical path-move, but reviewers will see them in the diff under their new paths. Mitigation: PR 1's description calls out which existing files moved where.
 
@@ -354,7 +354,7 @@ Without automated tests, every feature addition, dependency update, and refactor
 
 - **[HathorNetwork/rfcs#110](https://github.com/HathorNetwork/rfcs/pull/110) — Mobile wallet automated test suite.** This RFC's structure, the four-layer pyramid, the three-contract reducer pattern, the AI-agent doc layout, and the "reference smoke then feature-area PRs" cadence are all aligned with the sibling mobile RFC. The deliberate divergences are: Playwright instead of Maestro (Electron's Chromium renderer is amenable to CDP-driven testing, sidestepping the LavaMoat/SES concern that drove mobile's Maestro choice), and an explicit JS-level Ledger mock since desktop has hardware-wallet code that mobile does not.
 - **[hathor-wallet-lib integration tests](https://github.com/HathorNetwork/hathor-wallet-lib/tree/master/__tests__/integration)** provide deterministic-wallet helpers and the `qa/large-values-network/`-style docker-compose pattern. The desktop suite consumes these patterns directly rather than re-inventing them.
-- **[Integration Test Helper](https://github.com/tuliomir/hathor-integration-test-helper)** — the dockerized HTTP service designed in [RFC 0000 / hathor-wallet-lib](../../hathor-wallet-lib/0000-integration-test-helper.md). Pre-generates BIP39 wallets and splits the genesis UTXO into a pool so parallel test executions never compete for funds. Desktop E2E uses it directly.
+- **[Integration Test Helper](https://github.com/tuliomir/hathor-integration-test-helper)** — the dockerized HTTP service designed in [RFC 103](../../hathor-wallet-lib/0000-integration-test-helper.md). Pre-generates BIP39 wallets and splits the genesis UTXO into a pool so parallel test executions never compete for funds. Desktop E2E uses it directly.
 - **[hathor-ledger-app pytest + Speculos suite](https://github.com/HathorNetwork/hathor-ledger-app/tree/master/tests)** establishes the contract the desktop's JS-mock simulates. If the JS-mock starts disagreeing with real-device behavior, that repository's tests are the authoritative source.
 - **The Electron + Playwright community standard for 2025–2026** has converged on `_electron.launch()` for desktop-app E2E (VS Code, GitHub Desktop, Postman, Slack desktop), replacing the older Spectron + Mocha stack.
 
