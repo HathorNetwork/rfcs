@@ -31,7 +31,7 @@ The desktop wallet currently has no enforced automated quality gate. Concretely:
 
 1. **Jest exists but is disabled in CI.** `.github/workflows/main.yml` has the `npm test` step commented out, citing a since-resolved react-scripts/React 18 incompatibility. There are 9 ad-hoc tests under `src/__tests__/` that nobody has run in CI for months.
 2. **Coverage thresholds are placeholders.** `package.json` declares thresholds of 1–5% — they exist only so the coverage tooling does not error out, not as a real gate.
-3. **Cypress was attempted as a PoC, never as a real testing layer.** A single welcome-flow spec exists under `cypress/e2e/00-welcome.cy.js`, exercised by `e2e.yml` against `npm start` (the React app served by webpack-dev-server). It does not test the Electron-packaged app, IPC, main-process code, native dialogs, the auto-updater, or hardware-wallet integration.
+3. **Cypress was attempted as a PoC, never as a real testing layer.** A single welcome-flow spec exists under `cypress/e2e/00-welcome.cy.js`, exercised by `e2e.yml` against `npm start` (the React app served by webpack-dev-server). It does not test the Electron-packaged app, IPC, main-process code, native dialogs, or hardware-wallet integration.
 4. **The release-validation surface is six Markdown checklists.** `QA.md`, `QA_LEDGER.md`, `QA_Nano.md`, `QA_LARGE_VALUES.md`, `QA_WALLET_SERVICE.md`, and `SHORT_QA.md` together describe a multi-hour manual run before each release. QA is the sole correctness signal.
 5. **Asymmetry with the mobile wallet.** The sibling mobile wallet's automated-test-suite RFC ([HathorNetwork/rfcs#110](https://github.com/HathorNetwork/rfcs/pull/110)) has the same motivation. Aligning the desktop wallet's testing structure with mobile's lets engineers cross-cut between repos and share patterns.
 
@@ -40,7 +40,7 @@ The desktop wallet currently has no enforced automated quality gate. Concretely:
 
 ## Testing pyramid
 
-The suite follows a four-layer pyramid identical in shape to the mobile RFC:
+The suite follows a four-layer pyramid:
 
 ```
         ┌─────────┐
@@ -60,13 +60,13 @@ The suite follows a four-layer pyramid identical in shape to the mobile RFC:
 
 ### Layer 1 — Unit (Jest)
 
-Pure-function tests for `utils/`, financial math, and reducer state transitions. Run in milliseconds via the existing CRA test runner.
+Pure-function tests for `utils/`, financial math, selectors, and reducer state transitions. Run in milliseconds via the existing CRA test runner.
 
 ```bash
 npm test
 ```
 
-Reducer tests pin **three contracts** (mobile pattern): initial-state shape with top-level keys alphabetically sorted, exact action-type literal strings, and observable behavior. The three-contract layout is the deliberate safety net for the eventual RTK-slices migration; tests that assert only behavior leave the migration unprotected.
+Reducer tests pin **three contracts**: initial-state shape with top-level keys alphabetically sorted, exact action-type literal strings, and observable behavior. The three-contract layout is the deliberate safety net for the eventual RTK-slices migration; tests that assert only behavior leave the migration unprotected.
 
 ### Layer 2 — Integration (redux-saga-test-plan)
 
@@ -80,7 +80,7 @@ Screen-level rendering tests that mount components wrapped by `renderWithProvide
 
 Full user journeys executed against an Electron-launched build of the wallet. Playwright drives the renderer via the Chrome DevTools Protocol — the same mechanism Chrome devtools use — and reaches the main process via `electronApp.evaluate()` for IPC and native-dialog assertions.
 
-CDP is **not** a runtime instrumentation injected into the JS environment; the wallet code under test runs unmodified. This avoids the class of LavaMoat/SES compatibility risk that drove the mobile RFC to pick the gray-box-avoiding Maestro over Detox. The desktop wallet uses `@lavamoat/webpack`, and the renderer running under Playwright still has its normal LavaMoat hardening applied — Playwright observes it from outside via CDP, not from inside the JS sandbox.
+CDP is **not** a runtime instrumentation injected into the JS environment; the wallet code under test runs unmodified. This avoids the class of LavaMoat/SES compatibility risk that drove the mobile RFC ([HathorNetwork/rfcs#110](https://github.com/HathorNetwork/rfcs/pull/110)) to pick the gray-box-avoiding Maestro over Detox. The desktop wallet uses `@lavamoat/webpack`, and the renderer running under Playwright still has its normal LavaMoat hardening applied — Playwright observes it from outside via CDP, not from inside the JS sandbox.
 
 ## What E2E covers, and what it doesn't
 
@@ -88,9 +88,9 @@ CDP is **not** a runtime instrumentation injected into the JS environment; the w
 |---|---|
 | Full navigation flows (wallet creation, send/receive, token mgmt) | Cross-platform native packaging (macOS notarization, Windows signing, Linux AppImage/.deb specifics) |
 | Renderer ↔ main IPC paths through `public/electron.js` and `public/preload.js` | Hardware Ledger over real USB |
-| Native-dialog interception (file pickers, save dialogs) via main-process eval | Auto-updater real download/install (`electron-updater`) |
-| Multi-modal flows (lock screen, PIN modals, transaction overview modals) | Sentry telemetry behavior |
-| Live blockchain interaction (against `qa/large-values-network/` docker network) | Wallet Service mode (deferred to future possibilities) |
+| Native-dialog interception (file pickers, save dialogs) via main-process eval | Sentry telemetry behavior |
+| Multi-modal flows (lock screen, PIN modals, transaction overview modals) | Wallet Service mode (deferred to future possibilities) |
+| Live blockchain interaction (against `qa/large-values-network/` docker network) | — |
 
 QA remains essential for the right-hand column. E2E takes over the repetitive left-hand column, freeing QA to focus on exploratory testing, hardware paths, and packaging.
 
@@ -107,20 +107,28 @@ Scope:
 - Test layout under top-level `__tests__/` (existing `src/__tests__/` files migrate).
 - Helpers under `__tests__/helpers/`.
 - `jestMockSetup.js` with centralized mocks for `@hathor/wallet-lib`, `@hathor/hathor-rpc-handler`, `@reown/walletkit`, `@walletconnect/*`, `@sentry/electron`, `@ledgerhq/hw-transport-node-hid`, `unleash-proxy-client`, `ttag`, and the `electron` IPC bridge.
-- One smoke test per layer (utility, reducer, saga, component).
-- Re-enable the currently commented-out `npm test` step in `.github/workflows/main.yml`.
-- Agent / contributor docs: `AGENTS.md`, `CLAUDE.md`, `.claude/skills/writing-tests/SKILL.md`, `docs/testing-guide.md`.
-
-What "smoke" means at each layer in PR 1:
-
-| Layer | Smoke |
-|---|---|
-| 1 (utility) | one pure-function test against an existing `utils/` module |
-| 1 (reducer) | one reducer test pinning the three contracts |
-| 2 (saga) | one `expectSaga` test on a representative saga |
-| 3 (component) | one screen test (Welcome screen) — happy path |
+- The reference smoke set defined below — one canonical example per testing technique.
+- Re-enable the currently commented-out `npm test` step in `.github/workflows/main.yml` (see [Reactivating Jest in CI](#reactivating-jest-in-ci)).
+- Initial agent / contributor docs (see [AI agent / contributor documentation](#ai-agent--contributor-documentation)): `AGENTS.md`, `CLAUDE.md`, `.claude/skills/writing-tests/SKILL.md`, `docs/testing-guide.md`.
 
 Out of scope for PR 1: any Layer-4 work, any docker network changes, Playwright, the `cypress/` directory.
+
+### PR 1 smoke set
+
+The reference smoke is not "one test per layer." It is **one test per testing technique** future feature-area PRs will need. Each entry below establishes a copy-paste-and-extend pattern; the file paths are illustrative (the implementer picks the specific source-side function or screen that best fits each pattern).
+
+| Layer | Test file (indicative) | Pattern demonstrated |
+|---|---|---|
+| 1 (utility) | `__tests__/utils/tokens.test.ts` | Pure-function test with no mocks, no state, no async — baseline Jest pattern |
+| 1 (selector) | `__tests__/utils/walletSelectors.test.ts` | Function consuming Redux state — how to construct a test state object and pass it in |
+| 1 (reducer) | `__tests__/reducers/reducer.wallet.test.ts` | Three-contract reducer test (initial-state shape + action-type literals + behavior) |
+| 2 (saga) | `__tests__/sagas/wallet.test.ts` | `expectSaga` with `provide()` injecting a mocked wallet-lib response — saga + reducer integration with mock injection at the saga boundary |
+| 2 (saga state reset) | `__tests__/sagas/atomicSwap.test.ts` | Saga test demonstrating the `*ForTesting` module-state-reset pattern — module-state hygiene |
+| 3 (happy path) | `__tests__/screens/Welcome.test.tsx` | Screen rendering with preloaded Redux state — `renderWithProviders` + `createTestStore` |
+| 3 (error path) | `__tests__/screens/NewSoftwareWallet.test.tsx` | Asserting a non-happy-path UI state — form validation failure or error modal display |
+| 3 (navigation) | `__tests__/screens/Settings.test.tsx` | User action triggering navigation — `mockNavigation` usage and route-change assertion |
+
+After PR 1 lands, any feature-area PR can write its tests by finding the matching entry above and following its file shape. Reviewer cognitive load on later PRs becomes `O(coverage)`, not `O(coverage + infrastructure + pattern-discovery)`.
 
 ### PR 2 — Reference smoke for Layer 4
 
@@ -131,6 +139,7 @@ Scope:
   - **Large Values flow** — exercises the live blockchain test path against `qa/large-values-network/`. Replaces the current human-driven `qa/large-values-network/checks.py` with JS assertions in the test file itself, using targeted queries rather than the python script's whole-chain-state expectations.
 - CI wiring for the local docker network in `.github/workflows/e2e.yml` (replacing the Cypress job).
 - Removal of the `cypress/` directory, `cypress.config.ts`, and Cypress devDependencies; explicit note that Cypress was a PoC, not an implementation.
+- Extensions to the agent docs landed in PR 1 — Playwright-specific patterns, `electronApp.evaluate()` conventions, Linux CI `xvfb-run` notes (see [AI agent / contributor documentation](#ai-agent--contributor-documentation)).
 
 Out of scope for PR 2: any per-feature E2E coverage beyond the two reference flows.
 
@@ -153,7 +162,7 @@ Each follow-up PR owns one slice of the application and ships its full Layer-1-t
 | Ledger / Hardware Wallet | QA_LEDGER.md | 1+2+3 (JS-mock) |
 | Address management | QA.md "Addresses" | 1+2+3 |
 
-PR 1 establishes the bar; every follow-up PR is a copy-paste-and-extend of the same patterns. Reviewer cognitive load on later PRs is `O(coverage)`, not `O(coverage + infrastructure)`.
+PR 1 establishes the bar; every follow-up PR is a copy-paste-and-extend of the same patterns.
 
 ## Test layout
 
@@ -167,13 +176,17 @@ __tests__/
 │   └── ledgerTransportMock.ts      # scripted APDU responses; top-of-file
 │                                   # comment points at hathor-ledger-app
 ├── utils/
-│   └── tokens.test.ts              # ← PR 1 smoke
+│   ├── tokens.test.ts              # ← L1 smoke: pure function
+│   └── walletSelectors.test.ts     # ← L1 smoke: selector / state-consuming
 ├── reducers/
-│   └── reducer.wallet.test.ts      # ← PR 1 smoke (three contracts)
+│   └── reducer.wallet.test.ts      # ← L1 smoke: reducer three contracts
 ├── sagas/
-│   └── wallet.test.ts              # ← PR 1 smoke (expectSaga)
+│   ├── wallet.test.ts              # ← L2 smoke: expectSaga + provide()
+│   └── atomicSwap.test.ts          # ← L2 smoke: *ForTesting state reset
 └── screens/
-    └── Welcome.test.tsx            # ← PR 1 smoke (RTL)
+    ├── Welcome.test.tsx            # ← L3 smoke: happy path
+    ├── NewSoftwareWallet.test.tsx  # ← L3 smoke: error path
+    └── Settings.test.tsx           # ← L3 smoke: navigation
 
 jestMockSetup.js                    # setupFiles entry; centralized mocks
 
@@ -224,16 +237,16 @@ The mocks every test would otherwise re-declare. A new test must rely on these d
 
 ## Production code changes expected
 
-Phase 4 of the mobile RFC required five classes of production-code workarounds because of React Native 0.77 + Fabric + XCUITest interactions. The desktop wallet's Chromium renderer driven via CDP does not face those issues. Expected production-code changes here are smaller and bounded:
+Expected production-code changes for the test suite are small and bounded. The Chromium renderer driven via CDP imposes no testability-driven changes on the renderer itself; the expected modifications are limited to:
 
 | Class | Likelihood | Example |
 |---|---|---|
 | Test-only `*ForTesting` named exports to reset module-level saga state | 1–3 across PRs | `clearAtomicSwapStateForTesting` in `sagas/atomicSwap.js` |
 | `data-testid` props on interactive elements that lack stable selectors | Added per-feature-PR as needed | The Cypress PoC used a mix of placeholders and CSS ids; Playwright tests prefer explicit `data-testid` |
-| Disable Sentry / auto-updater / feature-flag polling under `HATHOR_TEST=1` | One place each in PR 2 | `public/electron.js`, `src/sagas/featureToggle.js` |
-| Renderer/Chromium-specific workarounds (Fabric-equivalents) | **None expected** | — |
+| Disable Sentry and feature-flag polling under `HATHOR_TEST=1` | One place each in PR 2 | `public/electron.js`, `src/sagas/featureToggle.js` |
+| Renderer-specific workarounds | **None expected** | — |
 
-The mobile RFC's exact analogue — `clearLoadingLocksForTesting` from `src/sagas/nanoContract.js` — is the model: a one-line named export with a `ForTesting` suffix that signals test-only intent by convention.
+Each `*ForTesting` export is a one-line named export marked test-only by convention.
 
 ## Ledger strategy
 
@@ -255,7 +268,59 @@ Speculos-based emulation (run the real `hathor-app.elf` binary inside a docker c
 
 Assertions against the live network are made in JS in the test file itself, replacing the legacy `qa/large-values-network/checks.py` script. The python script was designed for a human-guided run where the network's exact transaction count was knowable and assertable; the JS replacement uses **targeted queries** ("is this specific transaction confirmed?", "what is this specific address's balance?") rather than whole-chain-state assertions, so the tests remain valid when the network is reused across runs or shared with parallel work.
 
+## AI agent / contributor documentation
+
+PR 1 ships the documentation backbone alongside the smoke tests. PR 2 extends it with the E2E-specific material (Playwright patterns, `electronApp.evaluate()` conventions, Linux CI `xvfb-run` notes). Feature-area PRs improve it whenever they introduce a pattern the existing docs don't cover. The docs are deliberately a first-class deliverable of the reference PRs — not a follow-up — because the whole point of the reference PRs is to reduce future cognitive load.
+
+The four files:
+
+- **`AGENTS.md`** at repo root — cross-tool entry point. Brief authoritative rules pointing to deeper docs.
+- **`CLAUDE.md`** at repo root — Claude-Code-specific pointer; same rule set as `AGENTS.md` plus a note on how to load the writing-tests skill.
+- **`.claude/skills/writing-tests/SKILL.md`** — auto-loads when an agent edits a test file. Long-form, on-demand depth.
+- **`docs/testing-guide.md`** — human-readable reference, also linked from `CONTRIBUTING.md`. Long-form, always available.
+
+### `CLAUDE.md` content (brief, authoritative)
+
+Kept under ~40 lines:
+
+```markdown
+## Testing rules
+
+- **Reference vs feature-area distinction.** PRs labelled "reference smoke" land one representative test per technique plus infrastructure. PRs labelled "feature-area" cover one slice of the wallet across all applicable layers. Do not mix the two.
+- **Use centralized mocks.** All shared mocks live in `jestMockSetup.js`. Do not redeclare a mock in a test file when a centralized one exists; if you need a different shape, override it locally — do not add a competing mock.
+- **`*ForTesting` named exports** — do not remove or rename. Each one resets module-level state that integration tests depend on for isolation. Their `ForTesting` suffix marks them as test-only.
+- **Ledger mock is a contract, not a reimplementation.** The transport mock at `__tests__/helpers/ledgerTransportMock.ts` mimics the response shapes documented in https://github.com/HathorNetwork/hathor-ledger-app. JS-mock tests certify wallet code's behavior **given a Ledger response shape**, not Ledger correctness itself; release validation for Ledger flows stays with `QA_LEDGER.md`.
+- **Three-contract reducers.** New reducer tests pin (1) initial-state shape, (2) action-type literal strings, (3) behavior. The shape and action-type contracts are the safety net for any future slice/RTK migration.
+
+For deeper guidance: load the writing-tests skill at `.claude/skills/writing-tests/SKILL.md`, or read the long-form reference at `docs/testing-guide.md`.
+```
+
+### Skill / knowledge file content
+
+Sections in `.claude/skills/writing-tests/SKILL.md`:
+
+1. Pyramid layout and where each layer's files live.
+2. The reference-smoke vs feature-area-PR distinction with worked examples drawn from PRs 1 and 2.
+3. Test patterns — one section per entry in the PR 1 smoke set: pure function, selector, reducer three-contracts, saga with `provide()`, saga with `*ForTesting`, screen happy path, screen error path, screen navigation.
+4. Ledger JS-mock conventions and the explicit boundary at hathor-ledger-app.
+5. Saga test patterns with `redux-saga-test-plan`'s `provide()`, including the module-level-state hygiene rule and the `*ForTesting` pattern.
+6. Live-network assertion conventions: targeted queries, not whole-chain-state expectations; teardown discipline.
+7. What NOT to test in E2E: packaged-build behavior, real-network conditions, OS-level dialogs, visual regressions, real Ledger hardware.
+8. Diagnostic workflow when a Playwright test "fails to find" an element — renderer vs main process, IPC timing, `data-testid` propagation through React portals.
+
+### Why this matters
+
+AI agents working on this codebase will frequently add new screens, modify existing ones, or refactor shared components. Without this guidance, a well-intentioned agent will: skip writing tests because nothing told it that's required; redeclare a mock that the centralized setup already provides, breaking shared-state assumptions; remove a `*ForTesting` export because it "looks like a smell"; write an E2E test that asserts on whole-chain-state and breaks the first time the network is shared; or attempt to test Ledger correctness against the JS-mock when the mock is only a contract simulator.
+
+Each of those individually creates a new review nit cycle. The CLAUDE.md rules plus the skill file with the diagnostic workflow prevent the recurring nit by making the rules discoverable at the right level of detail.
+
 ## CI integration
+
+### Reactivating Jest in CI
+
+The `npm test` step in `.github/workflows/main.yml` is currently commented out citing an older react-scripts / React 18 incompatibility. `react-scripts@5.0.1` is now in `dependencies` and the 9 existing tests under `src/__tests__/` are expected to be runnable on a fresh clone.
+
+The first task in PR 1 verifies this. If `npm test` runs the 9 existing tests green, the comment in `main.yml` is stale and the step is simply re-enabled. If not, the fix lands in PR 1 — most likely a small migration of the test setup (e.g., the `--openssl-legacy-provider` flag pattern already used by `start-js` / `build-js`, or a Jest `transformIgnorePatterns` adjustment for React 18 ESM-only dependencies).
 
 ### `main.yml` (extended in PR 1)
 
@@ -288,7 +353,7 @@ Replaces the `cypress-io/github-action` step. Linux-only initially (single `ubun
 
 ### Coverage thresholds
 
-PR 1 leaves the current 1–5% threshold placeholders in `package.json`. A ratchet to meaningful values (mobile's tentative starting point: 25% overall, 90% on financial utilities) is explicitly a future-possibilities item, gated on the first few feature-area PRs landing.
+PR 1 leaves the current 1–5% threshold placeholders in `package.json`. A ratchet to meaningful values — 25% overall and 90% on financial utilities is a sensible starting frame — is explicitly a future-possibilities item, gated on the first few feature-area PRs landing.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -309,20 +374,19 @@ Playwright officially supports Electron via `_electron.launch()`. The same Playw
 
 - **LavaMoat/SES-safe by construction.** Playwright drives the renderer via CDP — the same protocol Chrome devtools use. It never injects instrumentation into the JS runtime, so the wallet's `@lavamoat/webpack` hardening continues to apply unmodified.
 - **Main-process access.** Unlike Cypress (renderer-only), Playwright reaches into main-process code, IPC handlers, and the modules under `public/`. This is the surface Electron-specific bugs live on, and the surface manual QA exercises today.
-- **Single-runner CI.** Linux ubuntu-latest is sufficient (Electron Linux build + `xvfb-run`). No macOS runner is required for the baseline suite, unlike the mobile RFC's iOS Maestro path.
+- **Single-runner CI.** Linux `ubuntu-latest` is sufficient (Electron Linux build + `xvfb-run`). Cross-platform E2E (macOS, Windows) is deferred as a future possibility.
 - **Mature ecosystem.** Microsoft-maintained, broad community adoption for Electron testing in 2025–2026 (VS Code, GitHub Desktop, Postman use it).
 
 **Weaknesses to be aware of:**
 
 - Slower per-test setup than a unit-test runner; mitigated by keeping E2E count small.
 - `electronApp.evaluate()` runs serialized code in main; complex assertions read awkwardly.
-- A small mental model shift from `cy.*` chains to `await page.*` is required, but this only matters to the one engineer who wrote the PoC.
 
 ## Cypress (PoC, not selected)
 
 Cypress was attempted earlier as a PoC. A single welcome-flow spec at `cypress/e2e/00-welcome.cy.js` runs against `npm start` (the React app served by webpack-dev-server). It was never adopted as the actual testing layer.
 
-The defining limitation for this project is that Cypress drives the renderer only, against the React app served by webpack-dev-server — not the Electron app. Anything in `public/electron.js`, `public/preload.js`, `public/ledger.js`, IPC handlers, native dialogs, main-process Ledger transport, the auto-updater, or any other main-process surface is invisible to it. Since most QA-doc-described breakage classes live in those surfaces, Cypress would have been useful only as a renderer-level smoke layer — for which Playwright already suffices.
+The defining limitation for this project is that Cypress drives the renderer only, against the React app served by webpack-dev-server — not the Electron app. Anything in `public/electron.js`, `public/preload.js`, `public/ledger.js`, IPC handlers, native dialogs, main-process Ledger transport, or any other main-process surface is invisible to it. Since most QA-doc-described breakage classes live in those surfaces, Cypress would have been useful only as a renderer-level smoke layer — for which Playwright already suffices.
 
 The existing Cypress directory and devDependencies are removed in PR 2.
 
@@ -347,12 +411,12 @@ Speculos remains a documented future possibility (see below).
 
 ## Impact of not doing this
 
-Without automated tests, every feature addition, dependency update, and refactor carries the risk of undetected regressions. The release-validation surface stays manual, scaling linearly with feature count. The recent `fix/reset-hardware-crash` class of regression continues to slip through to QA or, worse, to users.
+Without automated tests, every feature addition, dependency update, and refactor carries the risk of undetected regressions. The release-validation surface stays manual, scaling linearly with feature count.
 
 # Prior art
 [prior-art]: #prior-art
 
-- **[HathorNetwork/rfcs#110](https://github.com/HathorNetwork/rfcs/pull/110) — Mobile wallet automated test suite.** This RFC's structure, the four-layer pyramid, the three-contract reducer pattern, the AI-agent doc layout, and the "reference smoke then feature-area PRs" cadence are all aligned with the sibling mobile RFC. The deliberate divergences are: Playwright instead of Maestro (Electron's Chromium renderer is amenable to CDP-driven testing, sidestepping the LavaMoat/SES concern that drove mobile's Maestro choice), and an explicit JS-level Ledger mock since desktop has hardware-wallet code that mobile does not.
+- **[HathorNetwork/rfcs#110](https://github.com/HathorNetwork/rfcs/pull/110) — Mobile wallet automated test suite.** Direct sibling RFC. The four-layer pyramid, three-contract reducer pattern, AI-agent doc layout, and the reference-then-feature-area PR cadence are aligned with that RFC. The framework choice differs (Playwright + CDP here, Maestro there) for LavaMoat/SES-related reasons explained in the [Layer 4 description](#layer-4--e2e-playwright--electron), and the desktop suite adds an explicit Ledger transport mock that the mobile wallet has no equivalent surface for.
 - **[hathor-wallet-lib integration tests](https://github.com/HathorNetwork/hathor-wallet-lib/tree/master/__tests__/integration)** provide deterministic-wallet helpers and the `qa/large-values-network/`-style docker-compose pattern. The desktop suite consumes these patterns directly rather than re-inventing them.
 - **[Integration Test Helper](https://github.com/tuliomir/hathor-integration-test-helper)** — the dockerized HTTP service designed in [RFC 103](../../hathor-wallet-lib/0000-integration-test-helper.md). Pre-generates BIP39 wallets and splits the genesis UTXO into a pool so parallel test executions never compete for funds. Desktop E2E uses it directly.
 - **[hathor-ledger-app pytest + Speculos suite](https://github.com/HathorNetwork/hathor-ledger-app/tree/master/tests)** establishes the contract the desktop's JS-mock simulates. If the JS-mock starts disagreeing with real-device behavior, that repository's tests are the authoritative source.
@@ -361,10 +425,9 @@ Without automated tests, every feature addition, dependency update, and refactor
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-1. **react-scripts 5 / React 18 Jest compatibility on a fresh clone.** The `main.yml` test step was commented out citing an older react-scripts/React 18 incompatibility; `react-scripts@5.0.1` is now in deps. A one-evening spike at the start of PR 1 confirms whether the 9 existing tests run green. If yes, the commented block is stale; if no, the fix lands in PR 1.
-2. **Electron `userData` isolation across Playwright test runs.** `_electron.launch()` accumulates `userData` state across launches unless each test points at an isolated temp dir. Standard Playwright fixture pattern; the exact shape is decided in PR 2.
-3. **`qa/large-values-network/` long-term layout.** The directory's docker-compose is the right shape but its `checks.py` and `privnet.yml` are part of the legacy human-driven QA flow. Whether PR 2 carves out a sibling `qa/e2e-network/` or extends in place is a layout call left for PR 2.
-4. **Coverage thresholds for the eventual ratchet.** Specific percentages stay TBD and will be decided in the first feature-area PR that wants them enforced. The mobile RFC's tentative numbers (25% overall, 90% on financial utilities) are the starting frame.
+1. **Electron `userData` isolation across Playwright test runs.** `_electron.launch()` accumulates `userData` state across launches unless each test points at an isolated temp dir. Standard Playwright fixture pattern; the exact shape is decided in PR 2.
+2. **`qa/large-values-network/` long-term layout.** The directory's docker-compose is the right shape but its `checks.py` and `privnet.yml` are part of the legacy human-driven QA flow. Whether PR 2 carves out a sibling `qa/e2e-network/` or extends in place is a layout call left for PR 2.
+3. **Coverage thresholds for the eventual ratchet.** Specific percentages stay TBD and will be decided in the first feature-area PR that wants them enforced. The 25% overall / 90% on financial utilities frame is the starting point.
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
@@ -375,40 +438,4 @@ Without automated tests, every feature addition, dependency update, and refactor
 4. **Packaged-build E2E.** Run the smoke flow against the actual `electron-builder`-packaged artifact, exercising the production bundle behavior that `npm run build` + `electron .` does not fully replicate.
 5. **Cross-platform E2E.** Run the E2E job on macOS and Windows runners in addition to Linux, catching platform-specific Electron behavior. Adds runner cost.
 6. **Coverage threshold ratchet.** Move `package.json` coverage thresholds from the current 1–5% placeholders to meaningful values once enough feature-area PRs have landed.
-7. **TDD workflow.** Once the test infrastructure is mature, new features can be developed test-first — writing the component test and the E2E flow before the implementation, mirroring the mobile RFC's Future Possibilities #6.
-8. **AI agent testing guidelines via CLAUDE.md and a dedicated skill file.** Mirroring the mobile RFC's recommendation, the desktop suite ships its own copies tuned to this stack:
-
-   ### `CLAUDE.md` section (brief, authoritative)
-
-   Recommended structure, kept under ~40 lines:
-
-   ```markdown
-   ## Testing rules
-
-   - **Reference vs feature-area distinction.** PRs labelled "reference smoke" land one representative test per layer plus infrastructure. PRs labelled "feature-area" cover one slice of the wallet across all applicable layers. Do not mix the two.
-   - **Use centralized mocks.** All shared mocks live in `jestMockSetup.js`. Do not redeclare a mock in a test file when a centralized one exists; if you need a different shape, override it locally — do not add a competing mock.
-   - **`*ForTesting` named exports** — do not remove or rename. Each one resets module-level state that integration tests depend on for isolation. Their `ForTesting` suffix marks them as test-only.
-   - **Ledger mock is a contract, not a reimplementation.** The transport mock at `__tests__/helpers/ledgerTransportMock.ts` mimics the response shapes documented in https://github.com/HathorNetwork/hathor-ledger-app. JS-mock tests certify wallet code's behavior **given a Ledger response shape**, not Ledger correctness itself; release validation for Ledger flows stays with `QA_LEDGER.md`.
-   - **Three-contract reducers.** New reducer tests pin (1) initial-state shape, (2) action-type literal strings, (3) behavior. The shape and action-type contracts are the safety net for any future slice/RTK migration.
-
-   For deeper guidance: load the writing-tests skill at `.claude/skills/writing-tests/SKILL.md`, or read the long-form reference at `docs/testing-guide.md`.
-   ```
-
-   ### Skill / knowledge file content
-
-   Sections in `.claude/skills/writing-tests/SKILL.md`:
-
-   1. Pyramid layout and where each layer's files live.
-   2. The reference-smoke vs feature-area-PR distinction with worked examples drawn from PRs 1 and 2.
-   3. Test patterns: `renderWithProviders`, `createTestStore`, ttag handling, IPC mocking, `electronApp.evaluate()` from Playwright.
-   4. Ledger JS-mock conventions and the explicit boundary at hathor-ledger-app.
-   5. Saga test patterns with `redux-saga-test-plan`'s `provide()`, including the module-level-state hygiene rule and the `*ForTesting` pattern.
-   6. Live-network assertion conventions: targeted queries, not whole-chain-state expectations; teardown discipline.
-   7. What NOT to test in E2E: auto-updater downloads, packaged-build behavior, real-network conditions, OS-level dialogs, visual regressions, real Ledger hardware.
-   8. Diagnostic workflow when a Playwright test "fails to find" an element — renderer vs main process, IPC timing, `data-testid` propagation through React portals.
-
-   ### Why this matters
-
-   AI agents working on this codebase will frequently add new screens, modify existing ones, or refactor shared components. Without this guidance, a well-intentioned agent will: skip writing tests because nothing told it that's required; redeclare a mock that the centralized setup already provides, breaking shared-state assumptions; remove a `*ForTesting` export because it "looks like a smell"; write an E2E test that asserts on whole-chain-state and breaks the first time the network is shared; or attempt to test Ledger correctness against the JS-mock when the mock is only a contract simulator.
-
-   Each of those individually creates a new review nit cycle. The CLAUDE.md rules plus the skill file with the diagnostic workflow prevent the recurring nit by making the rules discoverable at the right level of detail.
+7. **TDD workflow.** Once the test infrastructure is mature, new features can be developed test-first — writing the component test and the E2E flow before the implementation.
