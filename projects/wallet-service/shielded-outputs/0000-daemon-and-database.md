@@ -7,7 +7,7 @@
 # Summary
 [summary]: #summary
 
-Add shielded-output support to the wallet-service by **extending the existing `tx_output`, `address_balance`, `wallet_balance`, `address_tx_history`, and `wallet_tx_history` tables**. A new `mode` column on `tx_output` discriminates `0 = transparent`, `1 = AMOUNT_SHIELDED`, `2 = FULLY_SHIELDED`. The heavy shielded-only on-chain bytes (commitment, range proof, ephemeral pubkey, script, plus mode-conditional fields) live in a 1:1 satellite table `shielded_tx_output_data` keyed by the same `(tx_id, output_index)` PK as `tx_output`. Shielded ownership lives in a new `shielded_address` table that, like the existing transparent `address` table, has rows for every observed spend_address — ownership fields populate only when a wallet claims the address.
+Add shielded-output support to the wallet-service by **extending the existing `tx_output`, `address`, `address_balance`, `wallet_balance`, `address_tx_history`, and `wallet_tx_history` tables**. A new `mode` column on `tx_output` discriminates `0 = transparent`, `1 = AMOUNT_SHIELDED`, `2 = FULLY_SHIELDED`. The heavy shielded-only on-chain bytes (commitment, range proof, ephemeral pubkey, script, plus mode-conditional fields) live in a 1:1 satellite table `shielded_tx_output_data` keyed by the same `(tx_id, index)` PK as `tx_output`. Shielded ownership folds into the existing `address` table via a new `bip32_account` discriminator column (`0 = transparent`, `1 = shielded scan path`); rows continue to exist for every observed spend_address, and the shielded scan key, long-form display address, and catchup state live on the same row.
 
 The daemon's `handleVertexAccepted`, `handleVoidedTx`, `handleUnvoidedTx`, `handleVertexRemoved`, and input-consumption code paths gain shielded-aware logic but are **not duplicated**: there is no `voidShieldedOutputs`, no `processShieldedOutputs` outside the main loop, no parallel reorg pipeline. The only kind-specific work is balance-column dispatch on `tx_output.mode` inside `updateAddressTablesWithTx`.
 
@@ -45,7 +45,7 @@ After this RFC, **the same one pipeline does the work**, but the loop iterates o
      insert tx_output row with mode = 0 | 1 | 2
      if mode in (1, 2):
        insert shielded_tx_output_data row with crypto bytes
-       upsert shielded_address row (transactions++; create if new)
+       upsert address row with bip32_account = 1 (create if new with NULL ownership; long-form shielded_address stays NULL until wallet registration populates it)
      if output is owned:
        update address_balance, wallet_balance, *_tx_history
        (column dispatch on mode)
@@ -59,7 +59,7 @@ The contributor must hold four concepts:
 
 2. **`recovery_state`** — `tx_output.recovery_state` (NULL for `mode = 0`; `unowned` / `recovered` / `recovery_failed` for `mode IN (1, 2)`). For unowned shielded outputs, `value` is always NULL; for `mode = 1` the `token_id` is populated at observe time from `token_data` (visible on the wire), so only `value` is filled by recovery; for `mode = 2`, both `value` and `token_id` are NULL until recovery.
 
-3. **Eager rewind on match.** When a shielded output's `address` matches a `shielded_address` row with non-NULL `wallet_id`, the daemon synchronously calls `rewindAmountShieldedOutput` or `rewindFullShieldedOutput` (from `@hathor/ct-crypto-node`) using the cached per-index `scan_privkey` for that row. On success, the recovered `{ value, token_id }` is written back to the **same** `tx_output` row (`recovery_state = 'recovered'`). Blinding factors are not stored.
+3. **Eager rewind on match.** When a shielded output's `address` matches an `address` row with `bip32_account = 1` and non-NULL `wallet_id`, the daemon synchronously calls `rewindAmountShieldedOutput` or `rewindFullShieldedOutput` (from `@hathor/ct-crypto-node`) using the cached per-index `scan_privkey` for that row. On success, the recovered `{ value, token_id }` is written back to the **same** `tx_output` row (`recovery_state = 'recovered'`). Blinding factors are not stored.
 
 4. **Single-table reorg/void.** The void path sets `voided = TRUE` on `tx_output` rows. The balance reversal calls the same `updateAddressTablesWithTx` (with a reversing sign) that the apply path used; that function switches on `mode` to reverse the right balance columns. **There is no separate shielded handler.**
 
@@ -79,13 +79,13 @@ User Alice's wallet has shielded keys registered. Bob sends Alice 1.5 HTR via an
    - `token_id = '00'` (from `token_data`)
    - `recovery_state = 'unowned'`
 4. It INSERTs a `shielded_tx_output_data` row with the crypto bytes.
-5. It UPSERTs `shielded_address`: row for Alice's `decoded.address` already exists with `wallet_id = wallet_alice`, `shielded_index = 7`, `scan_privkey = …` because Alice registered shielded keys earlier. The upsert bumps `transactions` from 0 to 1.
+5. It UPSERTs `address`: row for Alice's `decoded.address` already exists with `bip32_account = 1`, `wallet_id = wallet_alice`, `index = 7`, `scan_privkey = …`, `shielded_address = <long-form display string>` because Alice's wallet-registration step pre-derived this row earlier (registration is where the long-form is computed from `scan_privkey` + `spend_pubkey` and written to the row — see [[0001-wallet-registration]]). The single canonical `transactions` bump for `(address, tx)` happens once per vertex inside `updateAddressTablesWithTx` (see § *Invariants*); the observation upsert itself does not touch `transactions`.
 6. It sees `wallet_id IS NOT NULL` on the looked-up row → owned. It calls `rewindAmountShieldedOutput(scan_privkey, ephemeral_pubkey, commitment, range_proof, token_uid_from_token_data)`. Returns `{ value: 150 }`.
 7. It UPDATEs the `tx_output` row: `value = 150`, `recovery_state = 'recovered'`. (`token_id` is already populated.)
 8. It calls `updateAddressTablesWithTx`, which dispatches on `mode = 1`:
-   - Bump `address_balance.unlocked_balance += 150` for `(Alice_spend_address, '00')` with `kind = 'shielded'`.
+   - Bump `address_balance.unlocked_shielded_balance += 150` and `total_shielded_received += 150` for `(Alice_spend_address, '00')`. (The same row also carries transparent columns; those stay zero here.)
    - Bump `wallet_balance.unlocked_shielded_balance += 150` for `(wallet_alice, '00')`.
-   - Append `wallet_tx_history` row with `shielded_balance_delta = 150` (and `balance_delta = 0`).
+   - Append `wallet_tx_history` row with `shielded_balance_delta = 150` (and `balance_delta = 0`); append `address_tx_history` row with `shielded_balance_delta = 150` for `(Alice_spend_address, tx_id, '00')`.
 9. It enqueues a `'new-tx'` event carrying both transparent (empty here) and shielded deltas.
 10. The DB transaction commits.
 
@@ -97,11 +97,11 @@ Bob sends Alice 1.0 HTR via a transparent output **and** 1.5 HTR via an `AMOUNT_
 
 1. Fullnode emits `NEW_VERTEX_ACCEPTED`. The vertex has `outputs[]` (one entry, 1.0 HTR transparent to Alice) and `shielded_outputs[]` (one entry, 1.5 HTR shielded to Alice).
 2. `handleVertexAccepted` builds the concatenated list and iterates:
-   - **`outputs[0]` (transparent, concatenated index 0).** INSERTs `tx_output` row with `mode = 0`, `address = Alice_transparent_address`, `value = 100`, `token_id = '00'`, `recovery_state = NULL`. The existing transparent ownership lookup against `address` finds `wallet_id = wallet_alice`. Marked for balance update with `kind = 'transparent'`.
-   - **`shielded_outputs[0]` (mode=1, concatenated index 1).** INSERTs `tx_output` row with `mode = 1`, `address = Alice_spend_address`, `value = NULL`, `token_id = '00'` (from `token_data`), `recovery_state = 'unowned'`. INSERTs satellite row with crypto bytes. UPSERTs `shielded_address` (already owned by `wallet_alice` at `shielded_index = 7`). Rewinds → `value = 150`. UPDATEs the `tx_output` row to `value = 150`, `recovery_state = 'recovered'`.
+   - **`outputs[0]` (transparent, concatenated index 0).** INSERTs `tx_output` row with `mode = 0`, `address = Alice_transparent_address`, `value = 100`, `token_id = '00'`, `recovery_state = NULL`. The existing transparent ownership lookup against `address` (with `bip32_account = 0`) finds `wallet_id = wallet_alice`.
+   - **`shielded_outputs[0]` (mode=1, concatenated index 1).** INSERTs `tx_output` row with `mode = 1`, `address = Alice_spend_address`, `value = NULL`, `token_id = '00'` (from `token_data`), `recovery_state = 'unowned'`. INSERTs satellite row with crypto bytes. UPSERTs the `address` row for `Alice_spend_address` (already owned by `wallet_alice` at `bip32_account = 1`, `index = 7`). Rewinds → `value = 150`. UPDATEs the `tx_output` row to `value = 150`, `recovery_state = 'recovered'`.
 3. `updateAddressTablesWithTx` runs over both rows in the same call, dispatching on `mode`:
-   - `address_balance` for `(Alice_transparent_address, '00')`: bump `unlocked_balance += 100`, `kind = 'transparent'`.
-   - `address_balance` for `(Alice_spend_address, '00')`: bump `unlocked_balance += 150`, `kind = 'shielded'`.
+   - `address_balance` for `(Alice_transparent_address, '00')`: bump `unlocked_balance += 100`, `total_received += 100`.
+   - `address_balance` for `(Alice_spend_address, '00')`: bump `unlocked_shielded_balance += 150`, `total_shielded_received += 150`. (Same row layout as the transparent row above; only the shielded columns move.)
 4. `updateWalletTablesWithTx` aggregates per-token across both kinds:
    - `wallet_balance` for `(wallet_alice, '00')`: `unlocked_balance += 100`, `unlocked_shielded_balance += 150`, `transactions += 1`.
    - `wallet_tx_history`: **one row** for `(wallet_alice, tx_id, '00')` with `balance_delta = 100` and `shielded_balance_delta = 150`.
@@ -121,8 +121,8 @@ The vertex looks like:
 - `shielded_outputs[]`: two entries — `[0]` to Bob (1.5 HTR), `[1]` to Alice's change address (2.5 HTR).
 
 1. `handleVertexAccepted` iterates outputs first:
-   - **`shielded_outputs[0]` (Bob's, concatenated index 0).** INSERTs `tx_output` row with `mode = 1`, `address = Bob_spend_address`, `value = NULL`, `token_id = '00'`, `recovery_state = 'unowned'`. INSERTs satellite. UPSERTs `shielded_address` for `Bob_spend_address` — row didn't exist before (this is a brand-new observation), so an INSERT runs with `wallet_id = NULL`, `transactions = 1`. Ownership lookup: `wallet_id IS NULL` → unowned, no rewind, no balance update.
-   - **`shielded_outputs[1]` (Alice's change, concatenated index 1).** INSERTs `tx_output` with same shape as the prior example. UPSERTs `shielded_address` (Alice's change address is owned at `shielded_index = 12`, say). Rewinds → `value = 250`. UPDATEs `tx_output` to `value = 250`, `recovery_state = 'recovered'`.
+   - **`shielded_outputs[0]` (Bob's, concatenated index 0).** INSERTs `tx_output` row with `mode = 1`, `address = Bob_spend_address`, `value = NULL`, `token_id = '00'`, `recovery_state = 'unowned'`. INSERTs satellite. UPSERTs the `address` row for `Bob_spend_address` — row didn't exist before (this is a brand-new observation), so an INSERT runs with `bip32_account = 1`, `wallet_id = NULL`, `shielded_address = NULL` (the long-form cannot be derived from the on-chain spend address alone — it requires `scan_pubkey` + `spend_pubkey`, which the row only gains when a wallet later registers and pre-derives them). Ownership lookup: `wallet_id IS NULL` → unowned, no rewind, no balance update.
+   - **`shielded_outputs[1]` (Alice's change, concatenated index 1).** INSERTs `tx_output` with same shape as the prior example. UPSERTs the `address` row (Alice's change address is owned at `bip32_account = 1`, `index = 12`, say). Rewinds → `value = 250`. UPDATEs `tx_output` to `value = 250`, `recovery_state = 'recovered'`.
 2. Then the input loop:
    - **`inputs[0]`.** `markTxOutputSpent(tx_id=T0, index=5)` runs `UPDATE tx_output SET spent_by = <current_tx_id> WHERE tx_id = T0 AND index = 5`. The kind of the consumed output is read from `input.spent_output.mode = 1` directly — no second query.
 3. `updateAddressTablesWithTx` and `updateWalletTablesWithTx` aggregate every row touched by the vertex:
@@ -130,11 +130,11 @@ The vertex looks like:
    - From the new owned output `shielded_outputs[1]`: `+250` shielded delta (Alice's change).
    - From the new unowned output `shielded_outputs[0]`: no balance impact (unowned).
 4. Resulting writes:
-   - `address_balance` for `(Alice_spend_address_of_T0_index_5, '00')`: `unlocked_balance -= 400`, `kind = 'shielded'`.
-   - `address_balance` for `(Alice_change_spend_address, '00')`: `unlocked_balance += 250`, `kind = 'shielded'`.
+   - `address_balance` for `(Alice_spend_address_of_T0_index_5, '00')`: `unlocked_shielded_balance -= 400` (reversal helper UPDATEs only the `*_balance` columns; `total_shielded_received` is not touched because this is a spend reversal, not a void of the original receive — the T0 receive that credited `total_shielded_received` is still valid).
+   - `address_balance` for `(Alice_change_spend_address, '00')`: `unlocked_shielded_balance += 250`, `total_shielded_received += 250`.
    - `wallet_balance` for `(wallet_alice, '00')`: `unlocked_shielded_balance += (-400 + 250) = -150`.
-   - `wallet_tx_history`: one row with `balance_delta = 0`, `shielded_balance_delta = -150`.
-5. Bob's wallet-service (if he uses one) sees the same vertex independently and runs the same flow against his own `shielded_address` table; for him, Bob's output is owned and recovered, and Alice's change is unowned.
+   - `wallet_tx_history`: one row with `balance_delta = 0`, `shielded_balance_delta = -150`. `address_tx_history` carries the same `shielded_balance_delta` on the per-address rows.
+5. Bob's wallet-service (if he uses one) sees the same vertex independently and runs the same flow against its own `address` table; for him, Bob's output is owned and recovered, and Alice's change is unowned.
 
 The point of this example: **the input's `spent_output.mode` is the only signal needed to dispatch the balance reversal**, and the `UPDATE tx_output SET spent_by = …` works on shielded rows with no special case.
 
@@ -145,14 +145,14 @@ Charlie sends Dave a shielded output. Neither Charlie nor Dave has a wallet regi
 1. `handleVertexAccepted` iterates `shielded_outputs[]`:
    - INSERTs `tx_output` with `mode = 1`, `address = Dave_spend_address`, `value = NULL`, `token_id = '00'`, `recovery_state = 'unowned'`.
    - INSERTs satellite row with crypto bytes.
-   - UPSERTs `shielded_address` for `Dave_spend_address` (new row, `wallet_id = NULL`, `transactions = 1`).
+   - UPSERTs the `address` row for `Dave_spend_address` (new row, `bip32_account = 1`, `wallet_id = NULL`, `shielded_address = NULL` — the long-form is populated only when Dave's wallet later registers and derives it from `scan_privkey` + `spend_pubkey`).
    - Ownership lookup: `wallet_id IS NULL` → no rewind, no balance update.
 2. The input loop processes Charlie's spent input the same way: `UPDATE tx_output SET spent_by = …` (Charlie's prior UTXO was observed by the daemon the same way, with NULL ownership).
 3. `updateAddressTablesWithTx` runs and finds nothing to do (no `wallet_id` owns any of the touched addresses on this service). No `address_balance` / `wallet_balance` writes.
 4. No `'new-tx'` event is emitted to any wallet (no subscriber).
 5. The DB transaction commits.
 
-A week later, Dave registers shielded keys. His registration UPSERTs `shielded_address` rows for his first 20 indexes; one of those addresses **is** the row already created at step 1 above, so the UPSERT fills in `wallet_id`, `scan_privkey`, etc., transitioning the row from "observed, unowned" to "owned, catchup pending". The catch-up job then scans `tx_output WHERE mode IN (1,2) AND recovery_state = 'unowned' AND address IN (Dave's claimed set)`, finds the row written at step 1, runs the rewind, and credits Dave's balance retroactively.
+A week later, Dave registers shielded keys. His registration UPSERTs `address` rows (`bip32_account = 1`) for his first 20 shielded indexes; one of those addresses **is** the row already created at step 1 above, so the UPSERT fills in `wallet_id`, `index`, `scan_privkey`, `catchup_state`, etc., transitioning the row from "observed, unowned" to "owned, catchup pending". The catch-up job then scans `tx_output WHERE mode IN (1,2) AND recovery_state = 'unowned' AND address IN (Dave's claimed set)`, finds the row written at step 1, runs the rewind, and credits Dave's balance retroactively.
 
 ## Worked example: FULLY_SHIELDED receive
 
@@ -161,13 +161,13 @@ Alice receives 0.75 of token `T1` via a `FULLY_SHIELDED` output (mode = 2). The 
 1. `handleVertexAccepted` iterates `shielded_outputs[]`:
    - INSERTs `tx_output` with `mode = 2`, `address = Alice_spend_address`, `value = NULL`, `token_id = NULL` (token is hidden — no `token_data` to read), `recovery_state = 'unowned'`.
    - INSERTs satellite row including `asset_commitment` and `surjection_proof` (the mode-2-only fields).
-   - UPSERTs `shielded_address` (Alice's address, owned).
+   - UPSERTs the `address` row for Alice's spend address (owned, `bip32_account = 1`).
    - Ownership lookup hits. Calls `rewindFullShieldedOutput(scan_privkey, ephemeral_pubkey, commitment, range_proof, asset_commitment)`. Returns `{ value: 75, tokenUid: 'T1', assetBlindingFactor: … }`.
    - Verifies the asset commitment against the recovered token (`verifyAssetCommitment`) — a mandatory step for mode 2.
    - UPDATEs `tx_output`: `value = 75`, `token_id = 'T1'`, `recovery_state = 'recovered'`.
-2. `updateAddressTablesWithTx` updates `address_balance` for `(Alice_spend_address, 'T1')`, `kind = 'shielded'`, `unlocked_balance += 75`.
+2. `updateAddressTablesWithTx` updates `address_balance` for `(Alice_spend_address, 'T1')`: `unlocked_shielded_balance += 75`, `total_shielded_received += 75`.
 3. `wallet_balance` for `(wallet_alice, 'T1')`: `unlocked_shielded_balance += 75`. If this is the first time wallet_alice has seen token T1, the row is created by the upsert.
-4. `wallet_tx_history` row written with `shielded_balance_delta = 75` for `(wallet_alice, tx_id, 'T1')`.
+4. `wallet_tx_history` row written with `shielded_balance_delta = 75` for `(wallet_alice, tx_id, 'T1')`. `address_tx_history` carries the same `shielded_balance_delta = 75` on the per-address row.
 
 The point of this example: `token_id` lives in `tx_output` and is filled in by recovery for mode 2, whereas for mode 1 it would have been filled at observe time. The handler dispatches on `mode` to know which.
 
@@ -180,7 +180,7 @@ Two days after the first worked example (Alice received 1.5 HTR shielded), the t
 3. UPDATEs `wallet_tx_history` and `address_tx_history` rows for the same `tx_id`: `voided = TRUE`.
 4. Reverses the balance deltas by re-running `updateAddressTablesWithTx` / `updateWalletTablesWithTx` with a reversing sign. For each `tx_output` row of the vertex:
    - The row carries `mode = 1` and `recovery_state = 'recovered'` (it was recovered on receive).
-   - Dispatch on `mode` picks the shielded balance columns. `wallet_balance.unlocked_shielded_balance -= 150` for `(wallet_alice, '00')`. `address_balance.unlocked_balance -= 150` for `(Alice_spend_address, '00')` with `kind = 'shielded'`.
+   - Dispatch on `mode` picks the shielded balance columns. `wallet_balance.unlocked_shielded_balance -= 150` and `total_shielded_received -= 150` for `(wallet_alice, '00')`. `address_balance.unlocked_shielded_balance -= 150` and `total_shielded_received -= 150` for `(Alice_spend_address, '00')` on the unified row (no `kind` filter; the reversal helper UPDATEs the shielded columns and decrements `total_shielded_received` because this is a void of the original receive, mirroring how `voidAddressTransaction` decrements `total_received` for a voided transparent receive).
 5. Push notification or WebSocket event emitted to wallet_alice indicating the void.
 
 Crucially: this is the **same** `handleVoidedTx` that runs for a transparent void; the only kind-specific work is the column dispatch inside `updateAddressTablesWithTx`. There is no `voidShieldedOutputs` companion handler. The same observation applies to `handleUnvoidedTx` (re-applies) and `handleVertexRemoved` (delete, with FK cascading the satellite row).
@@ -188,16 +188,25 @@ Crucially: this is the **same** `handleVoidedTx` that runs for a transparent voi
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
+## Invariants
+
+These hold at every commit and constrain how the per-vertex pipeline writes the address-grain and wallet-grain tables. Every helper below is structured to maintain them.
+
+- **Single canonical `transactions` bump per `(address, tx)` and per `(wallet, tx)`.** The bump happens once per vertex inside `updateAddressTablesWithTx` / `updateWalletTablesWithTx`, which see every shielded input (via the transparent stub `prepareInputs` emits for each shielded input) and every shielded output (via the unified output loop in `handleVertexAccepted`). The shielded credit and reversal helpers therefore do **not** touch `transactions`. Any SQL added to those helpers that includes `transactions = transactions + 1` is a regression of this invariant.
+- **Shielded-credit-only coverage.** A vertex whose only impact on an address is a fresh shielded credit (no transparent output, no spent input owned by the wallet) still needs its single `transactions` bump. The credit path arranges this by including the touched address in the balance-aggregation map fed to `updateAddressTablesWithTx` — with a zero balance delta if the only contribution is a shielded credit — so the canonical bump fires once. The same arrangement holds at the wallet grain in `updateWalletTablesWithTx`.
+- **Lifetime totals reflect currently-valid receipts.** `total_received` and `total_shielded_received` (on `address_balance` and `wallet_balance`) are incremented by credit helpers when a receive is observed and decremented by reversal helpers when the receive is later voided — matching the transparent path's existing behavior (`voidAddressTransaction` subtracts `totalAmountSent` from `total_received` today). A voided receive is removed from the lifetime total so consumers see the lifetime amount that was actually delivered, not the gross including rolled-back txs. For shielded, the decrement only fires for outputs whose value was known when the credit happened (`recovery_state = 'recovered'`); unrecovered shielded outputs never contributed to `total_shielded_received` in the first place, so their void is a no-op for this column.
+- **`address.bip32_account` is `NOT NULL DEFAULT 0`.** The migration backfills existing transparent rows to `0` in the same `ADD COLUMN` statement, so the unique constraint `(wallet_id, bip32_account, index)` enforces strictly from the moment it lands. The other three new columns (`scan_privkey`, `catchup_state`, `shielded_address`) stay nullable — populated only for `bip32_account = 1` rows.
+
 ## Schema changes
 
 ### `tx_output` — modified
 
 ```
 tx_output
-  -- existing columns
-  tx_id                   VARCHAR(64)     NOT NULL,
-  index                   SMALLINT        NOT NULL,  -- concatenated index (outputs ++ shielded_outputs)
-  address                 VARCHAR(34)     NOT NULL,  -- decoded.address for both transparent and shielded
+  -- existing columns (some widened — see migration plan)
+  tx_id                   VARCHAR(64)         NOT NULL,
+  index                   SMALLINT UNSIGNED   NOT NULL,  -- WIDENED from TINYINT UNSIGNED; see migration plan. Concatenated index (outputs ++ shielded_outputs).
+  address                 VARCHAR(34)         NOT NULL,  -- decoded.address for both transparent and shielded
   value                   BIGINT UNSIGNED NULL,      -- CHANGED: now nullable (NULL for unrecovered shielded)
   token_id                VARCHAR(64)     NULL,      -- CHANGED: now nullable (NULL for unrecovered FULLY_SHIELDED)
   authorities             SMALLINT        NOT NULL DEFAULT 0,  -- always 0 for mode IN (1, 2)
@@ -233,24 +242,36 @@ Notes:
 
 Every existing query against `tx_output` that should remain transparent-only gains an explicit `WHERE mode = 0` clause as part of this migration. The migration script greps for `FROM tx_output` and lists the call sites; the implementation PR walks them. Queries that should naturally span both kinds (e.g., the `(prev_tx_id, prev_index)` input-resolution lookup) omit the filter intentionally.
 
+#### Type-widening migration for `tx_output.index`
+
+The existing `tx_output.index` column is `TINYINT UNSIGNED` (range 0–255), sized for the transparent protocol's hard cap of 255 outputs per transaction. With shielded outputs concatenated after transparent ones (up to 15 shielded entries appended to up to 255 transparent ones), the maximum concatenated index now exceeds 255 and overflows the current column. The migration widens it:
+
+```sql
+ALTER TABLE `tx_output` MODIFY COLUMN `index` SMALLINT UNSIGNED NOT NULL;
+```
+
+SMALLINT UNSIGNED (0–65535) is far more than needed (max ~270) but mirrors the existing UNSIGNED convention and is the smallest standard MySQL integer width that fits. Downstream code that types this column as a JS `number` is unaffected; any code that explicitly types it as `uint8_t` / `≤ 255` needs auditing. The same widening applies to the wire format's `prev_index` on inputs — if the fullnode emits `prev_index` as a single byte today, the shielded-output protocol upgrade is widening it server-side; the daemon parser accepts the wider integer naturally because Zod's `z.number().int()` carries no upper bound.
+
 ### `shielded_tx_output_data` — new, 1:1 satellite
 
 Holds the heavy on-chain cryptographic bytes for every shielded `tx_output` row. Keyed by the same composite PK.
 
 ```
 shielded_tx_output_data
-  tx_id              VARCHAR(64)     NOT NULL,
-  output_index       SMALLINT        NOT NULL,
-  commitment         VARBINARY(33)   NOT NULL,
-  range_proof        VARBINARY(1024) NOT NULL,
-  script             VARBINARY(1024) NOT NULL,  -- raw, not parsed
-  ephemeral_pubkey   VARBINARY(33)   NOT NULL,
-  token_data         TINYINT         NULL,    -- non-null iff mode = 1
-  asset_commitment   VARBINARY(33)   NULL,    -- non-null iff mode = 2
-  surjection_proof   VARBINARY(4096) NULL,    -- non-null iff mode = 2
-  PRIMARY KEY (tx_id, output_index),
-  FOREIGN KEY (tx_id, output_index) REFERENCES tx_output(tx_id, index) ON DELETE CASCADE
+  tx_id              VARCHAR(64)         NOT NULL,
+  `index`            SMALLINT UNSIGNED   NOT NULL,
+  commitment         VARBINARY(33)       NOT NULL,
+  range_proof        VARBINARY(1024)     NOT NULL,
+  script             VARBINARY(1024)     NOT NULL,  -- raw, not parsed
+  ephemeral_pubkey   VARBINARY(33)       NOT NULL,
+  token_data         TINYINT UNSIGNED    NULL,      -- non-null iff mode = 1; 1-byte wire value (low 7 bits = token index into vertex.tokens[], high bit = authority flag — always 0 for shielded)
+  asset_commitment   VARBINARY(33)       NULL,      -- non-null iff mode = 2
+  surjection_proof   VARBINARY(4096)     NULL,      -- non-null iff mode = 2
+  PRIMARY KEY (tx_id, `index`),
+  FOREIGN KEY (tx_id, `index`) REFERENCES tx_output(tx_id, `index`) ON DELETE CASCADE
 ```
+
+The `index` column is `SMALLINT UNSIGNED` to match the widened `tx_output.index` (see § *Type-widening migration for `tx_output.index`*) and backticked because `index` is a SQL-reserved keyword in MySQL. Using the same column name and type as the parent table makes the FK self-documenting and removes the `output_index` ↔ `index` naming asymmetry an earlier revision had. `token_data` is `TINYINT UNSIGNED` to cover the full 0–255 byte range the wire emits — signed TINYINT (-128..127) would not fit `token_data` values ≥ 128.
 
 Notes:
 
@@ -258,75 +279,87 @@ Notes:
 - `script` is stored raw for archival. The daemon does not parse it.
 - `recovery_state` is **not** here — it lives on `tx_output` so consumers can filter by it without joining the satellite. This is the answer to "where do I look to find every owned-but-unrecovered output for catch-up": `SELECT … FROM tx_output WHERE mode IN (1,2) AND recovery_state = 'unowned' AND address IN (…)`.
 
-### `shielded_address` — new
+### `address` — modified (shielded columns added)
 
-Holds every spend_address observed on chain in a shielded output, regardless of ownership. Ownership fields are NULL until a wallet claims the address.
+Shielded ownership folds into the existing transparent `address` table; there is **no** separate `shielded_address` table. A new `bip32_account` discriminator column (`0 = transparent`, `1 = shielded scan path`) tells the two kinds of rows apart on the same physical table. The existing PK `(address)` stays — the on-chain base58 spend address is unique within a kind, and the design assumes the two address spaces are disjoint (a given on-chain string is observed in only one role on this service).
 
 ```
-shielded_address
-  address           VARCHAR(34)    NOT NULL,  -- on-chain spend address (base58); PK
-  wallet_id         VARCHAR(64)    NULL,      -- NULL until owned
-  shielded_index    INT UNSIGNED   NULL,      -- NULL until owned
-  shielded_address  VARCHAR(100)   NULL,      -- 71-byte payload, base58, ≤100 chars; NULL until owned
-  scan_privkey      VARBINARY(32)  NULL,      -- plaintext; NULL until owned
-  catchup_state     ENUM('pending','running','done') NULL,  -- NULL until owned
+address
+  -- existing columns
+  address           VARCHAR(34)    NOT NULL,
+  wallet_id         VARCHAR(64)    NULL,
+  `index`           INT UNSIGNED   NULL,
   transactions      INT UNSIGNED   NOT NULL DEFAULT 0,
-  created_at        TIMESTAMP      NOT NULL,
+  -- new columns
+  bip32_account     TINYINT UNSIGNED NOT NULL DEFAULT 0,   -- 0 = transparent, 1 = shielded scan path
+  scan_privkey      VARBINARY(32)  NULL,                    -- plaintext; NULL for transparent rows
+  catchup_state     ENUM('pending','running','done') NULL,  -- NULL for transparent or unowned rows
+  shielded_address  VARCHAR(100)   NULL,                    -- long-form display string; 71-byte payload, base58, ≤100 chars; NULL for transparent rows AND for unowned shielded rows (populated only at wallet registration, since the long-form requires scan_pubkey + spend_pubkey)
   PRIMARY KEY (address),
-  UNIQUE KEY uk_wallet_shielded_index (wallet_id, shielded_index),
-  INDEX idx_shielded_address (shielded_address),
-  INDEX idx_wallet_catchup (wallet_id, catchup_state)
+  UNIQUE KEY uk_address_wallet_account_index (wallet_id, bip32_account, `index`),
+  INDEX idx_address_shielded_long (shielded_address),
+  INDEX idx_address_wallet_catchup (wallet_id, catchup_state)
 ```
 
 Notes:
 
-- This mirrors how the existing transparent `address` table works: rows exist for every observed address; `wallet_id` populates only when a wallet that derives the address registers.
-- `transactions` increments on every observed shielded output regardless of ownership. It is the per-address activity counter used for gap-limit decisions during catch-up.
-- `(wallet_id, shielded_index)` is UNIQUE. MySQL treats multiple NULLs as distinct, so unowned rows (NULL `wallet_id`) coexist freely.
-- `scan_pubkey` and `spend_pubkey` are **not** stored — they are intermediate values during derivation: `scan_pubkey` is recoverable via point multiplication from `scan_privkey`, and `spend_pubkey` is recoverable via BIP32 derivation from `wallet.spend_xpub` at the row's `shielded_index`.
+- `bip32_account` is `NOT NULL DEFAULT 0`. The `ADD COLUMN` migration backfills every existing transparent row to `0` in the same statement, so the new unique key `(wallet_id, bip32_account, index)` enforces strictly from the moment it lands. Shielded rows are written with `bip32_account = 1`.
+- The other three new columns (`scan_privkey`, `catchup_state`, `shielded_address`) stay nullable — they are only populated for `bip32_account = 1` rows.
+- Daemon ingestion writes a row on every observed shielded spend address (mirroring how transparent `address` rows are written on observation): the upsert sets `bip32_account = 1` and creates the row if it doesn't exist. It does **not** write `shielded_address`, `scan_privkey`, or `catchup_state` — those columns are owned by the wallet-registration path, which has the material to derive the long-form (`scan_privkey` + `spend_pubkey`) and persists it in the same UPSERT that claims ownership. For an already-claimed wallet's row, the observation upsert is a no-op on every ownership column; it just confirms `bip32_account = 1` and exits.
+- The single canonical `transactions` bump per `(address, tx)` lives in `updateAddressTablesWithTx` (see § *Invariants* below). The observation upsert does **not** bump it.
+- `scan_pubkey` and `spend_pubkey` are **not** stored — they are intermediate values during derivation: `scan_pubkey` is recoverable via point multiplication from `scan_privkey`, and `spend_pubkey` is recoverable via BIP32 derivation from `wallet.spend_xpub` at the row's `index`.
+- `scan_privkey` uses raw `ALTER TABLE … ADD COLUMN scan_privkey VARBINARY(32)` rather than the Sequelize BLOB family, because Sequelize's BLOB types map to `(TINY|MEDIUM|LONG)BLOB` and don't expose a fixed-cap VARBINARY variant. `scan_privkey` is always exactly 32 bytes (Ristretto255 scalar); VARBINARY is preferred over BLOB for inline storage and tight upper-bound typing.
+
+### Why one address table with a `bip32_account` discriminator?
+
+An earlier revision of this design used a separate `shielded_address` table. It was abandoned once it became clear that the shielded `spend_address` is a P2PKH derived on a separate BIP32 account (`m/44'/280'/1'`) and therefore shares the same on-chain shape as a transparent address — and can in principle receive both shielded *and* transparent outputs. Folding into one table eliminates a parallel ownership lookup path (`findShieldedAddressOwnership` becomes a filter on `bip32_account = 1` of the same SELECT) and removes a class of subtle bugs where the shielded ownership table and the transparent one drift out of sync during reorgs.
+
+The trade-off is that the row layout grows four nullable columns whose values are only meaningful for `bip32_account = 1`. That is a small price for collapsing two parallel handlers into one.
 
 ### `address_balance` — modified
 
 ```
 address_balance
   -- existing columns
-  address                 VARCHAR(34)     NOT NULL,
-  token_id                VARCHAR(64)     NOT NULL,
-  unlocked_balance        BIGINT          NOT NULL DEFAULT 0,
-  locked_balance          BIGINT UNSIGNED NOT NULL DEFAULT 0,
-  timelock_expires        INT UNSIGNED    NULL,
-  transactions            INT UNSIGNED    NOT NULL DEFAULT 0,
-  total_received          BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  address                    VARCHAR(34)     NOT NULL,
+  token_id                   VARCHAR(64)     NOT NULL,
+  unlocked_balance           BIGINT          NOT NULL DEFAULT 0,
+  locked_balance             BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  timelock_expires           INT UNSIGNED    NULL,
+  transactions               INT UNSIGNED    NOT NULL DEFAULT 0,
+  total_received             BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- existing authority columns unchanged
-  -- new column
-  kind                    ENUM('transparent','shielded') NOT NULL DEFAULT 'transparent',
-  PRIMARY KEY (address, token_id),
-  INDEX idx_kind_token (kind, token_id)
+  -- new shielded columns
+  unlocked_shielded_balance  BIGINT          NOT NULL DEFAULT 0,
+  locked_shielded_balance    BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  total_shielded_received    BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (address, token_id)
 ```
 
 Notes:
 
-- `kind` is functionally determined by which ownership table holds the address (`address` vs `shielded_address`) — the two address spaces are disjoint. The column is a denormalised label so consumers can filter without JOINing.
-- Authority bits stay populated for transparent rows; always 0 for shielded rows (shielded outputs cannot carry authority).
-- `idx_kind_token` accelerates per-kind aggregations and reorg-time scans.
+- The same `(address, token_id)` row carries both transparent and shielded balances. There is no `kind` discriminator — the layout mirrors `wallet_balance`, with separate column pairs for the two kinds of balance.
+- This shape exists because the shielded spend_address is a P2PKH that can in principle receive both transparent *and* shielded outputs. The same row then holds both kinds; consumers read one row and pick the columns they care about.
+- **Column-sign rationale.** `unlocked_shielded_balance` is `BIGINT` (signed) to mirror `unlocked_balance`; spend reversals decrement these columns and a signed type is the simpler defense against transient negatives. `locked_shielded_balance` is `BIGINT UNSIGNED` to mirror the existing `locked_balance`; this depends on the invariant that every reversal subtracts a value previously added in the same column (so the column stays ≥ 0 under correct operation — underflow would indicate a daemon bug). The broader question of whether `locked_balance` itself should move to signed is out of scope here; this design preserves the existing transparent convention and applies it symmetrically to the new shielded column. `total_shielded_received` mirrors `total_received` (unsigned) — see next point for the semantic.
+- `total_received` and `total_shielded_received` track currently-valid lifetime receipts. Credits add to them on receive; reversals subtract on void (matching today's `voidAddressTransaction` behavior on the transparent column). Spend reversals do **not** touch the `total_*_received` columns — only voids do, because only a void rolls back the receive itself. For shielded, the decrement only fires when the voided output had `recovery_state = 'recovered'` (its value was known at credit time); unrecovered shielded outputs never contributed and stay at zero impact on void.
+- `transactions` is a single combined counter on the row, bumped at most once per `(address, tx)` regardless of kind mix. The bump lives in `updateAddressTablesWithTx`.
+- Authority bits stay populated for the transparent columns; shielded outputs cannot carry authority.
 
 ### `address_tx_history` — modified
 
 ```
 address_tx_history
-  address           VARCHAR(34)     NOT NULL,
-  tx_id             VARCHAR(64)     NOT NULL,
-  token_id          VARCHAR(64)     NOT NULL,
-  balance_delta     BIGINT          NOT NULL,
-  timestamp         INT UNSIGNED    NOT NULL,
-  voided            BOOLEAN         NOT NULL DEFAULT FALSE,
-  -- new column
-  kind              ENUM('transparent','shielded') NOT NULL DEFAULT 'transparent',
-  PRIMARY KEY (address, tx_id, token_id),
-  INDEX idx_kind_token_timestamp (kind, token_id, timestamp DESC)
+  address                  VARCHAR(34)     NOT NULL,
+  tx_id                    VARCHAR(64)     NOT NULL,
+  token_id                 VARCHAR(64)     NOT NULL,
+  balance_delta            BIGINT          NOT NULL,        -- transparent delta
+  shielded_balance_delta   BIGINT          NOT NULL DEFAULT 0,   -- NEW; signed
+  timestamp                INT UNSIGNED    NOT NULL,
+  voided                   BOOLEAN         NOT NULL DEFAULT FALSE,
+  PRIMARY KEY (address, tx_id, token_id)
 ```
 
-PK unchanged: an address is one kind, and a `(address, tx_id, token_id)` triple is a unique movement. `kind` is a label.
+PK unchanged: one row per `(address, tx_id, token_id)` regardless of kind mix. The row's `balance_delta` and `shielded_balance_delta` are written together by `updateAddressTablesWithTx` from the totals it just computed for the vertex; either may be zero. `shielded_balance_delta` is signed so spend reversals can write a negative value.
 
 ### `wallet_balance` — modified
 
@@ -342,7 +375,7 @@ wallet_balance
   total_received             BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- existing authority columns unchanged
   -- new shielded columns
-  unlocked_shielded_balance  BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  unlocked_shielded_balance  BIGINT          NOT NULL DEFAULT 0,
   locked_shielded_balance    BIGINT UNSIGNED NOT NULL DEFAULT 0,
   total_shielded_received    BIGINT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (wallet_id, token_id)
@@ -350,6 +383,7 @@ wallet_balance
 
 Notes:
 
+- Column-sign rationale mirrors `address_balance`: `unlocked_shielded_balance` signed to match `unlocked_balance`; `locked_shielded_balance` unsigned to match `locked_balance` and rely on the same paired-add/subtract invariant; `total_shielded_received` unsigned and tracks currently-valid lifetime receipts (decremented on void of a recovered shielded output, matching the transparent `total_received` semantic).
 - `transactions` is a combined count. A single tx that touches both kinds for the same token increments by 1, not 2 — matching the natural reading of "transactions for this token in this wallet".
 - Authority bits stay (transparent only).
 - `timelock_expires` stays a single column. The timelock-expiry sweep is unified (one SQL query across `tx_output` regardless of `mode`; see the handlers section below), so a per-kind "next expiry" cache has no consumer — the scheduler reads one row, no per-kind breakdown is exposed by the API, and a single `MIN(timelock)` aggregate over locked rows is the right cache value.
@@ -386,8 +420,10 @@ token
 
 1. **Token creation** — `total_supply` is set to the initial mint amount when the token-creation tx is processed.
 2. **Block reward** (HTR only) — every accepted block increments `total_supply` for HTR by the block reward.
-3. **Mint / melt** — gated on the vertex containing no shielded outputs and at least one authority output. The signed delta is `sum(outputs[token].value) − sum(inputs[token].value)`, **including** burn-address outputs in the outputs sum so the authority-driven delta reflects the real supply change.
-4. **Burn sweep** — gated on the vertex containing no shielded outputs. Every transparent output sent to the burn address subtracts its `value` from that token's `total_supply`. The mint/melt math includes burns in its outputs sum, so the burn sweep handles destruction as a separate, additive correction (no double-count).
+3. **Mint / melt** — gated on the vertex containing no shielded outputs and at least one authority output. The signed delta is `sum(non-burn outputs[token].value) − sum(inputs[token].value)` — burn-address outputs are **excluded** from the outputs sum so this path reflects the authority-driven supply change only.
+4. **Burn sweep** — gated on the vertex containing no shielded outputs. Every transparent output sent to the burn address subtracts its `value` from that token's `total_supply`. Always runs when the gate is satisfied, regardless of whether the tx carried an authority output, since pure burns (no authority) reach `total_supply` only through this path.
+
+The two paths are cleanly disjoint: Path 3 is "authority-driven supply change" and Path 4 is "destruction." A mint/melt tx that also burns runs both paths and the deltas compose without double-counting (the burn is excluded from Path 3 and subtracted by Path 4); a pure burn tx runs only Path 4.
 
 The gate on `shielded_outputs.length === 0` is a v1 deferral: shielded mint/melt accounting requires a robust way to identify the authority-driven delta from blinded outputs, which is a follow-up. Until then, any vertex with shielded outputs leaves every involved token's `total_supply` untouched — `getTotalSupply` returns a stale (lower-bound) value for such tokens until the follow-up lands.
 
@@ -410,7 +446,8 @@ export const ShieldedOutputModeSchema = z.union([
 ]);
 
 const ShieldedDecodedSchema = z.object({
-  address: z.string(),  // base58 spend address (≤34 chars; mirrors transparent shape)
+  address: z.string(),                          // base58 spend address (≤34 chars; mirrors transparent shape)
+  timelock: z.number().int().optional(),        // unix seconds; absent ⇒ no timelock (mirrors transparent `decoded.timelock`)
 });
 
 const BaseShieldedOutputSchema = z.object({
@@ -421,6 +458,11 @@ const BaseShieldedOutputSchema = z.object({
   ephemeral_pubkey: z.string(),   // hex
   decoded: ShieldedDecodedSchema,
 });
+
+// Note: the shielded wire format does NOT carry a top-level `locked` flag (unlike
+// transparent `output.locked`). The daemon derives `locked` locally for shielded
+// outputs from `decoded.timelock` and `vertex.heightlock` against the current chain
+// time/height — see the `handleVertexAccepted` pseudocode below.
 
 export const AmountShieldedOutputSchema = BaseShieldedOutputSchema.extend({
   mode: z.literal(1),
@@ -496,24 +538,34 @@ async function handleVertexAccepted(db, txn, vertex) {
         recovery_state: null,
       });
     } else {
+      const shieldedTimelock = output.decoded.timelock ?? null;
+      const shieldedLocked = isOutputLocked(shieldedTimelock, vertex.heightlock, vertex);
+
       await db.insertTxOutput(txn, {
         tx_id: vertex.tx_id, index: idx, mode: output.mode,
         address: output.decoded.address,
         value: null,
         token_id: output.mode === 1 ? tokenUid(output.token_data, vertex) : null,
         authorities: 0,
-        timelock: null, heightlock: vertex.heightlock,
-        locked: false, voided: false,
+        timelock: shieldedTimelock,
+        heightlock: vertex.heightlock,
+        locked: shieldedLocked,
+        voided: false,
         recovery_state: 'unowned',
       });
 
       await db.insertShieldedTxOutputData(txn, vertex.tx_id, idx, output);
 
-      // Upsert the shielded_address row for activity tracking.
-      // Creates a row with NULL ownership fields if this is the first sighting of the address.
+      // Upsert the shielded ownership row on the unified `address` table.
+      // Writes bip32_account = 1. Creates a row with NULL ownership fields if this is
+      // the first sighting of the address. Does NOT write `shielded_address` / `scan_privkey`
+      // / `catchup_state` — the long-form cannot be derived from the on-chain spend address
+      // alone (it needs scan_pubkey + spend_pubkey), so those columns are populated only by
+      // the wallet-registration path which has the material to derive them.
+      // Does not touch `transactions` — see § Invariants.
       await db.upsertShieldedAddressObservation(txn, output.decoded.address);
 
-      // Ownership lookup. Single SELECT.
+      // Ownership lookup. Single SELECT against `address` filtered on bip32_account = 1.
       const owned = await db.findShieldedAddressOwnership(txn, output.decoded.address);
       if (owned?.wallet_id) {
         try {
@@ -528,13 +580,17 @@ async function handleVertexAccepted(db, txn, vertex) {
               );
           if (output.mode === 2) verifyAssetCommitment(recovered, output.asset_commitment);
 
+          // For mode = 1, `token_id` was set at observe time from `output.token_data`;
+          // the rewind only returns `{ value }`, so we leave `token_id` untouched.
+          // For mode = 2, the rewind returns `{ value, tokenUid }`; we write the recovered
+          // tokenUid into the row.
           await db.markTxOutputRecovered(txn, vertex.tx_id, idx, {
             value: recovered.value,
-            token_id: recovered.tokenUid ?? output.token_data ? tokenUid(output.token_data, vertex) : null,
+            ...(recovered.tokenUid !== undefined ? { token_id: recovered.tokenUid } : {}),
           });
         } catch (e) {
           await db.markTxOutputRecoveryFailed(txn, vertex.tx_id, idx);
-          emitAlert('shielded_recovery_failed', { tx_id: vertex.tx_id, output_index: idx });
+          emitAlert('shielded_recovery_failed', { tx_id: vertex.tx_id, index: idx });
         }
       }
     }
@@ -556,7 +612,7 @@ async function handleVertexAccepted(db, txn, vertex) {
 }
 ```
 
-`tokenUid` resolves the 1-byte `token_data` to its 32-byte UID by reading the vertex's `tokens[]` array (existing pattern).
+`tokenUid` resolves the 1-byte `token_data` to its 32-byte UID by reading the vertex's `tokens[]` array (existing pattern). `isOutputLocked(timelock, heightlock, vertex)` is the locally-computed equivalent of the wire's `output.locked` flag used on the transparent path — it returns true iff the timelock is in the future relative to the daemon's clock OR the vertex's heightlock is above the current chain height. The transparent path doesn't need this helper because the fullnode emits `output.locked` pre-computed on every transparent output; the shielded wire format does not.
 
 Critical invariant: everything runs inside a single per-vertex DB transaction. The existing `handleVertexAccepted` transaction wrapper is reused unchanged.
 
@@ -572,30 +628,37 @@ async function updateAddressTablesWithTx(txn, vertex) {
   //    rows newly marked spent_by). Each row carries its `mode` and `recovery_state`.
   const affected = await db.getAffectedTxOutputs(txn, vertex.tx_id);
 
-  // 2. Group by (address, token_id, kind). For unrecovered shielded rows, skip —
+  // 2. Group by (address, token_id). For unrecovered shielded rows, skip —
   //    we can't update balance without a known value.
   for (const row of affected) {
     if (row.mode === 0) {
-      // existing transparent logic, unchanged
-      await applyAddressBalanceDelta(txn, row.address, row.token_id, 'transparent',
-        signedAmount(row), row.locked);
+      // existing transparent logic, unchanged: writes the transparent columns
+      // of address_balance.
+      await applyTransparentAddressBalance(txn, row.address, row.token_id, signedAmount(row), row.locked);
     } else if (row.recovery_state === 'recovered') {
-      await applyAddressBalanceDelta(txn, row.address, row.token_id, 'shielded',
-        signedAmount(row), row.locked);
+      // Writes the shielded columns of the same unified address_balance row.
+      // Does not bump `transactions` — the central bump for (address, tx) lives
+      // in this same function and fires once per vertex regardless of kind mix.
+      await applyShieldedAddressBalance(txn, row.address, row.token_id, signedAmount(row), row.locked);
     }
     // mode IN (1,2) && recovery_state IN ('unowned','recovery_failed') => no balance impact.
   }
+
+  // 3. Single `transactions` bump for every (address, token_id) touched by this
+  //    vertex — covers transparent credits/spends, shielded credits (via the
+  //    aggregation map seeded with zero deltas for shielded-touched addresses),
+  //    and shielded spends (via the transparent stub emitted by prepareInputs).
 }
 ```
 
-`applyAddressBalanceDelta` writes to `address_balance` with the appropriate `kind` label and uses one pair of `unlocked_balance` / `locked_balance` columns (the row's `kind` already says which type of balance it carries).
+`applyTransparentAddressBalance` writes to the transparent columns (`unlocked_balance` / `locked_balance` / `total_received`) on the unified `address_balance` row. `applyShieldedAddressBalance` INSERTs with zero transparent columns + ON DUPLICATE KEY UPDATE on the shielded columns (`unlocked_shielded_balance` / `locked_shielded_balance` / `total_shielded_received`); no `WHERE kind = …` clause and no `kind` label is written. The reversal helper `reverseShieldedAddressBalanceOnSpend` UPDATEs only the `*_shielded_balance` columns (leaving `total_shielded_received` alone — see § *Invariants*).
 
 `updateWalletTablesWithTx` is similar but writes to `wallet_balance` and `wallet_tx_history`. For `wallet_balance` it dispatches on `mode`:
 
 - `mode = 0` → `unlocked_balance` / `locked_balance` columns.
 - `mode IN (1, 2)` recovered → `unlocked_shielded_balance` / `locked_shielded_balance` columns.
 
-For `wallet_tx_history`, the per-tx-per-token aggregation produces both `balance_delta` (sum of transparent contributions) and `shielded_balance_delta` (sum of shielded contributions) for the same row.
+For `wallet_tx_history`, the per-tx-per-token aggregation produces both `balance_delta` (sum of transparent contributions) and `shielded_balance_delta` (sum of shielded contributions) for the same row. The address-grain analogue (`address_tx_history`) carries the same two columns for the same reason.
 
 ## Spend / consume tracking
 
@@ -630,25 +693,56 @@ async function markTxOutputSpent(txn, input, consumingTxId) {
 
 ## Reorg, void, unvoid
 
-Each existing handler in `packages/daemon/src/services/index.ts` is extended in-place, not duplicated:
+Two distinct void code paths exist in the codebase today, in two different layers and triggered by two different events. The design extends both **in-place**, not duplicated. Per-event dispatch is unchanged: any given event fires one path or the other, never both, so the two are disjoint at runtime.
 
-- `handleVoidedTx`:
-  1. UPDATE `tx_output` SET `voided = TRUE` WHERE `tx_id = ?` — affects both transparent and shielded rows uniformly.
-  2. UPDATE `wallet_tx_history` and `address_tx_history` SET `voided = TRUE` for the same `tx_id`.
-  3. Reverse the balance deltas by re-running `updateAddressTablesWithTx` / `updateWalletTablesWithTx` with a reversing sign. Inside those functions, `mode` dispatch picks the right columns.
-  4. On the wallet-service side, `rebuildAddressBalancesFromUtxos` recomputes `address_balance` rows for affected addresses. The recompute helper queries (including `getAffectedAddressTotalReceivedFromTxList`) are kind-agnostic at the SQL level: `SUM(value)` skips NULL for unrecovered shielded rows and contributes the recovered portion for recovered ones, and the per-`(address, token)` UPDATE hits the correct kind-discriminated row in `address_balance` (transparent and shielded address spaces are disjoint, so each row is unambiguously one kind).
+### Path A — daemon `handleVoidedTx` (per-tx void event)
 
-- `handleUnvoidedTx`: mirror of `handleVoidedTx` (sets `voided = FALSE`; re-applies deltas).
+Lives in `packages/daemon/src/services/index.ts`. Triggered when the fullnode emits a `TX_VOIDED` metadata-diff event for a single tx. Wraps a DB transaction around `voidTx` (`db/index.ts`), which today does:
 
-- `handleVertexRemoved`: DELETE `tx_output` rows for the vertex; the FK on `shielded_tx_output_data` cascades. Balance reversal runs once.
+1. `voidTransaction` — mark the row voided on the `transaction` table.
+2. `markUtxosAsVoided` — UPDATE `tx_output` SET `voided = TRUE` for this tx's outputs.
+3. Compute `addressBalanceMap` from this tx's inputs and outputs.
+4. `voidAddressTransaction` / `voidWalletTransaction` — batched UPDATEs with `op: 'subtract'` reversing the original delta on the relevant balance columns, plus `transactions -= 1` and authority/timelock bookkeeping.
+5. `unspendUtxos` — clear `spent_by` on inputs spent by this tx.
+6. Token cleanup for any tokens created by this tx.
 
+The shielded extension is **column dispatch inside the existing helpers**, not a new handler:
+
+- `voidAddressTransaction` and `voidWalletTransaction` gain `mode`-dispatched UPDATEs so that for rows touching the shielded columns of the unified `(address, token_id)` / `(wallet_id, token_id)` row, they decrement `unlocked_shielded_balance` / `locked_shielded_balance` instead of (or in addition to, on mixed-kind txs) the transparent columns. The `addressBalanceMap` built upstream already carries both deltas; the helper picks columns by `mode`.
+- `total_received` / `total_shielded_received` are decremented here too, mirroring the transparent path's existing behavior — `totalAmountSent` is subtracted from `total_received` for the transparent contribution, and the analogous recovered-shielded receive amount is subtracted from `total_shielded_received` for the shielded contribution. Unrecovered shielded outputs (recovery_state ≠ 'recovered') never contributed to `total_shielded_received` and so don't decrement it on void.
+- `markUtxosAsVoided` is unchanged structurally — it works on `tx_output` rows uniformly, transparent and shielded.
+
+The shielded input case follows the same pattern: `prepareInputs` emits the input's contribution into `addressBalanceMap` reading `input.spent_output.mode` from the wire (see §*Spend / consume tracking*), so the helper sees a kind-tagged balance delta and dispatches columns accordingly.
+
+`handleUnvoidedTx` is the mirror — it calls `cleanupVoidedTx`, which today re-applies deltas with a forward sign; same shielded-column-dispatch extension applies.
+
+### Path B — wallet-service reorg sweep (`rebuildAddressBalancesFromUtxos`)
+
+Lives in `packages/wallet-service/src/commons.ts` (`handleVoided` at the per-tx wrapper layer; `handleReorg` for chain rewinds) and `packages/wallet-service/src/db/index.ts` (`rebuildAddressBalancesFromUtxos`, `getAffectedAddressTotalReceivedFromTxList`). Triggered by reorg detection or the wallet-service-side single-tx void wrapper. Today it:
+
+1. BFS-walks affected txs (`handleVoidedTxList`), marking each `tx_output.voided = TRUE` and unspending inputs along the way. Accumulates an `affectedUtxoList`.
+2. Collects the set of `(addresses, txIds)` touched.
+3. Calls `rebuildAddressBalancesFromUtxos`:
+   - Zeros out every `address_balance` row for the affected addresses.
+   - Recomputes from `tx_output` via two `INSERT ... ON DUPLICATE KEY UPDATE` SUMs (one for unlocked, one for locked).
+   - Re-derives `transactions` (`getAffectedAddressTxCountFromTxList`) and `total_received` (`getAffectedAddressTotalReceivedFromTxList`) from `address_tx_history`.
+4. `validateAddressBalances` cross-checks the result.
+
+The shielded extension is **kind-aware SQL added in place**:
+
+- The zero-out UPDATE adds the new shielded columns to its `SET` clause (`unlocked_shielded_balance = 0`, `locked_shielded_balance = 0`).
+- Two additional INSERT-on-duplicate-update blocks SUM `value` for shielded rows: one for `mode IN (1, 2) AND recovery_state = 'recovered' AND locked = FALSE` (writes `unlocked_shielded_balance`), one for `mode IN (1, 2) AND recovery_state = 'recovered' AND locked = TRUE` (writes `locked_shielded_balance`). Unrecovered shielded rows have `value IS NULL` and naturally drop out of the SUM.
+- `getAffectedAddressTotalReceivedFromTxList` today reads `SUM(value) FROM tx_output WHERE tx_id IN (...) AND voided = TRUE GROUP BY address, token_id` to produce the *diff to subtract* from the old `total_received`. The shielded extension adds a parallel SUM in the same query filtered on `mode IN (1, 2) AND recovery_state = 'recovered'` to compute the equivalent diff for `total_shielded_received`. `rebuildAddressBalancesFromUtxos` then subtracts both diffs from the corresponding pre-recompute values it cached at the start of the helper.
+
+### Other handlers
+
+- `handleVertexRemoved`: DELETE `tx_output` rows for the vertex; the FK on `shielded_tx_output_data` cascades. Whatever balance reversal Path A would have done for that vertex's contributions runs once via the same kind-dispatched helpers.
 - `handleReorgStarted`: no kind-specific logic; reorgs are realised by the per-vertex remove/void calls that follow.
-
-- `unlockTimelockedUtxos` (the periodic timelock-expiry sweep): `getExpiredTimelocksUtxos(now)` returns expired rows from `tx_output` *regardless of `mode`*. `unlockUtxos(utxos)` then:
+- `unlockTimelockedUtxos` (periodic timelock-expiry sweep): `getExpiredTimelocksUtxos(now)` returns expired rows from `tx_output` *regardless of `mode`*. `unlockUtxos(utxos)` then:
   1. Batches a single `dbUnlockUtxos(utxos)` to flip `locked = FALSE` on every row.
   2. Partitions the input by `(mode, recovery_state)` and runs two batched balance flows — one for transparent rows, one for recovered shielded rows — through the same kind-aware `updateAddressLockedBalance` / `updateWalletLockedBalance` helpers used by the receive/spend paths. Unowned (or recovery-failed) shielded rows get their row-level `locked = FALSE` flip but no balance write; when the wallet later registers and recovery succeeds, the recovery path reads the row's current `locked = FALSE` and credits `unlocked_shielded_balance` directly. No follow-up unlock is needed.
 
-**Why this is the central argument for the design.** A parallel-tables alternative would add a `…ShieldedOutputs(vertex)` companion call to every one of the four vertex handlers above *plus* a parallel `unlockShieldedTimelockedUtxos` sweep job, each performing the same arithmetic on parallel tables. Even with helpers that share an implementation, the *call sites* multiply, and every future change to the handlers would have to land in two places at once. With this design, the call sites stay the same; the **dispatch on `mode` lives inside the balance-update functions**, which is exactly the layer that already handles the per-row variance the transparent path requires (authority bits, locked vs unlocked, timelock expiry).
+**Why this is the central argument for the design.** A parallel-tables alternative would add a `…ShieldedOutputs(vertex)` companion call to every one of the four vertex handlers above *plus* a parallel `unlockShieldedTimelockedUtxos` sweep job *plus* a parallel `rebuildShieldedAddressBalancesFromUtxos`, each performing the same arithmetic on parallel tables. Even with helpers that share an implementation, the *call sites* multiply, and every future change to the handlers would have to land in two places at once. With this design, the call sites stay the same; the **dispatch on `mode` lives inside the balance-update functions** (and the kind-aware SUMs live inside the recompute helper), which is exactly the layer that already handles the per-row variance the transparent path requires (authority bits, locked vs unlocked, timelock expiry).
 
 ## Push notifications and WebSocket updates
 
@@ -687,7 +781,7 @@ Shielded outputs in mempool transactions are handled exactly as transparent memp
 ## Code organisation
 
 - `packages/daemon/src/services/index.ts` — `handleVertexAccepted`, `handleVoidedTx`, `handleUnvoidedTx`, `handleVertexRemoved` are extended in-place. A new module `packages/daemon/src/services/shielded/recovery.ts` holds the rewind wrapper and ownership-lookup helper; it is **called from** the existing handlers but doesn't replace them.
-- `packages/daemon/src/db/index.ts` — `insertTxOutput`, `markTxOutputSpent`, `updateAddressTablesWithTx`, `updateWalletTablesWithTx` gain kind-awareness. New helpers `insertShieldedTxOutputData`, `upsertShieldedAddressObservation`, `findShieldedAddressOwnership`, `markTxOutputRecovered`, `markTxOutputRecoveryFailed` are added but live next to the existing helpers, not in a separate `shielded.ts` namespace.
+- `packages/daemon/src/db/index.ts` — `insertTxOutput`, `markTxOutputSpent`, `updateAddressTablesWithTx`, `updateWalletTablesWithTx` gain kind-awareness. New helpers `insertShieldedTxOutputData`, `upsertShieldedAddressObservation` (writes to the unified `address` table with `bip32_account = 1`), `findShieldedAddressOwnership` (SELECT from `address` filtered on `bip32_account = 1`), `applyShieldedAddressBalance`, `reverseShieldedAddressBalanceOnSpend`, `markTxOutputRecovered`, `markTxOutputRecoveryFailed` are added but live next to the existing helpers, not in a separate `shielded.ts` namespace.
 - `packages/daemon/src/crypto/ctRewind.ts` — thin wrapper around `@hathor/ct-crypto-node` (centralises error handling and TypeScript types).
 - `packages/common/src/types.ts` and `packages/daemon/src/types/event.ts` — extend the shared event/vertex schema types with the new top-level `shielded_outputs[]` field and its mode-discriminated entries.
 
@@ -702,7 +796,7 @@ There is **no** script-parsing module: the fullnode delivers `decoded.address` p
 - **CPU on the daemon.** Each ownership match triggers a ~1 ms range-proof rewind in-line. The daemon is a long-running process with budget for this, but a sudden spike (e.g., an exchange registering many shielded wallets at once) could lengthen per-vertex processing. Mitigation: the rewind is per-output, not per-vertex, so backpressure is bounded by `outputs-per-tx × matches-per-output`.
 - **A second NAPI dependency** (`@hathor/ct-crypto-node`) on the daemon. Mitigation: wrapped behind `crypto/ctRewind.ts` for centralised error handling.
 - **Plaintext scan secrets in the DB.** Encryption-at-rest is out of scope. Mitigation: encryption can be added later without changing the schema layout — column types and widths leave room for ciphertext.
-- **Schema breadth.** Two new tables (`shielded_tx_output_data`, `shielded_address`) plus five modified tables. Modifications are additive; the migration is reversible by dropping the new columns and tables.
+- **Schema breadth.** One new table (`shielded_tx_output_data`) plus six modified tables. Modifications are additive; the migration is reversible by dropping the new columns and the satellite table. `address` carries four new nullable-or-defaulted columns whose values are only meaningful for `bip32_account = 1` rows.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -721,19 +815,18 @@ Inlining would balloon every transparent row with NULL columns that consume disk
 
 The FK with `ON DELETE CASCADE` keeps lifecycle parity automatic: deleting a `tx_output` row on `handleVertexRemoved` removes the satellite row in the same statement.
 
-## Why one `shielded_address` table with nullable ownership fields, mirroring transparent `address`?
+## Why fold shielded ownership into `address` instead of a separate `shielded_address` table?
 
-The transparent `address` table already has this shape: rows exist for every observed address; `wallet_id` is NULL until a wallet that derives the address registers. Mirroring that pattern for shielded:
+An earlier revision used a separate `shielded_address` table mirroring the transparent `address` table's shape. The two-table design was abandoned once it became clear that:
 
-- Lets the daemon track activity (`transactions` counter) for spend_addresses that aren't yet claimed by any wallet.
-- Makes wallet registration a per-row UPSERT against the existing pool, instead of an INSERT that might collide with what observation has written.
-- Keeps the gap-extension behaviour at registration symmetric with the transparent path.
+- The shielded `spend_address` is a P2PKH on a separate BIP32 account (`m/44'/280'/1'`); it shares the same on-chain shape as a transparent address and can in principle receive both shielded *and* transparent outputs.
+- The parallel-table design forced a duplicate ownership lookup (`findShieldedAddressOwnership`) that did the same work as the transparent lookup on a sibling table, and introduced a class of subtle bugs where shielded and transparent ownership rows could drift out of sync during reorgs.
 
-The cost is that ownership fields are nullable, which means queries that want owned-only rows must include `WHERE wallet_id IS NOT NULL`. This is a one-line filter; it doesn't multiply across many call sites.
+Folding into one table with a `bip32_account` discriminator collapses those two lookups into one (a SELECT against `address` with `WHERE bip32_account = 1`) and removes the parallel handler. The cost is that four columns on `address` are only meaningful for `bip32_account = 1` rows and stay NULL for transparent rows — accepted in exchange for handler simplicity.
 
-## Why `address_balance.kind` as a label instead of in the PK?
+## Why columns instead of a `kind` discriminator on `address_balance` and `address_tx_history`?
 
-Address spaces are disjoint — a given base58 string is either a transparent address or a shielded spend_address, never both. So `(address, token_id)` already uniquely identifies a row. Including `kind` in the PK would be redundant. Keeping it as a label column lets consumers filter by kind without JOINing through the ownership tables.
+The same `(address, token_id)` row can legitimately carry both transparent and shielded balances (the shielded spend_address is a P2PKH, so it can receive transparent outputs as well as shielded ones). A `kind` PK or label would either split that row into two — forcing every consumer to UNION them back — or be redundant alongside the discriminator that already lives on `tx_output.mode`. Mirroring the `wallet_balance` / `wallet_tx_history` shape (one row, separate `*_balance` and `*_shielded_balance` columns; one row, `balance_delta` and `shielded_balance_delta`) keeps the address grain consistent with the wallet grain.
 
 ## Why `wallet_balance` separate columns instead of `wallet_balance.kind` rows?
 

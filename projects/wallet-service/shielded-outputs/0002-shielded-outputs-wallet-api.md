@@ -7,14 +7,14 @@
 # Summary
 [summary]: #summary
 
-Extend the wallet-service REST API so client wallets can read and act on their shielded balances. The storage layer is unified: `tx_output`, `address_balance`, and `wallet_balance` carry both transparent and shielded rows, discriminated by `tx_output.mode` and labelled by `address_balance.kind`. This document specifies how that unified storage surfaces to clients.
+Extend the wallet-service REST API so client wallets can read and act on their shielded balances. The storage layer is unified: `tx_output` carries both transparent and shielded rows discriminated by `tx_output.mode`, while `address_balance` and `wallet_balance` carry parallel transparent and shielded amount columns on the same `(address, token_id)` / `(wallet_id, token_id)` row. This document specifies how that unified storage surfaces to clients.
 
 **Balance** responses keep today's `balance.unlocked` / `balance.locked` shape as a merged total (back-compat), and expose a `?include=split` query parameter that returns `{ transparent, shielded, total }`. **History** entries gain an optional `output_kind` discriminator and an optional `balanceBreakdown` block, all read from a single `wallet_tx_history` row per `(wallet_id, tx_id, token_id)`. **UTXO** endpoints take an optional `kind` filter (`transparent` | `shielded`); without it the response includes both kinds (single-table query, no UNION). The wallet-service does not sign shielded spends — clients construct them from the per-output bytes returned. The change is on the same endpoint paths the API exposes today; no `/v2` namespace, no `Accept-Version` header.
 
 # Motivation
 [motivation]: #motivation
 
-The [daemon and database design](0000-daemon-and-database.md) extends `tx_output`, `address_balance`, `wallet_balance`, and `wallet_tx_history` to carry shielded rows alongside transparent ones. The [wallet registration design](0001-wallet-registration.md) populates `shielded_address` so ownership can be resolved. This document closes the loop: it specifies the read surfaces the wallet client uses to view its shielded balance, browse shielded history, and obtain the per-output data it needs to build a shielded spend.
+The [daemon and database design](0000-daemon-and-database.md) extends `tx_output`, `address`, `address_balance`, `wallet_balance`, `address_tx_history`, and `wallet_tx_history` to carry shielded data alongside transparent. The [wallet registration design](0001-wallet-registration.md) populates the shielded rows of the unified `address` table (`bip32_account = 1`) so ownership can be resolved. This document closes the loop: it specifies the read surfaces the wallet client uses to view its shielded balance, browse shielded history, and obtain the per-output data it needs to build a shielded spend.
 
 The core API design tension is between **backward compatibility** (old clients reading `balance.unlocked` as a single number expect a meaningful number) and **breakdown** (a privacy-aware UI wants to render transparent vs shielded explicitly). The chosen resolution: keep the existing field shapes as merged totals by default, and expose the breakdown via opt-in query parameters and new optional response fields. Old clients see numbers that match the user's spendable funds; new clients can read the breakdown without an extra request shape.
 
@@ -299,11 +299,11 @@ Every entry has a `kind` discriminator (`'transparent'` or `'shielded'`) so a cl
 | `timelock`, `heightlock`, `locked` | ✓ | ✓ |
 | `voided`, `spent_by` | ✓ | ✓ |
 | `address` | ✓ (base58 transparent address) | ✓ (base58 on-chain spend address) |
-| `shielded_address` | — | ✓ (the long 71-byte user-facing base58 string from `shielded_address.shielded_address`) |
+| `shielded_address` | — | ✓ (the long 71-byte user-facing base58 string from `address.shielded_address` on the row with `bip32_account = 1`) |
 | `authorities` | ✓ (mint/melt bits) | always 0 — shielded outputs cannot carry authorities |
 | `mode` | `0` | `1` (AMOUNT_SHIELDED) or `2` (FULLY_SHIELDED) |
 | `recovery_state` | — | `'unowned' \| 'recovered' \| 'recovery_failed'` |
-| `shielded_index` | — | ✓ (BIP32 child index in the wallet, from `shielded_address.shielded_index`) |
+| `shielded_index` | — | ✓ (BIP32 child index in the wallet, from `address.index` on the row with `bip32_account = 1`) |
 | `commitment`, `ephemeral_pubkey`, `range_proof`, `script` | — | ✓ (from satellite `shielded_tx_output_data`) |
 | `token_data` | — | ✓ (only for `mode = 1`) |
 | `asset_commitment`, `surjection_proof` | — | ✓ (only for `mode = 2`) |
@@ -374,9 +374,10 @@ async function getFilteredUtxos(walletId: string, filters: Filters, kind?: 'tran
   // Single query against tx_output. mode dispatch is one optional WHERE clause.
   const rows = await db.queryUtxos(mysql, walletId, filters, kind);
 
-  // Hydrate shielded entries with crypto bytes and shielded_address metadata.
+  // Hydrate shielded entries with crypto bytes and ownership metadata.
   const shieldedIds = rows.filter(r => r.mode !== 0).map(r => [r.tx_id, r.index]);
   const satellite = await db.getShieldedTxOutputDataByIds(mysql, shieldedIds);
+  // Ownership rows live on the unified `address` table at bip32_account = 1.
   const ownership = await db.getShieldedAddressByAddresses(mysql, rows.map(r => r.address));
 
   return rows.map(r => formatUtxo(r, satellite, ownership));
