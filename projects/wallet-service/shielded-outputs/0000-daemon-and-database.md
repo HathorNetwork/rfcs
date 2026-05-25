@@ -192,8 +192,10 @@ Crucially: this is the **same** `handleVoidedTx` that runs for a transparent voi
 
 These hold at every commit and constrain how the per-vertex pipeline writes the address-grain and wallet-grain tables. Every helper below is structured to maintain them.
 
-- **Single canonical `transactions` bump per `(address, tx)` and per `(wallet, tx)`.** The bump happens once per vertex inside `updateAddressTablesWithTx` / `updateWalletTablesWithTx`, which see every shielded input (via the transparent stub `prepareInputs` emits for each shielded input) and every shielded output (via the unified output loop in `handleVertexAccepted`). The shielded credit and reversal helpers therefore do **not** touch `transactions`. Any SQL added to those helpers that includes `transactions = transactions + 1` is a regression of this invariant.
-- **Shielded-credit-only coverage.** A vertex whose only impact on an address is a fresh shielded credit (no transparent output, no spent input owned by the wallet) still needs its single `transactions` bump. The credit path arranges this by including the touched address in the balance-aggregation map fed to `updateAddressTablesWithTx` — with a zero balance delta if the only contribution is a shielded credit — so the canonical bump fires once. The same arrangement holds at the wallet grain in `updateWalletTablesWithTx`.
+- **Two grains of `transactions` counter, two single-writer invariants.**
+  - *Involvement counter* — `address.transactions`. Bumped exactly once per `(address, tx)`, driven by the involved-addresses set computed from wire data (inputs' `spent_output.decoded.address` + transparent outputs' `decoded.address` + shielded outputs' `decoded.address`). The bump fires regardless of whether the vertex carries a known token or value for that address, so unowned-shielded observations, recovery-failed shielded receives, and any other "we saw this address but don't know what happened" cases all contribute exactly one bump. The single writer is the address-grain bumper called inside `updateAddressTablesWithTx` (or a companion helper run at the same point in `handleVertexAccepted`). The observation upsert (`upsertShieldedAddressObservation`) does **not** bump.
+  - *Per-token counter* — `address_balance.transactions` and `wallet_balance.transactions`. Bumped exactly once per `(address, token, tx)` and per `(wallet, token, tx)`, driven by the unified per-token balance map. The map only contains entries where both token and value are known (transparent inputs/outputs, recovered+owned shielded inputs/outputs); unrecovered or unowned shielded entries are excluded, so no phantom `(address, '')` or `(wallet, '')` row can appear. The single writer is `updateAddressTablesWithTx` / `updateWalletTablesWithTx`.
+  - No wallet-grain involvement counter exists. `wallet.transactions` is intentionally not a column — wallet involvement is implicit in the ownership of involved addresses; consumers that need it can `JOIN` through `address.wallet_id`.
 - **Lifetime totals reflect currently-valid receipts.** `total_received` and `total_shielded_received` (on `address_balance` and `wallet_balance`) are incremented by credit helpers when a receive is observed and decremented by reversal helpers when the receive is later voided — matching the transparent path's existing behavior (`voidAddressTransaction` subtracts `totalAmountSent` from `total_received` today). A voided receive is removed from the lifetime total so consumers see the lifetime amount that was actually delivered, not the gross including rolled-back txs. For shielded, the decrement only fires for outputs whose value was known when the credit happened (`recovery_state = 'recovered'`); unrecovered shielded outputs never contributed to `total_shielded_received` in the first place, so their void is a no-op for this column.
 - **`address.bip32_account` is `NOT NULL DEFAULT 0`.** The migration backfills existing transparent rows to `0` in the same `ADD COLUMN` statement, so the unique constraint `(wallet_id, bip32_account, index)` enforces strictly from the moment it lands. The other three new columns (`scan_privkey`, `catchup_state`, `shielded_address`) stay nullable — populated only for `bip32_account = 1` rows.
 
@@ -323,14 +325,14 @@ address_balance
   -- existing columns
   address                    VARCHAR(34)     NOT NULL,
   token_id                   VARCHAR(64)     NOT NULL,
-  unlocked_balance           BIGINT          NOT NULL DEFAULT 0,
+  unlocked_balance           BIGINT UNSIGNED NOT NULL DEFAULT 0,
   locked_balance             BIGINT UNSIGNED NOT NULL DEFAULT 0,
   timelock_expires           INT UNSIGNED    NULL,
   transactions               INT UNSIGNED    NOT NULL DEFAULT 0,
   total_received             BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- existing authority columns unchanged
   -- new shielded columns
-  unlocked_shielded_balance  BIGINT          NOT NULL DEFAULT 0,
+  unlocked_shielded_balance  BIGINT UNSIGNED NOT NULL DEFAULT 0,
   locked_shielded_balance    BIGINT UNSIGNED NOT NULL DEFAULT 0,
   total_shielded_received    BIGINT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (address, token_id)
@@ -340,7 +342,7 @@ Notes:
 
 - The same `(address, token_id)` row carries both transparent and shielded balances. There is no `kind` discriminator — the layout mirrors `wallet_balance`, with separate column pairs for the two kinds of balance.
 - This shape exists because the shielded spend_address is a P2PKH that can in principle receive both transparent *and* shielded outputs. The same row then holds both kinds; consumers read one row and pick the columns they care about.
-- **Column-sign rationale.** `unlocked_shielded_balance` is `BIGINT` (signed) to mirror `unlocked_balance`; spend reversals decrement these columns and a signed type is the simpler defense against transient negatives. `locked_shielded_balance` is `BIGINT UNSIGNED` to mirror the existing `locked_balance`; this depends on the invariant that every reversal subtracts a value previously added in the same column (so the column stays ≥ 0 under correct operation — underflow would indicate a daemon bug). The broader question of whether `locked_balance` itself should move to signed is out of scope here; this design preserves the existing transparent convention and applies it symmetrically to the new shielded column. `total_shielded_received` mirrors `total_received` (unsigned) — see next point for the semantic.
+- **Column-sign rationale.** All balance and total columns — transparent and shielded alike — are `BIGINT UNSIGNED`, matching the existing transparent convention on master. The invariant is that every reversal subtracts a value previously added in the same column, so columns stay ≥ 0 under correct operation; underflow would indicate a daemon bug. Spend-reversal helpers use UPDATE-only SQL (`UPDATE … SET col = col - ? WHERE …`) rather than INSERT…ON DUPLICATE KEY UPDATE with negative `VALUES()`, because MySQL's STRICT_TRANS_TABLES (the default in 8.0) validates the literal in `VALUES(...)` against the column type *before* picking the update branch and rejects negative values against UNSIGNED columns. `total_*_received` is also `BIGINT UNSIGNED` and decremented on void (not on spend) — see next point for the semantic.
 - `total_received` and `total_shielded_received` track currently-valid lifetime receipts. Credits add to them on receive; reversals subtract on void (matching today's `voidAddressTransaction` behavior on the transparent column). Spend reversals do **not** touch the `total_*_received` columns — only voids do, because only a void rolls back the receive itself. For shielded, the decrement only fires when the voided output had `recovery_state = 'recovered'` (its value was known at credit time); unrecovered shielded outputs never contributed and stay at zero impact on void.
 - `transactions` is a single combined counter on the row, bumped at most once per `(address, tx)` regardless of kind mix. The bump lives in `updateAddressTablesWithTx`.
 - Authority bits stay populated for the transparent columns; shielded outputs cannot carry authority.
@@ -368,14 +370,14 @@ wallet_balance
   wallet_id                  VARCHAR(64)     NOT NULL,
   token_id                   VARCHAR(64)     NOT NULL,
   -- existing transparent columns
-  unlocked_balance           BIGINT          NOT NULL DEFAULT 0,
+  unlocked_balance           BIGINT UNSIGNED NOT NULL DEFAULT 0,
   locked_balance             BIGINT UNSIGNED NOT NULL DEFAULT 0,
   timelock_expires           INT UNSIGNED    NULL,
   transactions               INT UNSIGNED    NOT NULL DEFAULT 0,
   total_received             BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- existing authority columns unchanged
   -- new shielded columns
-  unlocked_shielded_balance  BIGINT          NOT NULL DEFAULT 0,
+  unlocked_shielded_balance  BIGINT UNSIGNED NOT NULL DEFAULT 0,
   locked_shielded_balance    BIGINT UNSIGNED NOT NULL DEFAULT 0,
   total_shielded_received    BIGINT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (wallet_id, token_id)
@@ -383,7 +385,7 @@ wallet_balance
 
 Notes:
 
-- Column-sign rationale mirrors `address_balance`: `unlocked_shielded_balance` signed to match `unlocked_balance`; `locked_shielded_balance` unsigned to match `locked_balance` and rely on the same paired-add/subtract invariant; `total_shielded_received` unsigned and tracks currently-valid lifetime receipts (decremented on void of a recovered shielded output, matching the transparent `total_received` semantic).
+- Column-sign rationale mirrors `address_balance`: all balance and total columns are `BIGINT UNSIGNED`, matching the existing transparent convention on master. Spend-reversal helpers use UPDATE-only SQL to dodge MySQL's strict-mode rejection of negative `VALUES()` against UNSIGNED columns. `total_shielded_received` tracks currently-valid lifetime receipts (decremented on void of a recovered shielded output, matching the transparent `total_received` semantic).
 - `transactions` is a combined count. A single tx that touches both kinds for the same token increments by 1, not 2 — matching the natural reading of "transactions for this token in this wallet".
 - Authority bits stay (transparent only).
 - `timelock_expires` stays a single column. The timelock-expiry sweep is unified (one SQL query across `tx_output` regardless of `mode`; see the handlers section below), so a per-kind "next expiry" cache has no consumer — the scheduler reads one row, no per-kind breakdown is exposed by the API, and a single `MIN(timelock)` aggregate over locked rows is the right cache value.
@@ -416,18 +418,20 @@ token
   total_supply           BIGINT UNSIGNED NOT NULL DEFAULT 0,             -- NEW
 ```
 
-`SUM(tx_output.value)` is structurally wrong once a token has any shielded UTXOs (shielded values are encrypted on chain and held as NULL on `tx_output` until the wallet-service owns the scan key and recovers them). A denormalised `total_supply` on `token` is updated in-place via four independent supply-change paths:
+`SUM(tx_output.value)` is structurally wrong once a token has any shielded UTXOs (shielded values are encrypted on chain and held as NULL on `tx_output` until the wallet-service owns the scan key and recovers them). A denormalised `total_supply` on `token` is updated in-place via four independent supply-change paths, with **two single-writer authorities**:
 
-1. **Token creation** — `total_supply` is set to the initial mint amount when the token-creation tx is processed.
+1. **Token creation** — `handleTokenCreated` is the single writer for the initial supply. It reads `initial_amount` directly from the `TOKEN_CREATED` event payload (`TokenCreatedEventSchema.initial_amount`) and sets `total_supply` to that value via `setTokenTotalSupply`. The wire payload is authoritative — no SUM over `tx_output` is needed, which also removes an implicit ordering dependency on transparent-output materialization.
 2. **Block reward** (HTR only) — every accepted block increments `total_supply` for HTR by the block reward.
 3. **Mint / melt** — gated on the vertex containing no shielded outputs and at least one authority output. The signed delta is `sum(non-burn outputs[token].value) − sum(inputs[token].value)` — burn-address outputs are **excluded** from the outputs sum so this path reflects the authority-driven supply change only.
 4. **Burn sweep** — gated on the vertex containing no shielded outputs. Every transparent output sent to the burn address subtracts its `value` from that token's `total_supply`. Always runs when the gate is satisfied, regardless of whether the tx carried an authority output, since pure burns (no authority) reach `total_supply` only through this path.
 
-The two paths are cleanly disjoint: Path 3 is "authority-driven supply change" and Path 4 is "destruction." A mint/melt tx that also burns runs both paths and the deltas compose without double-counting (the burn is excluded from Path 3 and subtracted by Path 4); a pure burn tx runs only Path 4.
+Paths 2-4 run inside `applyTokenSupplyUpdates` (called by `handleVertexAccepted`). They are the single writer for supply *deltas* on tokens that already exist. The function never inserts new `token` rows: `incrementTokenTotalSupply` is UPDATE-only, so a delta against a not-yet-created token row no-ops naturally — `handleTokenCreated` is the only inserter, and arrives after `handleVertexAccepted` for the creation tx, then sets the absolute value from the wire.
+
+Paths 3 and 4 are cleanly disjoint: Path 3 is "authority-driven supply change" and Path 4 is "destruction." A mint/melt tx that also burns runs both paths and the deltas compose without double-counting (the burn is excluded from Path 3 and subtracted by Path 4); a pure burn tx runs only Path 4.
 
 The gate on `shielded_outputs.length === 0` is a v1 deferral: shielded mint/melt accounting requires a robust way to identify the authority-driven delta from blinded outputs, which is a follow-up. Until then, any vertex with shielded outputs leaves every involved token's `total_supply` untouched — `getTotalSupply` returns a stale (lower-bound) value for such tokens until the follow-up lands.
 
-Void/unvoid runs paths 2–4 with the sign reversed. Path 1 is reversed by `handleVertexRemoved` when the creation tx is removed during a reorg.
+Void/unvoid runs paths 2-4 with the sign reversed. Path 1 is reversed by `handleVertexRemoved` when the creation tx is removed during a reorg.
 
 ## Event ingestion
 
@@ -510,13 +514,20 @@ export const VertexEventSchema = ExistingVertexEventSchema.extend({
 
 ## Daemon `handleVertexAccepted` extension
 
+The ordering is structured around two grains: address-grain involvement (kind-agnostic, no DB lookups) and per-token bookkeeping (kind-aware, only when token+value are known). The shielded credit and reversal helpers that used to live as parallel `applyShielded*` / `reverseShielded*` chains are folded into the unified `updateAddressTablesWithTx` / `updateWalletTablesWithTx` dispatch — the same balance map carries both transparent and shielded contributions per token on the same `(address, token_id)` row.
+
 Pseudocode for the modified handler in `packages/daemon/src/services/index.ts`:
 
 ```ts
 async function handleVertexAccepted(db, txn, vertex) {
-  await db.upsertTransaction(txn, vertex);                              // existing
+  // 1. Block-specific bookkeeping (miner + heightlock). Existing logic.
+  if (isBlock(vertex)) await db.upsertMinerAndHeightlock(txn, vertex);
 
-  // Single output loop spanning both kinds.
+  // 2. Add tx to transaction table. Existing logic.
+  await db.upsertTransaction(txn, vertex);
+
+  // 3-4. Single output loop spanning both kinds. Mark locked and insert all rows
+  // (transparent + shielded) into tx_output; shielded rows also write the satellite.
   const concatenated = [
     ...vertex.outputs.map((o, i) => ({ kind: 'transparent', output: o, idx: i })),
     ...vertex.shielded_outputs.map((o, i) => ({
@@ -525,88 +536,111 @@ async function handleVertexAccepted(db, txn, vertex) {
       idx: vertex.outputs.length + i,
     })),
   ];
-
   for (const { kind, output, idx } of concatenated) {
-    if (kind === 'transparent') {
-      await db.insertTxOutput(txn, {
-        tx_id: vertex.tx_id, index: idx, mode: 0,
-        address: output.decoded.address,
-        value: output.value, token_id: tokenUid(output.token_data, vertex),
-        authorities: output.token_authorities ?? 0,
-        timelock: output.decoded.timelock, heightlock: vertex.heightlock,
-        locked: output.locked, voided: false,
-        recovery_state: null,
-      });
-    } else {
-      const shieldedTimelock = output.decoded.timelock ?? null;
-      const shieldedLocked = isOutputLocked(shieldedTimelock, vertex.heightlock, vertex);
-
-      await db.insertTxOutput(txn, {
-        tx_id: vertex.tx_id, index: idx, mode: output.mode,
-        address: output.decoded.address,
-        value: null,
-        token_id: output.mode === 1 ? tokenUid(output.token_data, vertex) : null,
-        authorities: 0,
-        timelock: shieldedTimelock,
-        heightlock: vertex.heightlock,
-        locked: shieldedLocked,
-        voided: false,
-        recovery_state: 'unowned',
-      });
-
+    const timelock = output.decoded.timelock ?? null;
+    const locked = (kind === 'transparent') ? output.locked
+                                             : isOutputLocked(timelock, vertex.heightlock, vertex);
+    await db.insertTxOutput(txn, {
+      tx_id: vertex.tx_id, index: idx,
+      mode: kind === 'transparent' ? 0 : output.mode,
+      address: output.decoded.address,
+      value: kind === 'transparent' ? output.value : null,
+      token_id: kind === 'transparent' ? tokenUid(output.token_data, vertex)
+              : output.mode === 1   ? tokenUid(output.token_data, vertex)
+              :                       null,
+      authorities: kind === 'transparent' ? (output.token_authorities ?? 0) : 0,
+      timelock, heightlock: vertex.heightlock, locked, voided: false,
+      recovery_state: kind === 'transparent' ? null : 'unowned',
+    });
+    if (kind === 'shielded') {
       await db.insertShieldedTxOutputData(txn, vertex.tx_id, idx, output);
-
-      // Upsert the shielded ownership row on the unified `address` table.
-      // Writes bip32_account = 1. Creates a row with NULL ownership fields if this is
-      // the first sighting of the address. Does NOT write `shielded_address` / `scan_privkey`
-      // / `catchup_state` — the long-form cannot be derived from the on-chain spend address
-      // alone (it needs scan_pubkey + spend_pubkey), so those columns are populated only by
-      // the wallet-registration path which has the material to derive them.
-      // Does not touch `transactions` — see § Invariants.
+      // Upsert the shielded ownership row on the unified `address` table with
+      // bip32_account = 1. Does NOT write `shielded_address` / `scan_privkey` /
+      // `catchup_state` (those need scan_pubkey + spend_pubkey, populated by the
+      // wallet-registration path). Does NOT touch `transactions` — that's the
+      // canonical involvement bumper's job at step 6.
       await db.upsertShieldedAddressObservation(txn, output.decoded.address);
-
-      // Ownership lookup. Single SELECT against `address` filtered on bip32_account = 1.
-      const owned = await db.findShieldedAddressOwnership(txn, output.decoded.address);
-      if (owned?.wallet_id) {
-        try {
-          const recovered = (output.mode === 1)
-            ? rewindAmountShieldedOutput(
-                owned.scan_privkey, output.ephemeral_pubkey, output.commitment,
-                output.range_proof, tokenUid(output.token_data, vertex),
-              )
-            : rewindFullShieldedOutput(
-                owned.scan_privkey, output.ephemeral_pubkey, output.commitment,
-                output.range_proof, output.asset_commitment,
-              );
-          if (output.mode === 2) verifyAssetCommitment(recovered, output.asset_commitment);
-
-          // For mode = 1, `token_id` was set at observe time from `output.token_data`;
-          // the rewind only returns `{ value }`, so we leave `token_id` untouched.
-          // For mode = 2, the rewind returns `{ value, tokenUid }`; we write the recovered
-          // tokenUid into the row.
-          await db.markTxOutputRecovered(txn, vertex.tx_id, idx, {
-            value: recovered.value,
-            ...(recovered.tokenUid !== undefined ? { token_id: recovered.tokenUid } : {}),
-          });
-        } catch (e) {
-          await db.markTxOutputRecoveryFailed(txn, vertex.tx_id, idx);
-          emitAlert('shielded_recovery_failed', { tx_id: vertex.tx_id, index: idx });
-        }
-      }
     }
   }
 
-  // Inputs: a single lookup against tx_output regardless of kind. Each input also carries
-  // its spent_output on the wire (transparent or shielded), so the kind of the consumed
-  // output is known without re-querying.
-  for (const input of vertex.inputs) {
-    await db.markTxOutputSpent(txn, input, vertex.tx_id);
+  // 5. Compute the involved-addresses set from wire data — no DB lookups.
+  // Sources: inputs' spent_output.decoded.address (the address of the UTXO being
+  // spent, transparent or shielded), transparent outputs' decoded.address, shielded
+  // outputs' decoded.address, and nano-contract header addresses.
+  const involved = getInvolvedAddresses(vertex.inputs, vertex.outputs, vertex.shielded_outputs, vertex.headers);
+
+  // 6. Bump `address.transactions` once per involved address. Single canonical
+  // writer for the involvement counter (see § Invariants).
+  await db.bumpAddressInvolvement(txn, involved);
+
+  // 7. Shielded rewind for owned outputs. After this loop, owned recovered rows
+  // carry their value+token in tx_output; the recovery_state moves from 'unowned'
+  // to 'recovered' or 'recovery_failed'.
+  const recovered = [];  // [{ idx, address, value, token_id, locked }]
+  for (const { idx, output } of shieldedOnly(concatenated)) {
+    const owned = await db.findShieldedAddressOwnership(txn, output.decoded.address);
+    if (!owned?.wallet_id) continue;
+    try {
+      const r = (output.mode === 1)
+        ? rewindAmountShieldedOutput(owned.scan_privkey, output.ephemeral_pubkey,
+                                     output.commitment, output.range_proof,
+                                     tokenUid(output.token_data, vertex))
+        : rewindFullShieldedOutput(owned.scan_privkey, output.ephemeral_pubkey,
+                                   output.commitment, output.range_proof,
+                                   output.asset_commitment);
+      if (output.mode === 2) verifyAssetCommitment(r, output.asset_commitment);
+      await db.markTxOutputRecovered(txn, vertex.tx_id, idx, {
+        value: r.value,
+        ...(r.tokenUid !== undefined ? { token_id: r.tokenUid } : {}),
+      });
+      recovered.push({
+        idx, address: output.decoded.address, value: r.value,
+        token_id: r.tokenUid ?? tokenUid(output.token_data, vertex),
+        locked: isOutputLocked(output.decoded.timelock ?? null, vertex.heightlock, vertex),
+      });
+    } catch (e) {
+      await db.markTxOutputRecoveryFailed(txn, vertex.tx_id, idx);
+      emitAlert('shielded_recovery_failed', { tx_id: vertex.tx_id, index: idx });
+    }
   }
 
-  // Balance / history updates dispatch on mode — sourced from tx_output for outputs we
-  // just wrote, and from input.spent_output.mode for outputs being consumed.
-  await updateAddressTablesWithTx(txn, vertex);
-  await updateWalletTablesWithTx(txn, vertex);
+  // 8. Mark spent inputs — kind-agnostic, uses tx_id+index only.
+  await db.updateTxOutputSpentBy(txn, vertex.inputs, vertex.tx_id);
+
+  // 9. Build the unified per-token balance map. Each entry carries BOTH transparent
+  // and shielded contributions for the (address, token) pair. Sources:
+  //   - Transparent inputs: prepared inputs.
+  //   - Transparent outputs: prepared outputs.
+  //   - Shielded inputs (owned, recovered): looked up from local tx_output rows
+  //     (the wire payload doesn't carry value or — for FullyShielded — token);
+  //     contribute NEGATIVE shielded delta.
+  //   - Shielded inputs (unowned or recovery_failed): skipped — the address's
+  //     involvement bump fired at step 6.
+  //   - Shielded outputs (just-recovered above): contribute POSITIVE shielded delta.
+  //   - Shielded outputs (unowned or recovery_failed): skipped.
+  // The map only contains (address, token) pairs where token+value are both known.
+  const balanceMap = await getUnifiedBalanceMap(
+    txn, vertex.inputs, vertex.outputs, recovered, vertex.headers,
+  );
+
+  // 10. Single dispatch: writes both transparent and shielded column families on the
+  // same (address, token) row, bumps `address_balance.transactions` once per entry.
+  await updateAddressTablesWithTx(txn, vertex.tx_id, vertex.timestamp, balanceMap);
+
+  // 11-12. Build wallet map, dispatch. Same shape, per-token only (no wallet-grain
+  // involvement counter — `wallet.transactions` is intentionally not a column).
+  const addressWalletMap = await db.getAddressWalletInfo(txn, [...balanceMap.keys()]);
+  const walletBalanceMap = getWalletBalanceMap(addressWalletMap, balanceMap);
+  await updateWalletTablesWithTx(txn, vertex.tx_id, vertex.timestamp, walletBalanceMap);
+
+  // 13. Token-supply deltas for mint/melt/burn (block reward path is separate above).
+  // Token CREATION supply is handled by handleTokenCreated using the wire's
+  // initial_amount; applyTokenSupplyUpdates here only mutates existing token rows
+  // (incrementTokenTotalSupply is UPDATE-only, so a delta against a not-yet-created
+  // token row naturally no-ops). The shielded-output-presence gate stays — an
+  // unobserved shielded receive's value is invisible from the wire and must not
+  // be folded into transparent supply math.
+  await applyTokenSupplyUpdates(txn, vertex);
 
   await enqueueNewTxEvent(vertex);
 }
@@ -614,51 +648,44 @@ async function handleVertexAccepted(db, txn, vertex) {
 
 `tokenUid` resolves the 1-byte `token_data` to its 32-byte UID by reading the vertex's `tokens[]` array (existing pattern). `isOutputLocked(timelock, heightlock, vertex)` is the locally-computed equivalent of the wire's `output.locked` flag used on the transparent path — it returns true iff the timelock is in the future relative to the daemon's clock OR the vertex's heightlock is above the current chain height. The transparent path doesn't need this helper because the fullnode emits `output.locked` pre-computed on every transparent output; the shielded wire format does not.
 
+`getUnifiedBalanceMap` (a new helper in `packages/daemon/src/utils/wallet.ts`) does two extra DB lookups beyond what `getAddressBalanceMap` did before: one to read the local `tx_output` rows for shielded inputs (so it can find their recovered value+token). Cost is bounded by the number of shielded inputs per vertex (typically 0-1) and runs inside the same per-vertex transaction.
+
 Critical invariant: everything runs inside a single per-vertex DB transaction. The existing `handleVertexAccepted` transaction wrapper is reused unchanged.
 
 ## `updateAddressTablesWithTx` and `updateWalletTablesWithTx` — kind-aware
 
-These two functions already do the most intricate balance-arithmetic work in the codebase. The shielded extension adds a switch on `tx_output.mode` (and on `recovery_state` for shielded rows) when computing deltas and writing them back.
+These two functions take the **unified per-token balance map** built by `getUnifiedBalanceMap` and write both transparent and shielded column families on the same `(address, token_id)` row (and the same `(wallet_id, token_id)` row at the wallet grain) in a single statement.
+
+`updateAddressTablesWithTx` is driven by the balance map only — it does NOT bump the address-grain involvement counter. That bump is the canonical writer at step 6 of `handleVertexAccepted` (the `bumpAddressInvolvement` call), driven by the involved-addresses set rather than the balance map; this keeps the involvement bump independent of token knowledge.
 
 Pseudocode:
 
 ```ts
-async function updateAddressTablesWithTx(txn, vertex) {
-  // 1. Fetch every tx_output row affected by this vertex (rows we just wrote, plus
-  //    rows newly marked spent_by). Each row carries its `mode` and `recovery_state`.
-  const affected = await db.getAffectedTxOutputs(txn, vertex.tx_id);
-
-  // 2. Group by (address, token_id). For unrecovered shielded rows, skip —
-  //    we can't update balance without a known value.
-  for (const row of affected) {
-    if (row.mode === 0) {
-      // existing transparent logic, unchanged: writes the transparent columns
-      // of address_balance.
-      await applyTransparentAddressBalance(txn, row.address, row.token_id, signedAmount(row), row.locked);
-    } else if (row.recovery_state === 'recovered') {
-      // Writes the shielded columns of the same unified address_balance row.
-      // Does not bump `transactions` — the central bump for (address, tx) lives
-      // in this same function and fires once per vertex regardless of kind mix.
-      await applyShieldedAddressBalance(txn, row.address, row.token_id, signedAmount(row), row.locked);
+async function updateAddressTablesWithTx(txn, txId, timestamp, addressBalanceMap) {
+  // For every (address, token_id) touched by this vertex with known token+value:
+  for (const [address, perToken] of addressBalanceMap.entries()) {
+    for (const [tokenId, balance] of perToken.entries()) {
+      // INSERT...ON DUPLICATE KEY UPDATE in one statement, writing both column
+      // families on the unified row. The balance object carries both transparent
+      // (unlockedAmount, lockedAmount, totalAmountSent) and shielded
+      // (unlockedShieldedAmount, lockedShieldedAmount, totalShieldedReceived)
+      // contributions. Authority bits stay populated for the transparent columns;
+      // shielded outputs cannot carry authority.
+      await db.upsertAddressBalanceRow(txn, address, tokenId, balance);
     }
-    // mode IN (1,2) && recovery_state IN ('unowned','recovery_failed') => no balance impact.
   }
 
-  // 3. Single `transactions` bump for every (address, token_id) touched by this
-  //    vertex — covers transparent credits/spends, shielded credits (via the
-  //    aggregation map seeded with zero deltas for shielded-touched addresses),
-  //    and shielded spends (via the transparent stub emitted by prepareInputs).
+  // Write address_tx_history with both deltas on the same row. balance_delta
+  // sums the transparent contributions; shielded_balance_delta sums the shielded
+  // contributions. Either may be zero. PK is (address, tx_id, token_id) — one
+  // row per pair, regardless of kind mix.
+  await db.writeAddressTxHistory(txn, txId, timestamp, addressBalanceMap);
 }
 ```
 
-`applyTransparentAddressBalance` writes to the transparent columns (`unlocked_balance` / `locked_balance` / `total_received`) on the unified `address_balance` row. `applyShieldedAddressBalance` INSERTs with zero transparent columns + ON DUPLICATE KEY UPDATE on the shielded columns (`unlocked_shielded_balance` / `locked_shielded_balance` / `total_shielded_received`); no `WHERE kind = …` clause and no `kind` label is written. The reversal helper `reverseShieldedAddressBalanceOnSpend` UPDATEs only the `*_shielded_balance` columns (leaving `total_shielded_received` alone — see § *Invariants*).
+`updateWalletTablesWithTx` is structurally identical at the wallet grain — writes both column families on the same `(wallet_id, token_id)` row, and both deltas on the same `wallet_tx_history` row. It does NOT touch a wallet-grain involvement counter (no `wallet.transactions` column exists by design).
 
-`updateWalletTablesWithTx` is similar but writes to `wallet_balance` and `wallet_tx_history`. For `wallet_balance` it dispatches on `mode`:
-
-- `mode = 0` → `unlocked_balance` / `locked_balance` columns.
-- `mode IN (1, 2)` recovered → `unlocked_shielded_balance` / `locked_shielded_balance` columns.
-
-For `wallet_tx_history`, the per-tx-per-token aggregation produces both `balance_delta` (sum of transparent contributions) and `shielded_balance_delta` (sum of shielded contributions) for the same row. The address-grain analogue (`address_tx_history`) carries the same two columns for the same reason.
+All shielded balance writes — credit and reversal alike — flow through this single dispatch. There are no separate `applyShielded*` or `reverseShielded*` helpers; the column-family routing is internal to the per-row INSERT…ON DUPLICATE KEY UPDATE statement.
 
 ## Spend / consume tracking
 
@@ -685,9 +712,15 @@ async function markTxOutputSpent(txn, input, consumingTxId) {
 
 **`spent_output` on the wire.** Every input carries a `spent_output` field containing the full prior output (transparent or shielded), as defined in § *Event ingestion*. This means:
 
-- The daemon can dispatch balance-reversal logic on `input.spent_output.mode` directly, without an extra `SELECT mode FROM tx_output WHERE …` round-trip.
+- The daemon can dispatch on `input.spent_output.mode` to decide whether the input is transparent or shielded without an extra `SELECT mode FROM tx_output WHERE …` round-trip.
 - If for any reason the local `tx_output` row is missing (e.g., a transient ingestion gap), the wire payload still tells the daemon enough to log the inconsistency precisely, including the kind of the output that was supposed to be there.
-- Reorg/void paths that need to undo a balance delta read `mode` from the event payload, so they don't have to re-query `tx_output` (which may already be in a transient state during the same transaction).
+
+**Shielded-input balance contribution requires a local lookup.** The wire `spent_output` for shielded inputs does **not** carry the recovered value (always) or the recovered token (FullyShielded only). So contributing a shielded input to the unified balance map requires reading the local `tx_output` row (one `SELECT` per shielded input):
+
+- If the row has `recovery_state = 'recovered'` and is owned by this wallet, its `value` and `token_id` are populated; contribute a NEGATIVE shielded delta to the `(address, token_id)` entry of the balance map.
+- If the row has `recovery_state IN ('unowned', 'recovery_failed')`, skip from the balance map — the address-grain involvement bump at step 6 of `handleVertexAccepted` is the only bookkeeping needed.
+
+This same shape applies symmetrically to the void/reorg path (§ *Reorg, void, unvoid*): the void path also reads the local row to know what shielded balance to reverse, with the same recovery-state filter.
 
 **Cross-tx consumption invariant.** The fullnode is the authoritative validator for "an input cannot reference a shielded output that doesn't exist." The wallet-service treats a `markTxOutputSpent` miss as an integrity error (logged + alerted) rather than a correctness failure on its own. The presence of `input.spent_output` lets the alert payload include the full context of the missing prior output.
 
@@ -706,15 +739,15 @@ Lives in `packages/daemon/src/services/index.ts`. Triggered when the fullnode em
 5. `unspendUtxos` — clear `spent_by` on inputs spent by this tx.
 6. Token cleanup for any tokens created by this tx.
 
-The shielded extension is **column dispatch inside the existing helpers**, not a new handler:
+The shielded extension is **the same unified balance map** that the ingest path uses, run with negated signs. Concretely:
 
-- `voidAddressTransaction` and `voidWalletTransaction` gain `mode`-dispatched UPDATEs so that for rows touching the shielded columns of the unified `(address, token_id)` / `(wallet_id, token_id)` row, they decrement `unlocked_shielded_balance` / `locked_shielded_balance` instead of (or in addition to, on mixed-kind txs) the transparent columns. The `addressBalanceMap` built upstream already carries both deltas; the helper picks columns by `mode`.
-- `total_received` / `total_shielded_received` are decremented here too, mirroring the transparent path's existing behavior — `totalAmountSent` is subtracted from `total_received` for the transparent contribution, and the analogous recovered-shielded receive amount is subtracted from `total_shielded_received` for the shielded contribution. Unrecovered shielded outputs (recovery_state ≠ 'recovered') never contributed to `total_shielded_received` and so don't decrement it on void.
+- The void path computes the **unified per-token balance map** for the voided vertex, sourcing shielded contributions from local `tx_output` rows (which still exist with their original `value` / `token_id` / `recovery_state`, just about to be marked voided). For shielded inputs the lookup reads the spent UTXO's row; for shielded outputs the lookup reads the row being voided.
+- `voidAddressTransaction` and `voidWalletTransaction` accept the unified map and write both column families in a single UPDATE per row, mirroring `updateAddressTablesWithTx` / `updateWalletTablesWithTx` on the ingest path but with subtractive deltas.
+- `total_received` and `total_shielded_received` are decremented here too, mirroring the transparent path's existing behavior. Unrecovered shielded outputs (recovery_state ≠ 'recovered') never contributed to `total_shielded_received` and so don't decrement it on void.
+- Address-grain involvement (`address.transactions`) is also decremented here, by one per involved address in the voided vertex — same involved-addresses set the ingest path computed from the wire, just negated.
 - `markUtxosAsVoided` is unchanged structurally — it works on `tx_output` rows uniformly, transparent and shielded.
 
-The shielded input case follows the same pattern: `prepareInputs` emits the input's contribution into `addressBalanceMap` reading `input.spent_output.mode` from the wire (see §*Spend / consume tracking*), so the helper sees a kind-tagged balance delta and dispatches columns accordingly.
-
-`handleUnvoidedTx` is the mirror — it calls `cleanupVoidedTx`, which today re-applies deltas with a forward sign; same shielded-column-dispatch extension applies.
+`handleUnvoidedTx` is the mirror — same unified map, forward-signed.
 
 ### Path B — wallet-service reorg sweep (`rebuildAddressBalancesFromUtxos`)
 
