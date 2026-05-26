@@ -34,7 +34,7 @@ Address gap-extension is **not** a client-driven operation. It happens automatic
 The contributor must hold three concepts:
 
 - **Shielded index.** A single integer that drives **both** scan and spend derivations at the same position. There is no scenario in this design where the index differs between scan and spend; they advance together. On the unified `address` table this is the `index` column on rows with `bip32_account = 1`.
-- **Pre-derivation as UPSERT.** When the API generates an ownership row for shielded index N, the daemon (or the API on registration) computes `spend_address` (the on-chain base58 spend address) for that index and runs an `INSERT … ON DUPLICATE KEY UPDATE` against the unified `address` table. If the row exists with NULL ownership (the daemon observed the spend_address on-chain before the wallet claimed it), the UPDATE fills in `wallet_id`, `index`, `bip32_account = 1`, `shielded_address` (long-form), `scan_privkey`, `catchup_state`. If the row does not exist, the INSERT creates it. Either way, the row is ready for the daemon's hot path. `scan_pubkey` and `spend_pubkey` are computed as intermediates during derivation but are not stored — they are recoverable on demand from `scan_privkey` (point multiplication) and `wallet.spend_xpub` (BIP32 derivation).
+- **Pre-derivation as UPSERT.** When the API generates an ownership row for shielded index N, the daemon (or the API on registration) computes `spend_address` (the on-chain base58 spend address) for that index and runs an `INSERT … ON DUPLICATE KEY UPDATE` against the unified `address` table. If the row exists with NULL ownership (the daemon observed the spend_address on-chain before the wallet claimed it), the UPDATE fills in `wallet_id`, `index`, `bip32_account = 1`, `ct_address` (long-form CT address), `scan_privkey`, `catchup_state`. If the row does not exist, the INSERT creates it. Either way, the row is ready for the daemon's hot path. `scan_pubkey` and `spend_pubkey` are computed as intermediates during derivation but are not stored — they are recoverable on demand from `scan_privkey` (point multiplication) and `wallet.spend_xpub` (BIP32 derivation).
 - **Catch-up scan.** A bounded job that runs once per upgrade or gap-extension. It is **idempotent** (re-running it does not double-credit balances) so it can be retried safely on failure.
 
 ## Worked example: client adds shielded support
@@ -219,36 +219,36 @@ const scanPub    = scanChild.publicKey;      // 33 bytes compressed (intermediat
 const spendPub   = spendChild.publicKey;     // 33 bytes compressed (intermediate; not stored)
 
 // On-chain spend address: base58(network_byte || hash160(spendPub) || checksum) — the match key.
-const spendAddress    = encodeSpendAddress(spendPub);         // base58, ≤34 chars
-const shieldedAddress = encodeShieldedAddress(scanPub, spendPub);  // base58, ≤100 chars
+const spendAddress = encodeSpendAddress(spendPub);            // base58, ≤34 chars
+const ctAddress    = encodeCtAddress(scanPub, spendPub);      // long-form CT address, base58, ≤100 chars
 
 await db.upsertShieldedAddressOwnership({
-  address:          spendAddress,
-  wallet_id:        wallet.id,
-  index:            i,
-  shielded_address: shieldedAddress,
-  scan_privkey:     scanPriv,
-  catchup_state:    'pending',
+  address:       spendAddress,
+  wallet_id:     wallet.id,
+  index:         i,
+  ct_address:    ctAddress,
+  scan_privkey:  scanPriv,
+  catchup_state: 'pending',
 });
 ```
 
 `upsertShieldedAddressOwnership` writes to the unified `address` table:
 
 ```sql
-INSERT INTO address (address, bip32_account, wallet_id, `index`, shielded_address, scan_privkey, catchup_state)
+INSERT INTO address (address, bip32_account, wallet_id, `index`, ct_address, scan_privkey, catchup_state)
 VALUES (?, 1, ?, ?, ?, ?, 'pending')
 ON DUPLICATE KEY UPDATE
-  bip32_account    = 1,
-  wallet_id        = VALUES(wallet_id),
-  `index`          = VALUES(`index`),
-  shielded_address = VALUES(shielded_address),
-  scan_privkey     = VALUES(scan_privkey),
-  catchup_state    = COALESCE(catchup_state, 'pending')
+  bip32_account = 1,
+  wallet_id     = VALUES(wallet_id),
+  `index`       = VALUES(`index`),
+  ct_address    = VALUES(ct_address),
+  scan_privkey  = VALUES(scan_privkey),
+  catchup_state = COALESCE(catchup_state, 'pending')
 ```
 
-The registration path is the only writer of `shielded_address` — the daemon's observation upsert leaves that column NULL because the long-form cannot be derived from the on-chain `spend_address` alone (it requires `scan_pubkey` + `spend_pubkey`, which only the registration path has at hand). So this UPSERT can safely write `VALUES(shielded_address)` directly; there is no prior daemon-set value to preserve. The COALESCE on `catchup_state` is defensive: if for any reason the row already has `'done'` (e.g., a previous registration that was rolled back at a higher layer), we don't accidentally reset it to `'pending'` and re-run catch-up.
+The registration path is the only writer of `ct_address` — the daemon's observation upsert leaves that column NULL because the long-form cannot be derived from the on-chain `spend_address` alone (it requires `scan_pubkey` + `spend_pubkey`, which only the registration path has at hand). So this UPSERT can safely write `VALUES(ct_address)` directly; there is no prior daemon-set value to preserve. The COALESCE on `catchup_state` is defensive: if for any reason the row already has `'done'` (e.g., a previous registration that was rolled back at a higher layer), we don't accidentally reset it to `'pending'` and re-run catch-up.
 
-`encodeShieldedAddress` produces the user-facing string:
+`encodeCtAddress` produces the user-facing string:
 
 ```
 base58( network_byte(1B) || scan_pubkey(33B) || spend_pubkey(33B) || checksum(4B) )
@@ -386,7 +386,7 @@ This behaviour is provisional pending ops-team review.
 
 ## Why UPSERT on `address` instead of INSERT-only?
 
-The unified `address` table already contains rows for every spend_address the daemon has observed on-chain — including shielded ones (`bip32_account = 1`) with NULL ownership fields. When a wallet registers, its derived spend_addresses **may already be present** — Alice's wallet might be receiving shielded outputs before she upgrades her client. An INSERT-only would race with the daemon's observation writes; an UPSERT folds the two paths together: the daemon writes the row first if observation happens first, registration writes it first if registration happens first, and whichever runs second fills in the missing half. The daemon-vs-registration column ownership is disjoint — the daemon only writes `(address, bip32_account)`, the registration path owns `(wallet_id, index, shielded_address, scan_privkey, catchup_state)` — so the UPSERT has no contended columns and no risk of either side overwriting the other's authoritative value.
+The unified `address` table already contains rows for every spend_address the daemon has observed on-chain — including shielded ones (`bip32_account = 1`) with NULL ownership fields. When a wallet registers, its derived spend_addresses **may already be present** — Alice's wallet might be receiving shielded outputs before she upgrades her client. An INSERT-only would race with the daemon's observation writes; an UPSERT folds the two paths together: the daemon writes the row first if observation happens first, registration writes it first if registration happens first, and whichever runs second fills in the missing half. The daemon-vs-registration column ownership is disjoint — the daemon only writes `(address, bip32_account)`, the registration path owns `(wallet_id, index, ct_address, scan_privkey, catchup_state)` — so the UPSERT has no contended columns and no risk of either side overwriting the other's authoritative value.
 
 ## Why pre-derive scan privkeys instead of HD-derive on demand?
 

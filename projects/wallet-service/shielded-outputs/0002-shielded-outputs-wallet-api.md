@@ -9,7 +9,7 @@
 
 Extend the wallet-service REST API so client wallets can read and act on their shielded balances. The storage layer is unified: `tx_output` carries both transparent and shielded rows discriminated by `tx_output.mode`, while `address_balance` and `wallet_balance` carry parallel transparent and shielded amount columns on the same `(address, token_id)` / `(wallet_id, token_id)` row. This document specifies how that unified storage surfaces to clients.
 
-**Balance** responses keep today's `balance.unlocked` / `balance.locked` shape as a merged total (back-compat), and expose a `?include=split` query parameter that returns `{ transparent, shielded, total }`. **History** entries gain an optional `output_kind` discriminator and an optional `balanceBreakdown` block, all read from a single `wallet_tx_history` row per `(wallet_id, tx_id, token_id)`. **UTXO** endpoints take an optional `kind` filter (`transparent` | `shielded`); without it the response includes both kinds (single-table query, no UNION). The wallet-service does not sign shielded spends — clients construct them from the per-output bytes returned. The change is on the same endpoint paths the API exposes today; no `/v2` namespace, no `Accept-Version` header.
+**Balance** responses keep today's `balance.unlocked` / `balance.locked` shape as a merged total (back-compat), and expose a `?split=true` query parameter that returns `{ transparent, shielded, total }`. **History** entries gain an optional `output_kind` discriminator and an optional `balanceBreakdown` block, all read from a single `wallet_tx_history` row per `(wallet_id, tx_id, token_id)`. **UTXO** endpoints take an optional `kind` filter (`transparent` | `shielded`); without it the response includes both kinds (single-table query, no UNION). The wallet-service does not sign shielded spends — clients construct them from the per-output bytes returned. The change is on the same endpoint paths the API exposes today; no `/v2` namespace, no `Accept-Version` header.
 
 # Motivation
 [motivation]: #motivation
@@ -23,7 +23,7 @@ The core API design tension is between **backward compatibility** (old clients r
 
 A developer building a wallet client thinks about three reads:
 
-1. **"How much HTR / token X does the user have?"** → balance endpoint. Gets back the user's complete balance per token (transparent + shielded merged). Pass `?include=split` to see the breakdown.
+1. **"How much HTR / token X does the user have?"** → balance endpoint. Gets back the user's complete balance per token (transparent + shielded merged). Pass `?split=true` to see the breakdown.
 2. **"What just happened to my wallet?"** → history endpoint. Gets back a paginated stream of movements, each carrying an `output_kind` tag and an optional `balanceBreakdown` so a privacy-aware UI can render shielded receives differently.
 3. **"Build me a transaction that sends 1.0 HTR"** → UTXO endpoint. By default the response includes both transparent and shielded UTXOs; the client picks the inputs it can sign for.
 
@@ -64,7 +64,7 @@ Response (when the wallet has 1000 transparent + 2500 shielded HTR; `shielded_st
 }
 ```
 
-With `?include=split`:
+With `?split=true`:
 
 ```jsonc
 {
@@ -84,7 +84,7 @@ With `?include=split`:
 }
 ```
 
-The existing per-entry shape (`token`, `transactions`, `balance`, `tokenAuthorities`) is **unchanged at the field-name level**. `balance.unlocked` is a number in the default response (merged total) and an object with `{ transparent, shielded, total }` when `?include=split` is set. Storage is one row per `(wallet_id, token_id)` in `wallet_balance` carrying four amount columns; the handler picks which fields to render.
+The existing per-entry shape (`token`, `transactions`, `balance`, `tokenAuthorities`) is **unchanged at the field-name level**. `balance.unlocked` is a number in the default response (merged total) and an object with `{ transparent, shielded, total }` when `?split=true` is set. Storage is one row per `(wallet_id, token_id)` in `wallet_balance` carrying four amount columns; the handler picks which fields to render.
 
 For a transparent-only wallet, `balance.unlocked` is exactly the transparent balance (the shielded summands are zero) and `shielded_status` is `'none'`.
 
@@ -146,7 +146,7 @@ Existing request shape unchanged. One new optional query parameter:
 
 | Parameter | Values | Default |
 |-----------|--------|---------|
-| `include` | `split` | omitted (merged response) |
+| `split` | `true` / `false` | `false` (merged response) |
 
 ### Response shape — default (merged)
 
@@ -170,7 +170,7 @@ Existing request shape unchanged. One new optional query parameter:
 - `tokenAuthorities` is unchanged in semantics. Authority bits live on the transparent columns only — shielded outputs cannot carry mint/melt authority.
 - The top-level response gains an optional `shielded_status` field: `'none' | 'catching-up' | 'ready' | 'error'`.
 
-### Response shape — `?include=split`
+### Response shape — `?split=true`
 
 `balance.unlocked` and `balance.locked` are objects:
 
@@ -188,12 +188,12 @@ Existing request shape unchanged. One new optional query parameter:
 ### Implementation
 
 ```ts
-async function getBalances(walletId: string, tokenId?: string, includeSplit: boolean = false) {
+async function getBalances(walletId: string, tokenId?: string, split: boolean = false) {
   const rows = await db.getWalletBalance(mysql, walletId, tokenId);   // existing helper, returns the new 4-column shape
   return rows.map(row => ({
     token:            row.token,
     transactions:     row.transactions,
-    balance:          includeSplit ? splitShape(row) : mergedShape(row),
+    balance:          split ? splitShape(row) : mergedShape(row),
     tokenAuthorities: row.tokenAuthorities,
   }));
 }
@@ -299,7 +299,7 @@ Every entry has a `kind` discriminator (`'transparent'` or `'shielded'`) so a cl
 | `timelock`, `heightlock`, `locked` | ✓ | ✓ |
 | `voided`, `spent_by` | ✓ | ✓ |
 | `address` | ✓ (base58 transparent address) | ✓ (base58 on-chain spend address) |
-| `shielded_address` | — | ✓ (the long 71-byte user-facing base58 string from `address.shielded_address` on the row with `bip32_account = 1`) |
+| `ct_address` | — | ✓ (the long 71-byte user-facing CT address string from `address.ct_address` on the row with `bip32_account = 1`) |
 | `authorities` | ✓ (mint/melt bits) | always 0 — shielded outputs cannot carry authorities |
 | `mode` | `0` | `1` (AMOUNT_SHIELDED) or `2` (FULLY_SHIELDED) |
 | `recovery_state` | — | `'unowned' \| 'recovered' \| 'recovery_failed'` |
@@ -334,7 +334,7 @@ Concrete example (one transparent + one `AMOUNT_SHIELDED` entry):
       "shielded_index":   7,                  // BIP32 index for this wallet
       "token_id":         "00",
       "address":          "WXB8…",            // on-chain spend address (base58)
-      "shielded_address": "Hsh1…",            // long 71-byte user-facing base58 string
+      "ct_address":       "Hsh1…",            // long 71-byte user-facing CT address string
       "value":            150,                // recovered amount, Hathor cents
       "authorities":      0,
       "mode":             1,
@@ -390,6 +390,73 @@ The `formatUtxo` step picks the kind-appropriate fields from § *Response shape*
 
 The blinding factor is deterministically re-derivable from `(scan_privkey, ephemeral_pubkey)`. The client has the scan privkey too (it owns the seed); it re-derives blinding factors locally when constructing the spend. Avoiding blinding-factor exposure on the wire reduces secret material in the API response.
 
+## `GET wallet/addresses` — extended
+
+The existing address-listing endpoint (and its siblings: `POST /addresses/check_mine`, `GET /addresses?index=N`) keeps the same path and the same response wrapping. A new `legacy` boolean query parameter selects which derivation slot the response covers.
+
+### Request
+
+| Parameter | Values | Default |
+|-----------|--------|---------|
+| `legacy` | `true` / `false` | `true` (returns Legacy-derived addresses, matching today's shape exactly) |
+
+- `?legacy=true` (or absent): returns rows from `address` with `bip32_account = 0` (`Bip32Account.Legacy`) — the existing on-chain transparent addresses the wallet has historically held.
+- `?legacy=false`: returns rows from `address` with `bip32_account = 2` (`Bip32Account.CTSpend`) — the CTSpend-derived rows owned by this wallet, each carrying the long-form `ct_address` so the client can display the user-facing CT address string.
+
+### Response shape — `?legacy=true` (default)
+
+Unchanged from today:
+
+```jsonc
+{
+  "success": true,
+  "addresses": [
+    {
+      "address":      "WT4n…",
+      "index":        0,
+      "transactions": 12
+    }
+    // …
+  ]
+}
+```
+
+### Response shape — `?legacy=false`
+
+Same wrapping; each entry adds the `ct_address` field:
+
+```jsonc
+{
+  "success": true,
+  "addresses": [
+    {
+      "address":      "WXB8…",      // on-chain CTSpend-derived base58 address
+      "ct_address":   "Hsh1…",      // long-form CT address (user-facing display string) from address.ct_address
+      "index":        7,
+      "transactions": 3
+    }
+    // …
+  ]
+}
+```
+
+`ct_address` is non-NULL for CTSpend rows owned by a registered wallet (the registration path populates it from `scan_pubkey` + `spend_pubkey`). The endpoint only returns rows owned by the caller's wallet, so every entry has a populated `ct_address`.
+
+### Implementation
+
+One SELECT against `address`, filtered on `bip32_account`:
+
+```sql
+SELECT address, `index`, transactions
+  -- and ct_address when bip32_account = 2
+  FROM address
+ WHERE wallet_id = :wallet
+   AND bip32_account = :account   -- 0 for legacy=true, 2 for legacy=false
+ ORDER BY `index` ASC
+```
+
+No UNION, no handler-level kind translation. The `bip32_account` discriminator on the unified `address` table makes this a single-account read. The same pattern applies to the index-lookup variant (`GET /addresses?index=N` returns the one row at that index within the selected derivation account) and to `POST /addresses/check_mine` (the membership check resolves against the rows in the selected account; the default `?legacy=true` preserves today's behaviour).
+
 ## Mempool reflection
 
 Mempool shielded UTXOs are reflected in balances and history the same way transparent mempool UTXOs are today. The `balance.unlocked` and `shielded.balance.unlocked` numbers include mempool deltas exactly as the existing transparent flow does — no shape change beyond what is described above.
@@ -425,7 +492,7 @@ If the cosmetic discrepancy in the downgrade scenario is judged unacceptable, th
 
 ## Code organisation
 
-- `packages/wallet-service/src/api/balances.ts` — extend the existing `get` handler to recognise `?include=split` and render the breakdown when requested. Reads one row per `(wallet_id, token_id)` from the modified `wallet_balance`.
+- `packages/wallet-service/src/api/balances.ts` — extend the existing `get` handler to recognise `?split=true` and render the breakdown when requested. Reads one row per `(wallet_id, token_id)` from the modified `wallet_balance`.
 - `packages/wallet-service/src/api/txhistory.ts` — extend the existing `get` handler to emit `output_kind` and `balanceBreakdown` per row. Single-table read against `wallet_tx_history`; no UNION.
 - `packages/wallet-service/src/api/txOutputs.ts` — accept the optional `kind` query parameter; translate it to a `WHERE mode` filter. Hydrate shielded entries with satellite data and shielded-address metadata.
 - `packages/wallet-service/src/db/index.ts` — `getWalletBalance` returns the new four-column shape. New helpers `getShieldedTxOutputDataByIds` and `getShieldedAddressByAddresses` hydrate shielded UTXO entries.
@@ -438,7 +505,7 @@ No new handler files; no parallel `walletV2/` directory.
 - **UTXO endpoint payload size.** Range proofs are large (~675 bytes each). With merged-by-default semantics, a wallet with hundreds of shielded UTXOs may receive a multi-megabyte response on a no-`kind` query. Mitigation: existing `maxOutputs` filter caps the response; a future optimisation could return only metadata by default and a separate endpoint for proof bytes if it becomes a problem in practice. Clients that don't need the heavy fields can pass `kind=transparent`.
 - **Heterogeneous UTXO list.** The merged list mixes transparent and shielded entries with different field sets, distinguished by a `kind` discriminator. Mitigation: the table in § *Reference-level explanation* enumerates the per-kind fields; clients that don't dispatch on `kind` may stumble on shielded entries (see § *Backward compatibility*).
 - **Cosmetic discrepancy for old clients in the downgrade scenario.** A user who upgraded then opens an old client sees `balance.unlocked` higher than the transparent UTXOs they can spend, and the merged UTXO list contains entries they can't sign for. No fund loss; recoverable by re-upgrading. Discussed in § *Backward compatibility*.
-- **Two response shapes for `balance.unlocked`.** Default returns a number; `?include=split` returns an object. Clients that introspect the type at runtime must dispatch. Mitigation: the query parameter is explicit at the request site, so the client knows in advance which shape to expect.
+- **Two response shapes for `balance.unlocked`.** Default returns a number; `?split=true` returns an object. Clients that introspect the type at runtime must dispatch. Mitigation: the query parameter is explicit at the request site, so the client knows in advance which shape to expect.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
