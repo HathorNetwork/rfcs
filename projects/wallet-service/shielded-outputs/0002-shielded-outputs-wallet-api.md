@@ -14,7 +14,7 @@ Extend the wallet-service REST API so client wallets can read and act on their s
 # Motivation
 [motivation]: #motivation
 
-The [daemon and database design](0000-daemon-and-database.md) extends `tx_output`, `address`, `address_balance`, `wallet_balance`, `address_tx_history`, and `wallet_tx_history` to carry shielded data alongside transparent. The [wallet registration design](0001-wallet-registration.md) populates the shielded rows of the unified `address` table (`bip32_account = 1`) so ownership can be resolved. This document closes the loop: it specifies the read surfaces the wallet client uses to view its shielded balance, browse shielded history, and obtain the per-output data it needs to build a shielded spend.
+The [daemon and database design](0000-daemon-and-database.md) extends `tx_output`, `address`, `address_balance`, `wallet_balance`, `address_tx_history`, and `wallet_tx_history` to carry shielded data alongside transparent. The [wallet registration design](0001-wallet-registration.md) populates the shielded rows of the unified `address` table (`bip32_account = 2`) so ownership can be resolved. This document closes the loop: it specifies the read surfaces the wallet client uses to view its shielded balance, browse shielded history, and obtain the per-output data it needs to build a shielded spend.
 
 The core API design tension is between **backward compatibility** (old clients reading `balance.unlocked` as a single number expect a meaningful number) and **breakdown** (a privacy-aware UI wants to render transparent vs shielded explicitly). The chosen resolution: keep the existing field shapes as merged totals by default, and expose the breakdown via opt-in query parameters and new optional response fields. Old clients see numbers that match the user's spendable funds; new clients can read the breakdown without an extra request shape.
 
@@ -168,7 +168,7 @@ Existing request shape unchanged. One new optional query parameter:
 - `balance.unlocked` / `balance.locked` are the sum of `wallet_balance.unlocked_balance + unlocked_shielded_balance` and `wallet_balance.locked_balance + locked_shielded_balance` respectively.
 - `transactions` is the row's `transactions` count — a combined per-token counter (a single tx that touches both kinds of the same token increments by 1, not 2). This matches the natural reading of "transactions for this token in this wallet".
 - `tokenAuthorities` is unchanged in semantics. Authority bits live on the transparent columns only — shielded outputs cannot carry mint/melt authority.
-- The top-level response gains an optional `status` field carrying the unified wallet status (`'creating' | 'catching-up' | 'ready' | 'error'`), derived from `legacy_status` + `ct_status` as specified in the [wallet registration design](0001-wallet-registration.md) § *Schema additions*.
+- The top-level response gains an optional `status` field carrying the unified wallet status (`'creating' | 'ready' | 'error'`), derived from `legacy_status` + `ct_status` as specified in the [wallet registration design](0001-wallet-registration.md) § *Schema additions*.
 
 ### Response shape — `?split=true`
 
@@ -221,7 +221,7 @@ function splitShape(row) {
 }
 ```
 
-If the wallet's `status != 'ready'` (i.e., `ct_status = 'catching-up'`), partial shielded balances are already reflected in the response as the daemon recovers them — the daemon updates `wallet_balance.unlocked_shielded_balance` row-by-row during catch-up. `status: 'catching-up'` tells the client the merged total is still settling.
+If the wallet's `status != 'ready'` (i.e., `ct_status = 'creating'`), partial shielded balances are already reflected in the response as the daemon recovers them — the daemon updates `wallet_balance.unlocked_shielded_balance` row-by-row during catch-up. `status: 'creating'` tells the client the merged total is still settling.
 
 ## `GET wallet/history` — extended
 
@@ -299,11 +299,11 @@ Every entry has a `kind` discriminator (`'transparent'` or `'shielded'`) so a cl
 | `timelock`, `heightlock`, `locked` | ✓ | ✓ |
 | `voided`, `spent_by` | ✓ | ✓ |
 | `address` | ✓ (base58 transparent address) | ✓ (base58 on-chain spend address) |
-| `ct_address` | — | ✓ (the long 71-byte user-facing CT address string from `address.ct_address` on the row with `bip32_account = 1`) |
+| `ct_address` | — | ✓ (the long 71-byte user-facing CT address string from `address.ct_address` on the row with `bip32_account = 2`) |
 | `authorities` | ✓ (mint/melt bits) | always 0 — shielded outputs cannot carry authorities |
 | `mode` | `0` | `1` (AMOUNT_SHIELDED) or `2` (FULLY_SHIELDED) |
 | `recovery_state` | — | `'unowned' \| 'recovered' \| 'recovery_failed'` |
-| `shielded_index` | — | ✓ (BIP32 child index in the wallet, from `address.index` on the row with `bip32_account = 1`) |
+| `shielded_index` | — | ✓ (BIP32 child index in the wallet, from `address.index` on the row with `bip32_account = 2`) |
 | `commitment`, `ephemeral_pubkey`, `range_proof`, `script` | — | ✓ (from satellite `shielded_tx_output_data`) |
 | `token_data` | — | ✓ (only for `mode = 1`) |
 | `asset_commitment`, `surjection_proof` | — | ✓ (only for `mode = 2`) |
@@ -377,7 +377,7 @@ async function getFilteredUtxos(walletId: string, filters: Filters, kind?: 'tran
   // Hydrate shielded entries with crypto bytes and ownership metadata.
   const shieldedIds = rows.filter(r => r.mode !== 0).map(r => [r.tx_id, r.index]);
   const satellite = await db.getShieldedTxOutputDataByIds(mysql, shieldedIds);
-  // Ownership rows live on the unified `address` table at bip32_account = 1.
+  // Ownership rows live on the unified `address` table at bip32_account = 2.
   const ownership = await db.getShieldedAddressByAddresses(mysql, rows.map(r => r.address));
 
   return rows.map(r => formatUtxo(r, satellite, ownership));
@@ -481,7 +481,7 @@ Per-endpoint analysis:
 | `GET wallet/balances` (no `?include`) | `balance.unlocked` and `transactions` are exactly today's transparent values (the shielded summands are zero). Unchanged. | `balance.unlocked` reflects `transparent + shielded`. Old client sees a higher number than the transparent UTXOs it can fetch and sign for. **Cosmetic discrepancy**, no fund loss. |
 | `GET wallet/history` | New `output_kind` and `balanceBreakdown` fields are ignored; `shielded_balance_delta` is 0 on every row so `balance` matches today's `balance_delta`. Identical to today. | Old client receives a merged `balance` per row that includes shielded contributions. The user sees deltas they couldn't see before — generally desirable, not a break. |
 | `GET wallet/utxos` (default merged) | List contains only transparent entries (no shielded UTXOs exist). The new `kind` and `mode` fields on each entry are ignored. Identical to today. | List contains heterogeneous entries. Old clients that filter by `addresses[]` only get matches against the addresses they know — shielded spend_addresses are different from transparent addresses, so they don't appear unless the client explicitly includes them. Old clients that don't filter by addresses see shielded entries; if they try to spend one as a transparent UTXO, signing fails locally. **Cosmetic / signing-time error**, no fund loss. |
-| `GET wallet/status` | `status` field is the unified value; for a non-shielded wallet it equals the existing transparent `legacy_status`, so old clients see no change. | Same — the unified `status` may now read `'catching-up'` while the shielded catch-up is in progress; old clients handle this gracefully since `'catching-up'` was already a valid value during wallet init. |
+| `GET wallet/status` | `status` field is the unified value; for a non-shielded wallet it equals the existing transparent `legacy_status`, so old clients see no change. | Same — the unified `status` may now read `'creating'` while the shielded catch-up is in progress; old clients handle this gracefully since `'creating'` was already a valid value during wallet init. |
 | `POST wallet/init` | Old clients send only the existing fields; the server runs the existing flow. Unchanged. | Same. (Not affected by the shielded-keys reconciliation since the request omits shielded fields.) |
 | WebSocket `'new-tx'` | Unchanged. | Payload gains optional shielded fields; old clients ignore them and miss the shielded slice in real-time. The next balance/history poll catches them up. |
 | Push notifications | Unchanged. | Same as WebSocket — optional shielded fields ignored by old clients. |
