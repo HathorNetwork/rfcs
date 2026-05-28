@@ -420,6 +420,8 @@ token
 
 `SUM(tx_output.value)` is structurally wrong once a token has any shielded UTXOs (shielded values are encrypted on chain and held as NULL on `tx_output` until the wallet-service owns the scan key and recovers them). A denormalised `total_supply` on `token` is updated in-place via four independent supply-change paths, with **two single-writer authorities**:
 
+> **Deferral — mint/melt with shielded outputs.** Paths 3 and 4 below are gated on `shielded_outputs.length === 0`: any vertex that includes shielded outputs is skipped entirely for supply accounting in this design. Full shielded mint/melt support (reading `MintHeader`/`MeltHeader`, applying per-token public deltas) is part of a follow-up design. Until then, `total_supply` may undercount tokens that were minted or burned via a transaction with shielded outputs.
+
 1. **Token creation** — `handleTokenCreated` is the single writer for the initial supply. It reads `initial_amount` directly from the `TOKEN_CREATED` event payload (`TokenCreatedEventSchema.initial_amount`) and sets `total_supply` to that value via `setTokenTotalSupply`. The wire payload is authoritative — no SUM over `tx_output` is needed, which also removes an implicit ordering dependency on transparent-output materialization.
 2. **Block reward** (HTR only) — every accepted block increments `total_supply` for HTR by the block reward.
 3. **Mint / melt** — gated on the vertex containing no shielded outputs and at least one authority output. The signed delta is `sum(non-burn outputs[token].value) − sum(inputs[token].value)` — burn-address outputs are **excluded** from the outputs sum so this path reflects the authority-driven supply change only.

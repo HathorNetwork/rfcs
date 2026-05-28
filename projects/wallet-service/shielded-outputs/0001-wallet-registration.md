@@ -60,15 +60,15 @@ POST /wallet/init
 
 The shielded fields follow the same flat shape as the existing transparent signature fields — no nested `signatures` object, just sibling keys. All four shielded fields are all-or-none.
 
-The server reconciles. It looks up `wallet_alice` and finds it exists with `status = 'ready'`, `shielded_status = 'none'`. It then:
+The server reconciles. It looks up `wallet_alice` and finds it exists with `legacy_status = 'ready'`, `ct_status = 'none'`. It then:
 
 1. Validates the existing transparent signatures (unchanged path).
 2. Validates `scanXprivSignature` and `spendXpubSignature` against `auth_xpubkey/0` to confirm the caller has authority over both new keys.
 3. Confirms the `wallet` row has no `scan_xpriv` stored (this is the upgrade case, not a key-mismatch case).
-4. Sets `wallet.scan_xpriv`, `wallet.spend_xpub`, `shielded_max_gap = 20`, `shielded_status = 'catching-up'`.
+4. Sets `wallet.scan_xpriv`, `wallet.spend_xpub`, `shielded_max_gap = 20`, `ct_status = 'catching-up'`.
 5. Pre-derives 20 shielded addresses (indexes 0..19). For each, runs `INSERT … ON DUPLICATE KEY UPDATE` against the unified `address` table to either fill in ownership on a row the daemon had already observed, or insert a new owned row with `bip32_account = 1`. (`scan_pubkey` and `spend_pubkey` are computed during derivation but not stored.) New ownership rows are written with `catchup_state = 'pending'`.
 6. Enqueues a catch-up job for `wallet_alice`.
-7. Returns 200 with the wallet's status payload, including `shielded_status: 'catching-up'`. The client then polls the existing wallet-status endpoint until `shielded_status` reaches `'ready'`.
+7. Returns 200 with `status: 'catching-up'` (the CT component is `ct_status = 'catching-up'`). The client polls the wallet-status endpoint until `status` reaches `'ready'`.
 
 The catch-up job (running on the daemon, see § *Re-scan procedure*):
 
@@ -99,7 +99,7 @@ If the catch-up surfaces shielded receives at high indices, the catch-up algorit
 
 ### Variant: completely new wallet with shielded support
 
-The client calls the same load endpoint with the full set of keys. The server finds no existing `wallet_alice`, runs the existing transparent creation path (sets `status = 'creating'`), and **in the same atomic step** sets `shielded_status = 'catching-up'`, derives the initial 20 shielded ownership rows on the unified `address` table at `bip32_account = 1` (each via the UPSERT described above), and enqueues both the transparent and shielded async initialisers. Both halves run in parallel. The client polls until both `status = 'ready'` and `shielded_status = 'ready'`.
+The client calls the same load endpoint with the full set of keys. The server finds no existing `wallet_alice`, runs the existing transparent creation path (sets `status = 'creating'`), and **in the same atomic step** sets `shielded_status = 'catching-up'`, derives the initial 20 shielded ownership rows on the unified `address` table at `bip32_account = 1` (each via the UPSERT described above), and enqueues both the transparent and shielded async initialisers. Both halves run in parallel. The client polls until `status = 'ready'` (both `legacy_status` and `ct_status` have reached `'ready'`).
 
 ### Variant: client without shielded support
 
@@ -117,14 +117,20 @@ No-op. The server's reconciliation step finds `wallet.scan_xpriv` already popula
 New columns, all nullable to support the upgrade flow:
 
 ```sql
+ALTER TABLE wallet RENAME COLUMN status TO legacy_status;  -- existing transparent lifecycle column
 ALTER TABLE wallet ADD COLUMN scan_xpriv               VARBINARY(112) NULL;  -- HD privkey serialised, stored in plaintext
 ALTER TABLE wallet ADD COLUMN spend_xpub               VARCHAR(120)   NULL;
 ALTER TABLE wallet ADD COLUMN shielded_max_gap         SMALLINT UNSIGNED NULL DEFAULT 20;
 ALTER TABLE wallet ADD COLUMN last_used_shielded_index INT UNSIGNED   NULL;
-ALTER TABLE wallet ADD COLUMN shielded_status          ENUM('none','catching-up','ready','error') NOT NULL DEFAULT 'none';
+ALTER TABLE wallet ADD COLUMN ct_status                ENUM('none','catching-up','ready','error') NOT NULL DEFAULT 'none';
 ```
 
-`shielded_status` is independent of the existing `wallet.status` so the transparent and shielded views can be in different lifecycle phases at the same time (e.g., a wallet may be `status = 'ready'` for transparent while `shielded_status = 'catching-up'`).
+`ct_status` is independent of `legacy_status` so the transparent and shielded views can be in different lifecycle phases (e.g., `legacy_status = 'ready'` while `ct_status = 'catching-up'`). The API derives a single unified `status` from both columns using this rule:
+
+- `ct_status = 'none'` (no shielded keys registered) → `status = legacy_status`
+- Either column is `'error'` → `status = 'error'`
+- Either column is `'catching-up'` → `status = 'catching-up'`
+- Both are `'ready'` → `status = 'ready'`
 
 `scan_xpriv` stores the BIP32-serialised extended private key as bytes in plaintext. The column type and width leave room for a future encryption-at-rest migration to be a column-data change, not a schema change.
 
@@ -163,10 +169,10 @@ The handler reconciles its stored state against the submitted body. The matrix i
 
 | Wallet exists? | `wallet.scan_xpriv` already stored? | Shielded fields in request? | Server behaviour |
 |---|---|---|---|
-| No | n/a | No | Existing transparent creation path. `shielded_status = 'none'`. |
-| No | n/a | Yes | Transparent creation path **and** shielded init in the same atomic step: set `scan_xpriv`, `spend_xpub`, `shielded_max_gap = 20`; pre-derive 20 shielded ownership rows via UPSERT against the unified `address` table; `shielded_status = 'catching-up'`; enqueue catch-up job. |
+| No | n/a | No | Existing transparent creation path. `ct_status = 'none'`. |
+| No | n/a | Yes | Transparent creation path **and** shielded init in the same atomic step: set `scan_xpriv`, `spend_xpub`, `shielded_max_gap = 20`; pre-derive 20 shielded ownership rows via UPSERT against the unified `address` table; `ct_status = 'catching-up'`; enqueue catch-up job. |
 | Yes | No | No | Existing transparent already-loaded behaviour: return current status. |
-| Yes | No | Yes | **Upgrade case.** Verify shielded signatures; set `scan_xpriv`, `spend_xpub`, `shielded_max_gap = 20`; pre-derive 20 shielded ownership rows via UPSERT against the unified `address` table; `shielded_status = 'catching-up'`; enqueue catch-up job; return current status. |
+| Yes | No | Yes | **Upgrade case.** Verify shielded signatures; set `scan_xpriv`, `spend_xpub`, `shielded_max_gap = 20`; pre-derive 20 shielded ownership rows via UPSERT against the unified `address` table; `ct_status = 'catching-up'`; enqueue catch-up job; return current status. |
 | Yes | Yes (same as submitted) | Yes | No-op for the shielded half. Return current status. |
 | Yes | Yes (different from submitted) | Yes | **Reject (`409 Conflict`).** Silently overwriting registered shielded keys is a security violation. |
 | Yes | Yes | No | No-op. The client did not provide shielded data; this is **never** treated as a request to disable shielded. |
@@ -179,21 +185,23 @@ The handler reconciles its stored state against the submitted body. The matrix i
 
 #### Response
 
-The endpoint returns the existing wallet-status payload — same wrapping (`{ "success": true, "status": { ... } }`), same shape returned today. The status object gains three new fields:
+The endpoint returns the existing wallet-status payload — same wrapping (`{ "success": true, "status": { ... } }`). The status object replaces the old `status` field with a unified computed value and gains two new informational fields:
 
 ```jsonc
 {
   "success": true,
   "status": {
-    // ... existing fields (id, xpubkey, status, max_gap, last_used_address_index, etc.) ...
-    "shielded_status":          "none" | "catching-up" | "ready" | "error",
+    // ... existing fields (id, xpubkey, max_gap, last_used_address_index, etc.) ...
+    "status":                   "creating" | "ready" | "error" | "catching-up",  // unified (derived from legacy_status + ct_status)
     "shielded_max_gap":         20,
     "last_used_shielded_index": 7
   }
 }
 ```
 
-Clients poll the existing `GET wallet/status` endpoint to observe both `status` and `shielded_status` advancing. Old clients ignore the three new fields without issue (additive change).
+The `status` field is now the unified value derived from `legacy_status` and `ct_status` as described in § *Schema additions*. The raw per-subsystem columns are not exposed. Old clients that already read `status` continue to work; the field name is unchanged, and the only new value they may observe is `'catching-up'` (previously only the transparent init phase produced non-`'ready'` values; now a shielded catch-up also keeps `status` at `'catching-up'` until it completes).
+
+Clients poll the existing `GET wallet/status` endpoint to observe `status` advancing. Old clients ignore the two new informational fields (`shielded_max_gap`, `last_used_shielded_index`) without issue (additive change).
 
 ### Address gap-extension
 
@@ -323,7 +331,7 @@ loop:
          - goto step 4.
 
   4. Catch-up complete:
-       UPDATE wallet SET shielded_status='ready' WHERE id=:wallet_id
+       UPDATE wallet SET ct_status='ready' WHERE id=:wallet_id
 
   5. Emit a final 'shielded-catchup-complete' event.
 ```
@@ -368,7 +376,7 @@ Rate-limit: at most one shielded-key reconciliation per wallet per hour (configu
 
 ### Catch-up failure handling
 
-If the async catch-up encounters an unrecoverable error (e.g., a stuck rewind, persistent DB error), the job sets `shielded_status = 'error'` on the wallet. `wallet.status` is unchanged — the transparent side stays whatever it was. A subsequent wallet-load call with the same shielded keys retries: the handler observes `shielded_status = 'error'`, transitions it back to `'catching-up'`, and re-enqueues the job. The catch-up algorithm's idempotency (the `recovery_state = 'unowned'` row guard described in § *Re-scan procedure*) makes the retry safe.
+If the async catch-up encounters an unrecoverable error (e.g., a stuck rewind, persistent DB error), the job sets `ct_status = 'error'` on the wallet. `legacy_status` is unchanged — the transparent side stays whatever it was. The unified `status` becomes `'error'`. A subsequent wallet-load call with the same shielded keys retries: the handler observes `ct_status = 'error'`, transitions it back to `'catching-up'`, and re-enqueues the job. The catch-up algorithm's idempotency (the `recovery_state = 'unowned'` row guard described in § *Re-scan procedure*) makes the retry safe.
 
 This behaviour is provisional pending ops-team review.
 
@@ -396,9 +404,9 @@ The Lambda environment makes per-request HD derivation a measurable cost; pre-de
 
 The wallet-service must never hold the spend privkey. This is the entire point of the scan/spend split: the wallet-service can read but not steal. Spending is a client responsibility.
 
-## Why a separate `shielded_status` instead of reusing `wallet.status`?
+## Why two DB columns (`legacy_status` + `ct_status`) instead of one?
 
-A wallet can be transparent-ready while shielded-catching-up. Conflating these into a single status enum forces the client to disambiguate via auxiliary fields. A separate column makes the lifecycle explicit.
+A wallet can be transparent-ready while shielded-catching-up. Two independent columns (`legacy_status`, `ct_status`) let each subsystem advance through its lifecycle independently. The API collapses them into one unified `status` field (derivation rule in § *Schema additions*) so clients always read a single, actionable value without having to combine two fields themselves.
 
 ## Why not let the client run the catch-up scan and POST results?
 
