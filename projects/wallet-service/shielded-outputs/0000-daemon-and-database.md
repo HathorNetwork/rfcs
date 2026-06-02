@@ -79,7 +79,7 @@ User Alice's wallet has shielded keys registered. Bob sends Alice 1.5 HTR via an
    - `token_id = '00'` (from `token_data`)
    - `recovery_state = 'unowned'`
 4. It INSERTs a `shielded_tx_output_data` row with the crypto bytes.
-5. It UPSERTs `address`: row for Alice's `decoded.address` already exists with `bip32_account = Bip32Account.CTSpend`, `wallet_id = wallet_alice`, `index = 7`, `scan_privkey = …`, `ct_address = <long-form display string>` because Alice's wallet-registration step pre-derived this row earlier (registration is where the long-form is computed from `scan_privkey` + `spend_pubkey` and written to the row — see [[0001-wallet-registration]]). The single canonical `transactions` bump for `(address, tx)` happens once per vertex inside `updateAddressTablesWithTx` (see § *Invariants*); the observation upsert itself does not touch `transactions`.
+5. It UPSERTs `address`: row for Alice's `decoded.address` already exists with `bip32_account = Bip32Account.CTSpend`, `wallet_id = wallet_alice`, `index = 7`, `scan_privkey = …`, `ct_address = <long-form display string>` because Alice's wallet-registration step pre-derived this row earlier (registration is where the long-form is computed from `scan_privkey` + `spend_pubkey` and written to the row — see [wallet registration design](0001-wallet-registration)). The single canonical `transactions` bump for `(address, tx)` happens once per vertex inside `updateAddressTablesWithTx` (see § *Invariants*); the observation upsert itself does not touch `transactions`.
 6. It sees `wallet_id IS NOT NULL` on the looked-up row → owned. It calls `rewindAmountShieldedOutput(scan_privkey, ephemeral_pubkey, commitment, range_proof, token_uid_from_token_data)`. Returns `{ value: 150 }`.
 7. It UPDATEs the `tx_output` row: `value = 150`, `recovery_state = 'recovered'`. (`token_id` is already populated.)
 8. It calls `updateAddressTablesWithTx`, which dispatches on `mode = 1`:
@@ -173,7 +173,7 @@ The point of this example: `token_id` lives in `tx_output` and is filled in by r
 
 ## Worked example: void of a recovered shielded receive
 
-Two days after the first worked example (Alice received 1.5 HTR shielded), the transaction is reorged out and gets voided.
+Two minutes after the first worked example (Alice received 1.5 HTR shielded), the transaction is reorged out and gets voided.
 
 1. `handleVoidedTx` runs for the vertex.
 2. UPDATEs every `tx_output` row of the vertex: `voided = TRUE` (affects both transparent and shielded rows uniformly).
@@ -273,7 +273,7 @@ shielded_tx_output_data
   FOREIGN KEY (tx_id, `index`) REFERENCES tx_output(tx_id, `index`) ON DELETE CASCADE
 ```
 
-The `index` column is `SMALLINT UNSIGNED` to match the widened `tx_output.index` (see § *Type-widening migration for `tx_output.index`*) and backticked because `index` is a SQL-reserved keyword in MySQL. Using the same column name and type as the parent table makes the FK self-documenting and removes the `output_index` ↔ `index` naming asymmetry an earlier revision had. `token_data` is `TINYINT UNSIGNED` to cover the full 0–255 byte range the wire emits — signed TINYINT (-128..127) would not fit `token_data` values ≥ 128.
+The `index` column is `SMALLINT UNSIGNED` to match the widened `tx_output.index` (see § *Type-widening migration for `tx_output.index`*) and backticked because `index` is a SQL-reserved keyword in MySQL. `token_data` is `TINYINT UNSIGNED` to cover the full 0–255 byte range the wire emits.
 
 Notes:
 
@@ -787,7 +787,7 @@ Two channels exist today:
 - Realtime WebSocket updates — the daemon enqueues a realtime message via `sendRealtimeTx` (`packages/daemon/src/utils/aws.ts`, `NEW_TX_SQS`); the wallet-service `onNewTx` SQS handler (`packages/wallet-service/src/ws/txNotify.ts`) fans it out as a `{ type: 'new-tx', … }` WebSocket frame.
 - Push notifications (FCM via SQS/Lambda) — the daemon forwards a per-wallet balance summary via `invokeOnTxPushNotificationRequestedLambda` (`packages/daemon/src/utils/aws.ts`); the FCM payload is built in `packages/wallet-service/src/utils/pushnotification.utils.ts`.
 
-This design keeps the **single** `'new-tx'` realtime message in its existing `{ type: 'new-tx', data: { …Transaction } }` shape — it is **not** reshaped into a balance-delta payload, so the wrapper stays backwards-compatible. The client only needs to know *which of its addresses were involved* so it can refetch the affected balances/history from the read API (`[[0002-shielded-outputs-wallet-api]]`). Two additive fields go **inside `data`** (alongside the existing Transaction fields): `shielded_outputs` (the legacy transparent payload doesn't carry them) and `addresses` — the involved-address set the daemon already computes during ingestion (`getInvolvedAddresses` — transparent inputs/outputs, every shielded output's decoded address, shielded-input spend addresses, and nano-header addresses):
+This design keeps the **single** `'new-tx'` realtime message in its existing `{ type: 'new-tx', data: { …Transaction } }` shape — it is **not** reshaped into a balance-delta payload, so the wrapper stays backwards-compatible. The client only needs to know *which of its addresses were involved* so it can refetch the affected balances/history from the read API ([wallet api design](0002-shielded-outputs-wallet-api)). Two additive fields go **inside `data`** (alongside the existing Transaction fields): `shielded_outputs` (the legacy transparent payload doesn't carry them) and `addresses` — the involved-address set the daemon already computes during ingestion (`getInvolvedAddresses` — transparent inputs/outputs, every shielded output's decoded address, shielded-input spend addresses, and nano-header addresses):
 
 ```jsonc
 {
@@ -802,7 +802,7 @@ This design keeps the **single** `'new-tx'` realtime message in its existing `{ 
 
 The message carries **no balance deltas and no recovered/secret material** (scan keys, blinding factors, recovered values); the shielded outputs are included exactly as they appear on the public wire (their commitments / ephemeral pubkeys are already public on-chain). A client intersects `data.addresses` with its own address set and refetches the affected balances/history when they overlap. Old clients that ignore the new `data.shielded_outputs` / `data.addresses` fields still receive the transaction exactly as before; there is no `'new-shielded-tx'` companion event.
 
-Push payloads similarly omit any cryptographic material; they carry only the per-wallet, user-visible balance summary (`WalletBalanceValue`). Whether and how a shielded amount surfaces in a push notification is a product decision tracked in `[[0002-shielded-outputs-wallet-api]]` and does not block the daemon work, which simply forwards the per-wallet balance map.
+Push payloads similarly omit any cryptographic material; they carry only the per-wallet, user-visible balance summary (`WalletBalanceValue`). Whether and how a shielded amount surfaces in a push notification is a product decision tracked in [wallet api design](0002-shielded-outputs-wallet-api) and does not block the daemon work, which simply forwards the per-wallet balance map.
 
 ## Mempool
 
