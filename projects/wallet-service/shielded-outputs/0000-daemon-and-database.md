@@ -86,7 +86,7 @@ User Alice's wallet has shielded keys registered. Bob sends Alice 1.5 HTR via an
    - Bump `address_balance.unlocked_shielded_balance += 150` and `total_shielded_received += 150` for `(Alice_ctspend_address, '00')`. (The same row also carries transparent columns; those stay zero here.)
    - Bump `wallet_balance.unlocked_shielded_balance += 150` for `(wallet_alice, '00')`.
    - Append `wallet_tx_history` row with `shielded_balance_delta = 150` (and `balance_delta = 0`); append `address_tx_history` row with `shielded_balance_delta = 150` for `(Alice_ctspend_address, tx_id, '00')`.
-9. It enqueues a `'new-tx'` event carrying both transparent (empty here) and shielded deltas.
+9. It enqueues a single realtime `'new-tx'` message (`data` = the transaction plus its `shielded_outputs` and the involved `addresses` set); the client refetches the affected balances.
 10. The DB transaction commits.
 
 If the same vertex also had transparent outputs, those would be processed in the same loop and contribute to the **same** `wallet_tx_history` row (one row per `(wallet_id, tx_id, token_id)`), with `balance_delta` carrying the transparent delta and `shielded_balance_delta` carrying the shielded delta.
@@ -105,7 +105,7 @@ Bob sends Alice 1.0 HTR via a transparent output **and** 1.5 HTR via an `AMOUNT_
 4. `updateWalletTablesWithTx` aggregates per-token across both kinds:
    - `wallet_balance` for `(wallet_alice, '00')`: `unlocked_balance += 100`, `unlocked_shielded_balance += 150`, `transactions += 1`.
    - `wallet_tx_history`: **one row** for `(wallet_alice, tx_id, '00')` with `balance_delta = 100` and `shielded_balance_delta = 150`.
-5. Emits a single `'new-tx'` event with `balance_changes_by_token: [{ token_id: '00', balance_delta: 100, shielded_balance_delta: 150 }]`.
+5. Enqueues a single realtime `'new-tx'` message — `data` carries the transaction, its `shielded_outputs`, and the involved `addresses` set; the client refetches the affected balances (transparent + shielded) from the read API.
 6. The DB transaction commits.
 
 Note: the `wallet_tx_history` row is one row, not two. The API derives `output_kind = 'mixed'` from "both deltas non-zero" when it renders this entry.
@@ -784,31 +784,25 @@ The shielded extension is **kind-aware SQL added in place**:
 
 Two channels exist today:
 
-- Push notifications (FCM via SQS) — `packages/daemon/src/services/pushNotification` and the alerts subsystem.
-- WebSocket updates to connected wallet clients — `packages/wallet-service/src/ws/`.
+- Realtime WebSocket updates — the daemon enqueues a realtime message via `sendRealtimeTx` (`packages/daemon/src/utils/aws.ts`, `NEW_TX_SQS`); the wallet-service `onNewTx` SQS handler (`packages/wallet-service/src/ws/txNotify.ts`) fans it out as a `{ type: 'new-tx', … }` WebSocket frame.
+- Push notifications (FCM via SQS/Lambda) — the daemon forwards a per-wallet balance summary via `invokeOnTxPushNotificationRequestedLambda` (`packages/daemon/src/utils/aws.ts`); the FCM payload is built in `packages/wallet-service/src/utils/pushnotification.utils.ts`.
 
-This design keeps the **single** `'new-tx'` event. Its payload gains optional shielded fields:
+This design keeps the **single** `'new-tx'` realtime message in its existing `{ type: 'new-tx', data: { …Transaction } }` shape — it is **not** reshaped into a balance-delta payload, so the wrapper stays backwards-compatible. The client only needs to know *which of its addresses were involved* so it can refetch the affected balances/history from the read API (`[[0002-shielded-outputs-wallet-api]]`). Two additive fields go **inside `data`** (alongside the existing Transaction fields): `shielded_outputs` (the legacy transparent payload doesn't carry them) and `addresses` — the involved-address set the daemon already computes during ingestion (`getInvolvedAddresses` — transparent inputs/outputs, every shielded output's decoded address, shielded-input spend addresses, and nano-header addresses):
 
 ```jsonc
 {
-  "wallet_id": "…",
-  "tx_id":     "…",
-  "balance_changes_by_token": [
-    {
-      "token_id":               "00",
-      "balance_delta":          -50,   // transparent
-      "shielded_balance_delta": 150    // shielded
-    }
-  ],
-  "shielded_outputs_meta": [           // optional, summary only — no crypto material
-    { "index": 5, "mode": 1 }
-  ]
+  "type": "new-tx",
+  "data": {
+    // …existing Transaction fields (tx_id, outputs, inputs, …) — unchanged
+    "shielded_outputs": [ /* shielded outputs on this tx, as they appear on the wire */ ],
+    "addresses":        ["Hxxx…", "WT4n…"]   // involved set (transparent + shielded), already computed
+  }
 }
 ```
 
-Old clients that don't read the shielded fields see the existing payload shape. Clients that subscribe to `'new-tx'` for a wallet that received shielded outputs see one event per tx, not two.
+The message carries **no balance deltas and no recovered/secret material** (scan keys, blinding factors, recovered values); the shielded outputs are included exactly as they appear on the public wire (their commitments / ephemeral pubkeys are already public on-chain). A client intersects `data.addresses` with its own address set and refetches the affected balances/history when they overlap. Old clients that ignore the new `data.shielded_outputs` / `data.addresses` fields still receive the transaction exactly as before; there is no `'new-shielded-tx'` companion event.
 
-Push payloads omit any cryptographic material (commitments, ephemeral pubkeys); they carry only the user-visible summary.
+Push payloads similarly omit any cryptographic material; they carry only the per-wallet, user-visible balance summary (`WalletBalanceValue`). Whether and how a shielded amount surfaces in a push notification is a product decision tracked in `[[0002-shielded-outputs-wallet-api]]` and does not block the daemon work, which simply forwards the per-wallet balance map.
 
 ## Mempool
 
