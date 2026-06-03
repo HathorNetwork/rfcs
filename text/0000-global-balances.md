@@ -59,6 +59,10 @@ So a transaction may:
 
 This is not a pure account model. UTXOs remain the settlement format. The global map is an additional protocol balance space for cases where explicit UTXO planning is too rigid.
 
+## A note on decimal precision
+
+This feature is built on top of [Token Amount V2](../projects/token-amount-v2/0002-token-amount-v2.md), the upgrade from 2 to 18 decimal places. Every amount in the global map is an 18-decimal (V2) base-unit integer: the examples below write human-readable values such as `4 HTR`, but on the wire and in storage that is `4 * 10^18` base units. The global balance map is 18-decimal native; it does not exist for the legacy 2-decimal (V1) representation. See [Decimal precision](#decimal-precision-token-amount-v2) for the full rules.
+
 ## Examples
 
 ### UTXO to global balance
@@ -195,6 +199,17 @@ That implies:
 
 Contracts still own funds through contract-local treasury state, not through entries in `GlobalAddressBalance`.
 
+## Decimal precision (Token Amount V2)
+[decimal-precision-token-amount-v2]: #decimal-precision-token-amount-v2
+
+This feature is specified directly on top of [Token Amount V2](../projects/token-amount-v2/0002-token-amount-v2.md), which raises token precision from 2 to 18 decimal places. It is 18-decimal native from the start; there is no 2-decimal (V1) form of the global balance map.
+
+The rules are:
+
+- Every amount in this RFC — `GlobalAddressBalance[(address, token)]` values, `TxTransferInput.amount`, `TxTransferOutput.amount`, and the syscall amounts — is a **V2 (18-decimal) normalized base-unit integer**. This matches the full node's internal accounting, which is always V2-normalized; V1 values elsewhere are scaled up by the normalization factor `10^16` (Token Amount V2, I7/I9).
+- Global balance and seqnum entries live in the same patricia-trie used for nano contract state, which Token Amount V2 re-serializes to V2 (I18). Amounts are stored using the trie's existing internal integer encoding (LEB128); this RFC introduces no new encoding.
+- This feature **requires Token Amount V2 to be active**. It is gated behind its own Feature Activation process whose activation must not precede V2. Before V2 is active there are no V2 transactions, so no `TransferHeader` can be accepted.
+
 ## Transaction format
 
 Transactions may include at most one `TransferHeader`.
@@ -237,6 +252,8 @@ The fields mean:
 - index `n > 0` refers to `tx.tokens[n - 1]`
 
 `address_index` points into `TransferHeader.addresses`.
+
+`amount` fields are encoded with the same versioned output-value codec used by the other headers, i.e. `encode_output_value(serializer, amount, decimal_version=tx.decimal_version)`. Because this header only exists in the V2 era (see [Decimal precision](#decimal-precision-token-amount-v2)), **a `TransferHeader` is only valid on a V2 transaction** (`VertexDecimalVersion.V2`). A V1 transaction carrying a `TransferHeader` is invalid. Each `amount` is therefore an 18-decimal base-unit integer, bounded by the same maximum output value as regular outputs, `2^63 * 10^16` (Token Amount V2, I2).
 
 The header is part of the transaction sighash. Therefore each `InputAddress.script` authorizes the full transaction, not only the transfer entries in isolation.
 
@@ -292,6 +309,7 @@ If a transaction would both debit and credit the same `(address, token)` pair, i
 This RFC defines the following validity rules for `TransferHeader`:
 
 - only transactions may carry it
+- the carrying transaction must be V2 (`tx.decimal_version == VertexDecimalVersion.V2`); a `TransferHeader` on a V1 transaction is rejected
 - only one `TransferHeader` instance is allowed
 - each `address_index` must point to an existing `InputAddress`
 - each referenced `token_index` must resolve to HTR or a token in `tx.tokens`
@@ -331,6 +349,8 @@ Where:
 - `TransferOutputs[T]` is the sum of `TxTransferOutput.amount` for token `T`
 - `NCWithdrawals[T]` and `NCDeposits[T]` are the existing nano-contract treasury movements
 - `MintMeltAndFeeAdjustments[T]` covers existing token accounting rules such as mint authority, melt authority, and per-output fee calculations
+
+Every term in this equation is evaluated in V2-normalized (18-decimal) units. The transaction is V2, so its transfer amounts, outputs, and nano actions are already V2; when it spends V1 UTXOs, those input values are scaled up by `10^16` before the equation is checked, so V2 values are never truncated to V1 (Token Amount V2, I6/I7). The equation itself is unchanged.
 
 So, in balance verification:
 
@@ -383,6 +403,8 @@ Their semantics are:
 - `get_address_balance_before_current_call(address, token)` reads `GlobalAddressBalance[(address, token)]` as it was before the current transaction began, ignoring any in-flight changes. This is consistent with `get_balance_before_current_call` for contract treasury balances.
 - `transfer_to_address(address, amount, token)` debits the executing contract treasury and credits the target global address balance. If the contract's treasury has insufficient balance for the requested transfer, the call raises an execution failure, which causes the entire nano contract call to fail. Blueprint authors who want to avoid this should check the treasury balance before attempting a transfer.
 
+These syscalls are available to **V2 blueprints only**. The global map stores 18-decimal values and V2 blueprints already operate in 18 decimals, so amounts cross the syscall boundary as raw V2 base-unit integers with no normalization. Calling them from a V1 blueprint is a runtime error, consistent with Token Amount V2's two-worlds model where V1 and V2 blueprints cannot interact (I15). This restriction is automatically satisfied for caller-funded calls: a `TransferHeader` implies a V2 transaction, which can only target V2 blueprints in the first place.
+
 This RFC does not define a general-purpose syscall to debit arbitrary user balances from the global map.
 
 That is intentional. Nano contracts execute arbitrary code, so user debits must remain explicit and transaction-authenticated. In this RFC, a contract may consume user value from the global map only when:
@@ -414,6 +436,8 @@ This RFC adds a second protocol balance domain beside UTXOs. That increases comp
 - API surface area
 
 It also introduces per-address sequence state, which is more account-like than Hathor's current UTXO-only flows.
+
+This feature also hard-depends on Token Amount V2: it cannot be used by V1 transactions or V1 blueprints, and its activation cannot precede V2's. Participants that have not migrated to V2 are excluded from the global balance map entirely.
 
 Finally, the caller-only rule for nano-contract debits is intentionally conservative. It keeps authorization simple, but it does not cover every multi-party contract flow that might be desirable in the future.
 
@@ -482,7 +506,8 @@ This RFC takes a hybrid approach:
 - Which explorer and API endpoints should expose global address balances, and should they also expose seqnum state?
 - Should a future RFC allow nano-contract transactions to consume multiple pre-authorized input addresses instead of only the caller?
 - Should a future RFC expose more contract-facing operations over the global balance map beyond read and settle?
-- What feature-activation schedule and rollout policy should be used for deployment on each network?
+- What feature-activation schedule and rollout policy should be used for deployment on each network, given that activation must not precede Token Amount V2?
+- Should a future RFC let V1 transactions and V1 blueprints participate in the global map through boundary normalization (scaling 2-decimal amounts by `10^16`, with lossy reads of sub-cent balances)? This RFC keeps the map V2-only and treats that as explicitly out of scope.
 - What is the expected state growth profile for the global balance table, and should zero-balance entries be pruned from the trie to limit storage growth? Any pruning strategy must not affect consensus: currently, trie root-ids are not used for reaching consensus, so pruning is purely a storage optimization.
 - How are transaction fees paid when a transaction has zero UTXO inputs? Can fees come from transfer-header debits, or must a minimal UTXO input always be present for fee payment?
 - Should the `nc_address` field in `NanoHeader` be renamed or clarified to avoid confusion between the caller address and the contract address?
