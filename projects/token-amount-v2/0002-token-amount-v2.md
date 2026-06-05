@@ -69,7 +69,7 @@ For fee-based tokens, the fee header will support V2 values (already covered in 
 Storage of versioned transactions requires no upgrade, as they will naturally use their encoded bytes as the stored artifact. Token-related indexes need to be upgraded to support the new token amounts. This includes the UTXO index and the Tokens index.
 
 - **I9:** Indexes will use V2 values internally, as in I7. V1 values will be normalized accordingly.
-- **I10:** The RocksDB implementation of the UTXO index currently uses a fixed slot of 8 bytes for storing amounts. It will be changed to use a fixed slot of 16 bytes, which supports up to `~10^20` tokens with 18 decimal places.
+- **I10:** The RocksDB implementation of the UTXO index currently uses a fixed slot of 8 bytes for storing amounts. It will be changed to use a varint slot with the same serialization as the V2 token amounts.
 
 ### APIs
 
