@@ -73,11 +73,11 @@ Storage of versioned transactions requires no upgrade, as they will naturally us
 
 ### APIs
 
-The full node APIs must reflect the new versioned tokens. For example, the `/transaction` route must return output values as they are defined in the respective transaction, so:
+The full node APIs must reflect the new versioned tokens. For example, the `/v1a/transaction` route must return output values as they are defined in the respective transaction, so:
 
-- **I11:** V1 transactions will return V1-scaled token amounts in the `/transaction` API, and V2 transactions will return V2-scaled amounts. The API will also include a `token_amount_version` field so clients can correctly interpret the amounts considering the transaction's own version.
-- **I12:** Existing APIs that take token amounts in the request will continue receiving V1 amounts to prevent breaking API contracts.
-- **I13:** Existing APIs that return token amounts in the response will continue returning those amounts in the same field to prevent breaking API contracts; however, a new field with the same name suffixed with `_v2` will be added, containing the V2-scaled token amount.
+- **I11:** We'll introduce new `/v2` API routes for all existing `/v1a` routes that receive amounts as requests or send them as responses.
+- **I12:** The new `/v2` APIs will return amounts as strings, and include fields with the token amount version and number of decimal places.
+- **I13:** Existing `/v1a` APIs will be kept but deprecated, and they will return errors for V2 transactions.
 
 Clients can therefore update their API calls incrementally while the full node is already using V2 accounting internally, at least until V2 transactions are activated (per I4). At that point, clients must be fully updated.
 
@@ -104,8 +104,10 @@ Therefore, we can use normalized values internally in all Runner accounting, con
 
 We must determine how the shielded outputs project will interact with this project.
 
-- Can we put values with increased precision in shielded outputs? Does that increase the required size of proofs?
-- Should we support shielded outputs with V1 values, or just V2? If we support both, how does normalization affect the cryptographic balance accounting?
+Q: Can we put values with increased precision in shielded outputs? Does that increase the required size of proofs?
+A: It does increase the Borromean range proof since its size grows linearly.
+
+Q: Should we support shielded outputs with V1 values, or just V2? If we support both, how does normalization affect the cryptographic balance accounting? A: We must ship Token Amount V2 before shipping shielded outputs and enforce all shielded outputs to use V2. Otherwise, we can't balance inputs and outputs with different versions.
 
 
 ### Migration
@@ -225,7 +227,7 @@ sometimes intentionally diverges from common blockchain features.
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-1. Interaction with the Shielded Outputs project, see the [respective section](#shielded-outputs).
+N/A
 
 <!--
 - What parts of the design do you expect to resolve through the RFC process
