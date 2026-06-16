@@ -241,13 +241,20 @@ transaction before signing, so the pinned set is fully re-derivable from the tra
 certificate verification. The committee hash binds a signature to a specific committee, and the domain tag
 (`PIN_MESSAGE_TAG`) prevents cross-protocol replay.
 
-The backend (`py_ecc`, pure-Python) is wrapped behind module-level functions
-(`bls_keygen / sk_to_pk / pop_prove / pop_verify / sign / verify / aggregate / fast_aggregate_verify`) so
-it can be swapped for a native library without touching the rest of the codebase. A benchmark
-([`0000-subsecond-finality-bls-benchmark.md`](0000-subsecond-finality-bls-benchmark.md)) measured native
-`blst` at ≈ 0.6 ms per certificate verify versus ≈ 240 ms for
-`py_ecc` — a ~400× speedup, and < 0.5% of the ~150–300 ms network round-trip — making the `py_ecc → blst`
-swap the recommended (mandatory for production) backend change while leaving the protocol untouched.
+The backend is the native **`blst`** library, reached through the project's Rust extension (`htr_lib`)
+and wrapped behind module-level functions
+(`bls_keygen / sk_to_pk / pop_prove / pop_verify / sign / verify / aggregate / fast_aggregate_verify`),
+so it stays swappable without touching the rest of the codebase. Ordinary signatures and
+proofs-of-possession use **distinct domain-separation tags** (`BLS_SIG_..._POP_` vs `BLS_POP_..._POP_`),
+so a PoP can never be replayed as an ordinary vote. Because keys and signatures are parsed from untrusted
+network data, verification keeps subgroup checks (`sig_groupcheck` / `pk_validate`) **on** and treats every
+malformed input as a verification failure rather than an error.
+
+Native crypto is what makes the fast path viable: a benchmark
+([`0000-subsecond-finality-bls-benchmark.md`](0000-subsecond-finality-bls-benchmark.md)) measured `blst` at
+≈ 0.6 ms per certificate verify — < 0.5% of the ~150–300 ms network round-trip and **constant in committee
+size**. A pure-Python BLS reference (`py_ecc`) was ~400× slower (≈ 240 ms per verify, ≈ 16 s to verify a
+100-vote quorum), which would have blown the sub-second target on its own.
 
 `FinalityValidatorSigner` holds a runtime private key and exposes `sign_pin`; `FinalityValidatorSignerFile`
 is the pydantic key-file (hex private key, public key, PoP) that validates internal consistency on load.
@@ -422,8 +429,9 @@ a UTXO (a liveness failure, recoverable by the PoW tier), but they can never rev
 - **Operational complexity and layer coupling.** Block validity now depends on FCs, coupling two
   previously independent layers. Validator-set governance, key rotation, and FC dissemination are new
   responsibilities.
-- **A pure-Python BLS backend is far too slow for production.** `py_ecc` verify is ≈ 240 ms; the protocol
-  is correct with it, but production requires the `blst` backend swap.
+- **A native crypto dependency.** Sub-second verification relies on the native `blst` backend (via the
+  `htr_lib` Rust extension) — a pure-Python BLS would be ~400× too slow (≈ 240 ms per verify). This is a
+  compiled dependency in the hot path, though one already carried by the project's Rust crate.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -529,8 +537,9 @@ economics, and confidential-transaction interaction.
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-- **`blst` backend swap.** Already validated by benchmark; the recommended production change, behind the
-  existing `crypto.py` wrapper.
+- **Batch / parallel certificate verification.** `blst`'s randomized multi-aggregate verification was not
+  yet adopted; it would further raise verify throughput when a node validates many votes or certificates
+  at once. Verification is embarrassingly parallel (no shared state), so it also scales across cores.
 - **Binding FC-root block header (deferred PR G).** A 32-byte merkle root of the certified transactions in
   a block, committed in the header. v1 derives its binding security entirely from the consensus
   ratification rule (which needs the FC known only locally); a *binding* root would enable light-client

@@ -1,9 +1,10 @@
 # BLS12-381 (`blst`) signing & verification benchmark
 
 - Date: 2026-06-16
-- Purpose: decide the digital-signature backend for sub-second finality. The v1 implementation uses
-  `py_ecc` (pure-Python BLS) for clean packaging, but it is slow; this measures the production-grade
-  native library (`blst`) to confirm the latency/throughput headroom before committing.
+- Purpose: confirm the digital-signature backend for sub-second finality has the latency/throughput
+  headroom the fast path needs. Measures the native `blst` library (the backend used by the
+  implementation, via the `htr_lib` Rust extension) and quantifies how far a pure-Python BLS reference
+  (`py_ecc`) falls short.
 - Related: [`0000-subsecond-finality.md`](0000-subsecond-finality.md) (crypto lives in
   `hathor/finality/crypto.py`, written behind a swappable backend wrapper).
 
@@ -16,8 +17,7 @@
 - At these speeds the signature is **not** the bottleneck: one certificate verify (0.6 ms) is <0.5%
   of the ~150–300 ms global soft-finality network round-trip. The earlier `py_ecc` slowness (≈16 s to
   verify a 100-vote quorum) is what would have blown the sub-second target; `blst` removes it entirely.
-- **Decision implication:** keep BLS; the only production change that matters is swapping the backend
-  `py_ecc → blst` behind the existing wrapper. Raw speed should not drive BLS-vs-Schnorr — both are
+- **Decision:** keep BLS, backed by native `blst`. Raw speed should not drive BLS-vs-Schnorr — both are
   orders of magnitude under the network budget — so choose on structure (non-interactive
   observe-then-aggregate, constant-size accountable certificates, no nonce state), which favors BLS.
 
@@ -94,7 +94,7 @@ hyperthreading adds little for compute-bound pairing code, and all-core load thr
 A server with many uniform cores and `blst`'s randomized **batch verification**
 (`verify_multiple_aggregate_signatures`, not benchmarked here) would push this several-fold higher.
 
-## Comparison: `blst` vs the shipped `py_ecc` reference
+## Comparison: `blst` vs a pure-Python `py_ecc` reference
 
 `py_ecc` numbers measured earlier on the same machine (pure-Python, single-thread):
 
@@ -118,7 +118,7 @@ Put the crypto next to the latency budget:
   rate; signing (~4,300/s/core) is a non-issue.
 
 With `py_ecc` the same 67 vote-verifies were ≈ **16 seconds** — which is precisely why it would have
-broken the RFC's sub-second target and why the backend swap is mandatory. `blst` clears that wall with
+broken the RFC's sub-second target and why the fast path is backed by `blst`. `blst` clears that wall with
 large margin.
 
 **BLS vs Schnorr on speed:** a Schnorr verify (no pairing) is ~10–50× faster per op, but a Schnorr-list
@@ -128,10 +128,10 @@ not a differentiator**. Decide on the structural properties instead (covered in 
 observe-then-aggregate, constant-size + accountable certificates, and no nonce state — all of which favor
 BLS.
 
-**Recommended production action:** keep BLS and swap the backend from `py_ecc` to `blst` behind the
-`hathor/finality/crypto.py` wrapper. In-process this is best done via the project's existing Rust crate
-(`htr-rs/crates/htr-lib`, already built and bound as `htr_lib`), exposing sign/verify/aggregate/
-fast-aggregate-verify with `sig_groupcheck`/`pk_validate` enabled for network-sourced data.
+**Backend:** BLS on native `blst`, behind the `hathor/finality/crypto.py` wrapper. In-process this runs
+via the project's Rust crate (`htr-rs/crates/htr-lib`, built and bound as `htr_lib`), exposing
+sign/verify/aggregate/fast-aggregate-verify with `sig_groupcheck`/`pk_validate` enabled for
+network-sourced data.
 
 ## Caveats
 
