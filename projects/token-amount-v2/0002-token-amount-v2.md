@@ -153,11 +153,11 @@ In reverse order, option #3 is non-canonical and should be discarded, as it is n
 
 Option #2 is viable, but unnecessarily wasteful. Adding a new flag-only header would require 1 byte for the header version (with an empty body). All V2 transactions would have to carry that extra 1 byte, on top of the already increased encoded token amount sizes.
 
-Therefore, option #1 is the proposed approach: repurpose a signal bit in the transaction's first byte to encode the token amount version. The first byte of all vertices is a reserved signal byte intended precisely for this kind of upgrade. On mainnet/testnet, the least significant nibble of the signal byte of blocks is used for voting on Feature Activation processes. For transactions, the entire signal byte remains unused.
+Therefore, option #1 is the proposed approach: repurpose a signal bit in the transaction's first byte to encode the token amount version. The first byte of all vertices is a reserved signal byte intended precisely for this kind of upgrade. On mainnet/testnet, the least significant nibble of the signal byte of blocks is used for voting on Feature Activation processes. For transactions, the entire first byte remains unused. We'll call it `flags_byte`.
 
-We use the least significant bit of a transaction's signal byte, with `0` representing V1 and `1` representing V2. If more token amount versions are ever needed, additional bits can be repurposed. This makes the token amount versioning effectively cost-free.
+We use the least significant bit of a transaction's `flags_byte`, with `0` representing V1 and `1` representing V2. If more token amount versions are ever needed, additional bits can be repurposed. This makes the token amount versioning effectively cost-free.
 
-The only drawback is that empty signal bits are not currently enforced on transactions. We would first need to add a new verification that prohibits transactions with unknown signal bits, to prevent old transactions with a set bit from being interpreted as V2 in the future. A scan was performed on both mainnet and testnet, and no existing transactions violate this rule.
+The only drawback is that empty flag bits are not currently enforced on transactions. We would first need to add a new verification that prohibits transactions with unknown flag bits, to prevent old transactions with a set bit from being interpreted as V2 in the future. A scan was performed on both mainnet and testnet, and no existing transactions violate this rule.
 
 Lastly, Feature Activation would be used to add support for V2 transactions: the project can be fully implemented with the feature disabled — V2 transactions are rejected at verification. This means there would be no V2 output values, fees, Nano actions, or OCBs. Meanwhile, the internal changes can be made and clients can upgrade. When everything is ready, the feature is activated and support takes effect system-wide.
 
