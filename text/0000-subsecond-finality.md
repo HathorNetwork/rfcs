@@ -414,6 +414,27 @@ validator that signs both leaves two contradictory signatures over the same UTXO
 evidence of equivocation (the basis for future slashing). Validators can withhold signatures and **stall**
 a UTXO (a liveness failure, recoverable by the PoW tier), but they can never reverse or forge.
 
+## Latency
+
+An end-to-end benchmark
+([`0000-subsecond-finality-latency-benchmark.md`](0000-subsecond-finality-latency-benchmark.md)) drives
+the real `FinalityService` fast path — pin, sign, flood the vote, accumulate, assemble the certificate,
+verify, admit — over a discrete-event simulated network whose per-hop latency `L` is a parameter and whose
+handler CPU is the *measured* `blst` cost. Two findings shape the design:
+
+- **Soft finality ≈ `2·L + ~5 ms`.** A quorum is collected in two flood hops (the transaction out to the
+  committee, the votes back), plus a few milliseconds of crypto on the critical path. The network
+  round-trip dominates; sub-second holds with large margin for any realistic inter-validator latency
+  (a 100-validator committee on 100 ms links reaches soft finality in ~205 ms).
+- **Flat in committee size.** The node-local floor stays ≈ 3–5 ms from `N = 4` to `N = 100`, because
+  `FastAggregateVerify` is constant in `N` and per-vote verification is ~1 ms. The committee can grow for
+  decentralization at essentially no latency cost — but note vote gossip is all-to-all, so a validator's
+  *work per transaction* still grows with `N` (`O(N)` vote verifies), even though the *latency* to first
+  certification does not.
+
+This is the measured basis for the "sub-second" claim, and it is why the design tolerates a sizable
+committee: the latency budget is spent almost entirely on the network, not on validators or crypto.
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
@@ -432,6 +453,10 @@ a UTXO (a liveness failure, recoverable by the PoW tier), but they can never rev
 - **A native crypto dependency.** Sub-second verification relies on the native `blst` backend (via the
   `htr_lib` Rust extension) — a pure-Python BLS would be ~400× too slow (≈ 240 ms per verify). This is a
   compiled dependency in the hot path, though one already carried by the project's Rust crate.
+- **Per-validator work grows with committee size.** Vote gossip is all-to-all, so each validator performs
+  `O(N)` vote verifications per transaction and the committee does `O(N²)` total. Soft-finality *latency*
+  stays flat in `N` (see *Latency*), but validator CPU and bandwidth do not, which bounds how large the
+  committee can grow before vote dissemination needs a smarter (e.g. aggregation-tree) overlay.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
