@@ -9,6 +9,22 @@
 
 ---
 
+> **Update (2026-06-26): this recommendation was adopted and promoted.** The
+> `hathor-direct` scheme proposed below is now specified in full across
+> [`0006-x402-hathor-direct-protocol.md`](0006-x402-hathor-direct-protocol.md)
+> (protocol & wire format),
+> [`0007-x402-roles-and-payment-flow.md`](0007-x402-roles-and-payment-flow.md)
+> (roles, flow, facilitator API), and
+> [`0008-x402-wallets-agents-and-skill.md`](0008-x402-wallets-agents-and-skill.md)
+> (the payer / agent side). The nano-contract design this document argues against
+> has been archived in [`old/`](old/README.md). This document is kept as the
+> research and decision record; where the shipped protocol differs from the
+> sketch here, **0006 is authoritative** — most notably, the request↔payment
+> binding is done with off-chain input-ownership signatures over `requestId`,
+> not the on-chain data output sketched in §4.1.
+
+---
+
 ## 1. Why This Document Exists
 
 RFCs 0001–0004 specify x402 on Hathor using the `hathor-escrow` scheme, which is a nano contract. The requester for the x402 initiative (Yan) flagged two concerns about that choice:
