@@ -7,7 +7,16 @@
 # Summary
 [summary]: #summary
 
-This RFC introduces **shielded outputs** for Hathor transactions — a header-based extension that hides output amounts and, optionally, token types using Pedersen commitments, Bulletproof range proofs, and asset surjection proofs. Rather than defining a new transaction version, shielded outputs attach to existing transaction types (regular transactions and token creation transactions) via a `ShieldedOutputsHeader`, preserving full backward compatibility. Two privacy tiers are offered: `AmountShieldedOutput` (amount hidden, token visible) and `FullShieldedOutput` (both amount and token hidden). Recipients recover hidden values through ECDH-based range proof rewinding, requiring no out-of-band communication.
+This RFC introduces **shielded outputs** for Hathor transactions — a header-based extension that hides output amounts and, optionally, token types using Pedersen commitments, range proofs, and asset surjection proofs. Rather than defining a new transaction version, shielded outputs attach to existing transaction types (regular transactions and token creation transactions) via a set of transaction headers, preserving full backward compatibility. Two privacy tiers are offered: `AmountShieldedOutput` (amount hidden, token visible) and `FullShieldedOutput` (both amount and token hidden). Recipients recover hidden values through ECDH-based range proof rewinding, requiring no out-of-band communication.
+
+The design covers four headers: `ShieldedOutputsHeader` (carries the shielded outputs), `UnshieldBalanceHeader` (carries the balance residual for full-unshield transactions), and `MintHeader` / `MeltHeader` (publicly declare per-token supply changes so that mint and melt operations may participate in shielded transactions while remaining auditable). This document is self-contained: it specifies the full data model, cryptography, transaction rules, verification pipeline, fee mechanism, and supply-audit properties as actually implemented.
+
+> **Implementation status.** This RFC documents the implementation on branch
+> `feat/shielded-outputs-rebased` of `hathor-core`. Where the design differs from
+> earlier drafts (range proof construction, balance-residual representation, fee
+> rates, library layout), this document reflects the **code**, and the earlier
+> framing is preserved only under [Future possibilities](#future-possibilities)
+> when it describes work not yet implemented.
 
 # Motivation
 [motivation]: #motivation
@@ -21,10 +30,11 @@ This transparency creates real problems:
 - **Trading and DeFi.** Front-runners and MEV extractors exploit visible amounts to sandwich trades or copy strategies.
 - **Personal finance.** Any recipient of a payment can trace the sender's full balance and transaction history.
 - **Multi-token privacy.** Hathor supports custom tokens. When token types are visible, observers can track the flow of specific assets (e.g., loyalty points, governance tokens, stablecoins), revealing business relationships and portfolio composition.
+- **Confidential issuance.** A token issuer who routinely transacts in shielded form should be able to mint or melt without dropping to fully-transparent mode, while still letting anyone audit total supply.
 
-Shielded outputs address these problems by making amounts and token types cryptographically opaque to everyone except the transaction participants, while preserving the ability of every full node to verify that no inflation or double-spending has occurred.
+Shielded outputs address these problems by making amounts and token types cryptographically opaque to everyone except the transaction participants, while preserving the ability of every full node to verify that no inflation or double-spending has occurred — and the ability of anyone to audit per-token supply.
 
-**Expected outcome:** Users can opt into amount privacy (and optionally token-type privacy) on a per-output basis, within ordinary Hathor transactions, with no protocol-level changes to transaction versions, input formats, or the DAG structure.
+**Expected outcome:** Users can opt into amount privacy (and optionally token-type privacy) on a per-output basis, within ordinary Hathor transactions, with no protocol-level changes to transaction versions, input formats, or the DAG structure. Issuers can mint, melt, and create tokens directly into shielded outputs.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -50,10 +60,10 @@ Hathor offers **two privacy tiers**, selectable per output:
 
 | Tier | Hides Amount | Hides Token | Proof Overhead | Use Case |
 |------|:---:|:---:|---|---|
-| `AmountShieldedOutput` | Yes | No | Range proof (~675 B) | Hide salary amounts while token type is public |
-| `FullShieldedOutput` | Yes | Yes | Range proof + surjection proof (~675 + ~130 B) | Full privacy for multi-token transactions |
+| `AmountShieldedOutput` | Yes | No | Range proof (~3213 B) | Hide salary amounts while token type is public |
+| `FullShieldedOutput` | Yes | Yes | Range proof + surjection proof (~3213 + variable B) | Full privacy for multi-token transactions |
 
-Both tiers use **Pedersen commitments** for amounts and **Bulletproof range proofs** to guarantee amounts are non-negative. `FullShieldedOutput` additionally uses **blinded asset tags** and **asset surjection proofs** to hide and validate the token type.
+Both tiers use **Pedersen commitments** for amounts and **Borromean range proofs** to guarantee amounts are non-negative (specifically in `[1, 2^40)`). `FullShieldedOutput` additionally uses **blinded asset tags** and **asset surjection proofs** to hide and validate the token type.
 
 ### The Privacy Stack
 
@@ -67,7 +77,7 @@ Shielded outputs are Phase B of Hathor's three-phase privacy roadmap:
 +-----------------------------------------------------------+
 +-----------------------------------------------------------+
 |  Phase B: SHIELDED OUTPUTS  <- THIS RFC                   |
-|  Pedersen commitments + Bulletproofs + surjection proofs  |
+|  Pedersen commitments + range proofs + surjection proofs  |
 |  "How much?" + "Which token?" -> Hidden                   |
 +-----------------------------------------------------------+
 +-----------------------------------------------------------+
@@ -101,53 +111,79 @@ AFTER:
   Observer does NOT know: the split between Output0 and Output1
 ```
 
-Note: at least 2 shielded outputs are required when all inputs are transparent (Rule 4 — see Section 4.3). This prevents an observer from trivially deducing the single output's amount.
+Note: at least 2 shielded outputs are required whenever a transaction has any shielded outputs (Rule 4 — see Section 4.3). This prevents an observer from trivially deducing a single output's amount.
 
 ### Unshielding: Returning to Transparency
 
-To unshield, a user spends shielded inputs into transparent outputs:
+To unshield, a user spends shielded inputs into transparent outputs. There are two shapes:
+
+**Partial unshield** — at least one shielded output remains (e.g. shielded change). The balance equation is the ordinary one (`sum(C_in) == sum(C_out) + fee·H_HTR`), and the wallet makes the last shielded output absorb the blinding residual.
+
+**Full unshield** — *no* shielded outputs remain (every output is transparent). There is no shielded output to absorb the blinding residual, so the transaction carries an **`UnshieldBalanceHeader`** holding the scalar `excess = sum(r_in) − sum(r_out)`, and the balance equation becomes `sum(C_in) == sum(C_out) + excess·G + fee·H_HTR`.
 
 ```
-UNSHIELDING TRANSACTION:
+FULL-UNSHIELD TRANSACTION:
   Input:   [commitment] (shielded, 90 HTR hidden)
-  Output0: 60 HTR to Bob (transparent)
-  Output1: [commitment'] (shielded change, 25 HTR hidden)
+  Output0: 85 HTR to Bob (transparent)
   Fee:     5 HTR (transparent)
 
-Observer sees: 60 HTR left the shielded pool, plus a shielded change output
-Observer does NOT know: the shielded input amount or the change amount
+  Header: UnshieldBalanceHeader { excess_blinding_factor (32B scalar) }
+
+Observer sees: 85 HTR left the shielded pool
+Observer does NOT know: the shielded input amount (other than that it equals 85 + 5)
 ```
+
+> **Privacy footgun.** The scalar form of `UnshieldBalanceHeader` exposes
+> `sum(r_in)` of the unshielded inputs as a raw scalar. A point-form replacement
+> (`E_tx = excess·G` plus a Schnorr binding signature) closes this; it is **not
+> implemented** and is described in [Future possibilities](#future-possibilities).
 
 ### Mixed Transactions
 
 Transparent and shielded inputs/outputs can be freely combined in a single transaction. The balance equation works uniformly: transparent amounts are treated as "trivial commitments" with a zero blinding factor, and the homomorphic verification covers everything in one check.
 
-| Type | Transparent In | Shielded In | Transparent Out | Shielded Out | Use Case |
-|------|:---:|:---:|:---:|:---:|---|
-| Standard | Yes | — | Yes | — | Legacy transaction |
-| Shielding | Yes | — | Optional | Yes (>=2) | Enter shielded pool |
-| Confidential | — | Yes | — | Yes | Fully private transfer |
-| Unshielding | — | Yes | Yes | Optional | Exit shielded pool |
-| Fully mixed | Yes | Yes | Yes | Yes | Maximum flexibility |
+| Type | Transparent In | Shielded In | Transparent Out | Shielded Out | Balance header | Use Case |
+|------|:---:|:---:|:---:|:---:|---|---|
+| Standard | Yes | — | Yes | — | — | Legacy transaction |
+| Shielding | Yes | — | Optional | Yes (≥2) | — | Enter shielded pool |
+| Confidential | — | Yes | — | Yes (≥2) | — | Fully private transfer |
+| Partial unshield | — | Yes | Yes | Yes (≥2) | — | Exit, keep shielded change |
+| Full unshield | — | Yes | Yes | — | `UnshieldBalanceHeader` | Exit shielded pool entirely |
+| Fully mixed | Yes | Yes | Yes | Yes (≥2) | — | Maximum flexibility |
+
+A shielded transaction must carry **exactly one** of `ShieldedOutputsHeader` or `UnshieldBalanceHeader` — never both and never neither (enforced inside balance verification).
+
+### Confidential Mint, Melt, and Token Creation
+
+A shielded transaction may exercise mint or melt authority and may create new tokens directly into shielded outputs. The per-token supply change is declared publicly via two headers:
+
+- **`MintHeader`** — list of `(token_index, amount)` entries declaring supply *created* in this transaction.
+- **`MeltHeader`** — list of `(token_index, amount)` entries declaring supply *destroyed* in this transaction.
+
+The declared amounts are bound into the homomorphic balance equation as public scalar terms (Rule M4), so the verifier enforces supply correctness without learning where the new value lands or which UTXO was melted. Because the amounts are public, total per-token supply remains computable by anyone. What becomes private is the *recipient set*, the *per-recipient amounts*, and *which shielded UTXO is melted*.
+
+A given token may appear in **either** `MintHeader` **or** `MeltHeader` in a single transaction, never both (Rule M3). Worked examples appear in [§2.7](#27-mintmelt-examples).
 
 ### Fee Model
 
-Shielded outputs impose additional verification costs (Bulletproof verification ~1ms per output, surjection proof verification, larger storage). A per-output fee compensates the network:
+Shielded outputs impose additional verification costs (range-proof verification, surjection-proof verification, larger storage). A per-output fee compensates the network:
 
-- `FEE_PER_AMOUNT_SHIELDED_OUTPUT`: charged per `AmountShieldedOutput` (default: 1 HTR base unit)
-- `FEE_PER_FULL_SHIELDED_OUTPUT`: charged per `FullShieldedOutput` (default: 2 HTR base units)
+- `FEE_PER_AMOUNT_SHIELDED_OUTPUT`: charged per `AmountShieldedOutput` (default: `1` HTR base unit)
+- `FEE_PER_FULL_SHIELDED_OUTPUT`: charged per `FullShieldedOutput` (default: `2` HTR base units)
 
-Fees are declared in the existing `FeeHeader`, are fully transparent, and are burned. See [Section 4.5](#45-fee-mechanism) for details.
+Fees are declared in the existing `FeeHeader`, are fully transparent, and are burned. See [Section 4.6](#46-fee-mechanism) for details.
 
 ### What Remains Visible
 
 Even with shielded outputs, the following information is always public:
 
-- **Transaction structure**: number of inputs, number of outputs, which outputs are shielded vs. transparent
-- **Fee amounts**: always plaintext HTR (Rule 2)
-- **Authority outputs**: mint/melt authority tokens are always transparent (Rule 7)
-- **Scripts**: the locking script (recipient address) remains visible unless combined with Silent Payments (Phase A)
-- **Transparent inputs/outputs**: their amounts and tokens remain fully visible
+- **Transaction structure**: number of inputs, number of outputs, which outputs are shielded vs. transparent.
+- **Fee amounts**: always plaintext HTR (Rule 2).
+- **Authority outputs**: mint/melt authority tokens are always transparent (Rule 7).
+- **Per-token supply delta**: each `(token_index, amount)` declared in `MintHeader`/`MeltHeader`.
+- **HTR deposit/withdraw**: for `DEPOSIT`-version tokens, derived from the declared mint/melt amounts via Hathor's 1% rule.
+- **Scripts**: the locking script (recipient address) remains visible unless combined with Silent Payments (Phase A).
+- **Transparent inputs/outputs**: their amounts and tokens remain fully visible.
 
 ## 3. Shielded Addresses (Pending Decision)
 
@@ -190,7 +226,7 @@ Both keys are present in full. Longer addresses, but the sender has everything n
 spend_pubkey(33)
 ```
 
-Only the spend public key is encoded — no scan key at all. This is the shortest possible shielded address and the simplest to implement. However, without a scan key, the wallet cannot delegate blockchain scanning to a third-party service (since the scan private key is what enables a service to detect incoming payments without having spending authority). The wallet must download and trial-decrypt the entire shielded transaction history itself to compute its balance, which is impractical for light clients.
+Only the spend public key is encoded — no scan key at all. This is the shortest possible shielded address and the simplest to implement. However, without a scan key, the wallet cannot delegate blockchain scanning to a third-party service (the scan private key is what enables a service to detect incoming payments without spending authority). The wallet must download and trial-decrypt the entire shielded transaction history itself to compute its balance, which is impractical for light clients.
 
 ### Tradeoff Analysis
 
@@ -204,16 +240,16 @@ Only the spend public key is encoded — no scan key at all. This is the shortes
 | Delegated scanning | Yes (scan key separates detection from spending) | Yes (scan key separates detection from spending) | No (wallet must scan entire history itself) |
 | Light client support | Yes | Yes | No |
 
-**Status:** Decision pending. Both options are documented here for review. The implementation currently uses the full public key for ECDH, so Option B aligns with the existing code path.
+**Status:** Decision pending. The implementation currently uses the full public key for ECDH, so Option B aligns with the existing code path.
 
 ## 4. Wallet Integration Guide
 
 ### Receiving Shielded Payments
 
-Every shielded output contains an `ephemeral_pubkey` field (33 bytes). The recipient recovers the hidden amount through **ECDH + range proof rewind**:
+Every shielded output contains an `ephemeral_pubkey` field (33 bytes; all-zero means "not present"). The recipient recovers the hidden amount through **ECDH + range proof rewind**:
 
 1. **Address match**: The wallet checks if the output script contains `hash(spend_pubkey)` matching one of its keys.
-2. **ECDH shared secret**: `s = SHA256(scan_privkey * ephemeral_pubkey)`.
+2. **ECDH shared secret**: `s = ECDH(scan_privkey, ephemeral_pubkey)` (secp256k1 ECDH; SHA256 of the shared point).
 3. **Nonce derivation**: `nonce = SHA256("Hathor_CT_nonce_v1" || s)`.
 4. **Range proof rewind**: Using the nonce as the rewind key, the wallet calls `rewind_range_proof()` which returns the committed `(value, blinding_factor, message)`.
 5. **For `FullShieldedOutput`**: The `message` field contains `token_uid(32B) || asset_blinding_factor(32B)`. The wallet reconstructs the expected asset commitment from these values and cross-checks against the on-chain `asset_commitment` to prevent a malicious sender from claiming a worthless token is HTR.
@@ -226,17 +262,17 @@ If rewind fails (wrong nonce), the output is not addressed to this wallet — sk
 2. **Generate ephemeral keypair** `(e, E = e*G)` for each output.
 3. **Compute ECDH shared secret** with the recipient's scan public key (`B_scan`).
 4. **Derive nonce** for range proof construction.
-5. **Create Pedersen commitment**: `C = amount * H_token + blinding * G`.
+5. **Create Pedersen commitment**: `C = amount * H_token + blinding * G` (with `H_token` the blinded asset generator for `FullShieldedOutput`).
 6. **Create range proof** using the deterministic nonce (enables recipient rewind).
-7. **For `FullShieldedOutput`**: Create blinded asset commitment and surjection proof.
-8. **Balance blinding factors**: Assign random blinding factors to all shielded outputs except the last, which receives the balancing factor: `r_last = sum(r_inputs) - sum(r_other_outputs)`.
-9. **Compute and attach fee** in `FeeHeader`.
+7. **For `FullShieldedOutput`**: Create the blinded asset commitment and surjection proof, and embed `token_uid || asset_blinding_factor` in the range proof message.
+8. **Balance blinding factors**: Assign random blinding factors to all shielded outputs except the last, which receives the balancing residual computed by `compute_balancing_blinding_factor()`. (For full-unshield transactions there is no last shielded output, so the residual is published as the `UnshieldBalanceHeader` scalar.)
+9. **Compute and attach fee** in `FeeHeader`; attach `MintHeader`/`MeltHeader` if minting or melting.
 
 ### Blinding Factor Management and Backup
 
 The wallet must store blinding factors for every owned shielded UTXO — without them, the funds cannot be spent.
 
-**Recovery guarantee**: Since blinding factors for received outputs are derived deterministically from `ECDH(scan_privkey, ephemeral_pubkey)` — and both the scan private key (derivable from the seed) and the ephemeral pubkey (stored on-chain) are always available — a **seed backup is sufficient** for full recovery. The wallet re-derives all blinding factors by scanning the blockchain.
+**Recovery guarantee**: Since blinding factors for received outputs are derived deterministically from `ECDH(scan_privkey, ephemeral_pubkey)` — and both the scan private key (derivable from the seed) and the ephemeral pubkey (stored on-chain) are always available — a **seed backup is sufficient** for full recovery. The wallet re-derives all blinding factors by scanning the blockchain and rewinding the range proofs.
 
 For change outputs, wallets should use deterministic derivation from the input blinding factors and output index to ensure recoverability.
 
@@ -252,7 +288,7 @@ Privacy only affects external observers — the wallet owner always sees exact a
 
 ### Rule 4 Compliance
 
-When all inputs are transparent, the wallet must automatically ensure at least 2 shielded outputs (or include a transparent output). This is typically satisfied naturally (payment + change), but the wallet may need to create a zero-value absorber output in edge cases.
+Whenever a transaction has any shielded outputs, the wallet must include at least 2 of them. This is typically satisfied naturally (payment + change). Note that zero-value shielded outputs are forbidden by the range proof's `min_value = 1`, so in edge cases the wallet should split a real output or add a small decoy output it owns rather than emit an empty placeholder.
 
 ### Fee Computation
 
@@ -262,7 +298,7 @@ shielded_fee = (count_amount_shielded * FEE_PER_AMOUNT_SHIELDED_OUTPUT)
 total_fee    = shielded_fee + standard_fee_if_any
 ```
 
-The wallet should display the expected fee before the user confirms.
+For `DEPOSIT`-version tokens being minted/melted, the wallet must also fund (or will receive) the 1% HTR deposit/withdraw, which is folded into the balance equation rather than the `FeeHeader`. For `FEE`-version tokens, each `MintHeader`/`MeltHeader` entry costs one extra `FEE_PER_OUTPUT` (also folded into the balance equation). The wallet should display the expected fee before the user confirms.
 
 ## 5. Explorer and Indexer Impact
 
@@ -273,36 +309,190 @@ The wallet should display the expected fee before the user confirms.
 | Show output amounts | Broken for shielded | Hidden behind Pedersen commitments |
 | Identify output token type | Broken for `FullShieldedOutput` | Hidden behind blinded asset commitments |
 | Compute address balances | Broken for shielded | Cannot sum opaque curve points |
-| Token supply tracking | Unaffected | Mint/melt transactions cannot contain shielded outputs (Rule 8) |
+| Token supply tracking | **Unaffected** | Mint/melt amounts are declared publicly in `MintHeader`/`MeltHeader` |
 | Rich list / rankings | Broken for shielded | Balances not computable |
 
 ### What Still Works
 
-- Transaction structure (input/output count, shielded vs. transparent)
-- Transparent outputs (amounts, tokens, scripts — unchanged)
-- Fee amounts (always transparent)
-- Cryptographic proof verification (anyone can verify correctness)
-- Authority UTXO tracking (always transparent, Rule 7)
-- Token metadata (name, symbol from creation transaction)
+- Transaction structure (input/output count, shielded vs. transparent).
+- Transparent outputs (amounts, tokens, scripts — unchanged).
+- Fee amounts (always transparent).
+- Cryptographic proof verification (anyone can verify correctness).
+- Authority UTXO tracking (always transparent, Rule 7).
+- Token metadata (name, symbol from creation transaction).
+- **Per-token supply**: an indexer reconciles supply by reading `MintHeader`/`MeltHeader` entries on every shielded tx in addition to existing transparent mint/melt detection. Shielded UTXOs are skipped in per-UTXO token indexing (their amount is hidden), but supply totals come from the headers.
+- **Network-wide supply audit**: `Σ C_utxo == Σ_token (total_supply · H_token)` holds for the whole chain with no protocol change. See [§4.7](#47-network-wide-supply-audit).
 
 ### Mitigations
 
-- **Shielded pool boundary tracking**: Explorers can track aggregate amounts entering/leaving the shielded pool from the transparent side of shielding/unshielding transactions.
-- **View key delegation**: Users can optionally share view keys with trusted explorers for selective disclosure.
+- **Shielded pool boundary tracking**: Explorers can track aggregate amounts entering/leaving the shielded pool from the transparent side of shielding/unshielding transactions and from the mint/melt headers.
+- **View key delegation**: Users can optionally share scan keys with trusted explorers for selective disclosure.
 - **"Shielded" indicator**: Explorers should display shielded outputs with a clear indicator, showing commitment hex values but never placeholder amounts.
 
-## 6. Mint/Melt Transactions Are Always Transparent
+## 6. Confidential Issuance Is Auditable
 
-Transactions that exercise mint or melt authority **cannot** contain shielded outputs (Rule 8). Both the authority outputs (Rule 7) and all value outputs in a mint/melt transaction remain fully transparent.
+Mint, melt, and token-creation transactions can now be shielded, but the supply change is always declared in plaintext via `MintHeader`/`MeltHeader`. This means:
 
-This means:
-
-- An explorer can see **when** mint authority is exercised and **exactly how many** tokens were minted or melted.
+- An explorer can see **when** mint/melt authority is exercised and **exactly how many** tokens were minted or melted.
 - Token supply remains fully auditable for all custom tokens — no trust in the token creator is required.
-- Users who want amount privacy must move minted tokens into shielded outputs in a separate transaction.
+- What is hidden is only the *recipient set*, the *per-recipient split*, and *which shielded UTXO was melted*.
+
+## 7. Mint/Melt Examples
+[27-mintmelt-examples]: #27-mintmelt-examples
+
+### 7.1 Confidential mint
+
+An issuer holds a transparent mint authority for token T and wants to mint 100,000 T directly into a single shielded output for a salary recipient (plus a shielded change output to satisfy Rule 4).
+
+```
+Inputs:
+  - mint authority of T (transparent)
+  - HTR (shielded, for deposit + fee)
+
+Outputs:
+  - mint authority of T (transparent, retained)
+  - shielded HTR change (shielded)
+  - shielded T output: 100,000 T (shielded)
+
+Headers:
+  - FeeHeader: standard fee
+  - ShieldedOutputsHeader: 2 shielded outputs
+  - MintHeader: [(token_index=1, amount=100000)]
+```
+
+Observers learn: *100,000 T were minted*. They do not learn the recipient or the issuer's HTR change.
+
+### 7.2 Confidential token creation
+
+An issuer creates token T with initial supply 1,000,000, distributed across 4 shielded outputs.
+
+```
+Inputs:
+  - HTR (transparent or shielded), enough for 1% deposit + fee
+
+Outputs:
+  - 4 shielded T outputs (shielded)
+  - transparent HTR change (transparent)
+
+Headers:
+  - FeeHeader
+  - ShieldedOutputsHeader: 4 shielded outputs
+  - MintHeader: [(token_index=1, amount=1000000)]
+```
+
+The token UID is the tx hash; the supply (`1,000,000`) is publicly declared. Per-recipient amounts are private. A shielded `TokenCreationTransaction` MUST declare its initial supply via exactly one `MintHeader` entry for `token_index = 1`, and MUST NOT melt the new token. (`MeltHeader` is not permitted on a token creation transaction.)
+
+### 7.3 DEPOSIT-version token: mint with HTR deposit
+
+Token `TD` is `DEPOSIT`-version. The issuer mints 100,000 TD across two shielded outputs. The 1% deposit rule applies: minting 100,000 TD costs 1,000 HTR. Assume shielded outputs cost 1 HTR each (`FEE_PER_AMOUNT_SHIELDED_OUTPUT`).
+
+```
+Inputs:
+  - mint authority of TD (transparent)
+  - HTR (transparent), 1,002 HTR available
+
+Outputs:
+  - mint authority of TD (transparent, retained)
+  - 2 shielded TD outputs (total 100,000 TD)
+
+Headers:
+  - FeeHeader: 2 HTR fee (2 × FEE_PER_AMOUNT_SHIELDED_OUTPUT)
+  - ShieldedOutputsHeader: 2 shielded outputs
+  - MintHeader: [(token_index=1, amount=100000)]
+
+Verifier (Rule M4):
+  - deposit = 0.01 × 100,000 = 1,000 HTR, folded onto the HTR output side.
+  - Augmented balance:
+      sum(C_in) + 100,000·H_TD
+        == sum(C_out) + 1,000·H_HTR (deposit) + 2·H_HTR (fee)
+  - HTR side: 1,002·H_HTR (input) == 1,000·H_HTR + 2·H_HTR.
+  - TD side: 100,000·H_TD == sum(shielded TD commitments).
+```
+
+### 7.4 FEE-version token: mint paying per-output fees
+
+Token `TF` is `FEE`-version. The issuer mints 50,000 TF into one transparent output of 30,000 TF plus one shielded output of 20,000 TF. `FEE`-version tokens have no HTR deposit; per-output fees apply, plus one extra `FEE_PER_OUTPUT` per `MintHeader`/`MeltHeader` entry on a `FEE`-version token (Rule M4).
+
+```
+Inputs:
+  - mint authority of TF (transparent)
+  - HTR (shielded), enough for fees
+
+Outputs:
+  - mint authority of TF (transparent, retained)
+  - transparent TF output: 30,000 TF (chargeable)
+  - shielded TF output: 20,000 TF
+  - shielded HTR change
+
+Headers:
+  - FeeHeader:
+      1 × FEE_PER_OUTPUT (one chargeable transparent TF output)
+      + 2 × FEE_PER_AMOUNT_SHIELDED_OUTPUT (two shielded outputs)
+  - ShieldedOutputsHeader: 2 shielded outputs
+  - MintHeader: [(token_index=1, amount=50000)]
+
+Verifier (Rule M4):
+  - No 1% deposit (FEE-version skips it).
+  - Each MintHeader/MeltHeader entry on a FEE-version token contributes one
+    FEE_PER_OUTPUT charge to the output side of the balance equation (folded
+    directly, NOT declared in FeeHeader).
+  - TF side: 50,000·H_TF balances 30,000 (transparent) + 20,000 (shielded).
+  - FeeHeader total must match exactly:
+      FEE_PER_OUTPUT × 1 (transparent TF output)
+      + FEE_PER_AMOUNT_SHIELDED_OUTPUT × 2 (two shielded outputs).
+```
+
+The per-entry `FEE_PER_OUTPUT` is visible but leaks no per-recipient information — every entry pays exactly one `FEE_PER_OUTPUT` regardless of how many shielded recipients the entry is split across.
+
+### 7.5 DEPOSIT-version token: melt with HTR withdraw
+
+Token `TD` is `DEPOSIT`-version. The treasurer melts 80,000 TD; this releases 800 HTR back from the deposit pool (1% withdraw rule).
+
+```
+Inputs:
+  - melt authority of TD (transparent)
+  - shielded TD input (holds ≥ 80,000 TD plus optional change)
+
+Outputs:
+  - melt authority of TD (transparent, retained)
+  - shielded HTR output (carries the 800 HTR withdraw + change)
+  - optional shielded TD change
+
+Headers:
+  - FeeHeader: shielded fees only
+  - ShieldedOutputsHeader
+  - MeltHeader: [(token_index=1, amount=80000)]
+
+Verifier (Rule M4):
+  - withdraw = 0.01 × 80,000 = 800 HTR, folded onto the HTR input side.
+  - Augmented balance:
+      sum(C_in) + 800·H_HTR
+        == sum(C_out) + 80,000·H_TD + fee·H_HTR
+```
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
+
+## 4.0 Cryptographic Library Layout
+
+The cryptography is implemented in Rust and exposed to Python:
+
+```
+htr-rs/crates/htr-ct-crypto   Rust core (secp256k1-zkp v0.11):
+                              pedersen, generators, rangeproof,
+                              surjection, ecdh, balance, error
+        |
+        v
+htr-rs/crates/htr-lib         PyO3 native extension. Registers the
+                              `htr_lib.shielded` submodule.
+        |
+        v  (import: `from htr_lib import shielded`)
+hathorlib/hathorlib/crypto/shielded/   Thin Python wrappers:
+                              asset_tag.py, commitment.py, range_proof.py,
+                              surjection.py, ecdh.py, balance.py, recover.py
+```
+
+`hathor-core` consumes only the `hathorlib` wrappers; it never calls `secp256k1-zkp` directly. The Python data model (output types, headers) lives in `hathorlib` and is reused by `hathor-core`.
 
 ## 4.1 Cryptographic Primitives
 
@@ -314,32 +504,28 @@ A Pedersen commitment to a value `v` with blinding factor `r` using generator `H
 C = v * H + r * G
 
 Where:
-  v  = amount (u64, range [0, 2^64))
+  v  = amount (u64)
   r  = blinding factor (32-byte scalar)
   H  = generator point specific to the token type
   G  = secp256k1 base generator
 ```
 
-**Properties:**
-- **Hiding**: Given `C`, an observer cannot determine `v` without knowing `r`.
-- **Binding**: Given `C`, one cannot find `(v', r')` such that `C = v'*H + r'*G` and `v' != v`, unless one knows the discrete log of `H` w.r.t. `G` (computationally infeasible for NUMS generators).
-- **Homomorphic**: `C1 + C2 = (v1+v2)*H + (r1+r2)*G`. This enables balance verification without revealing amounts.
+**Properties:** hiding, binding, and homomorphic (`C1 + C2 = (v1+v2)*H + (r1+r2)*G`). Commitments are 33 bytes (compressed point). A *trivial* commitment `C = v*H` (zero blinding) represents transparent amounts in the balance equation.
+
+Implemented in `htr-ct-crypto/src/pedersen.rs` (`create_commitment`, `create_trivial_commitment`, `verify_commitments_sum`).
 
 ### NUMS Asset Tag Derivation
 
-Each token has a deterministic generator `H_token` derived via a Nothing-Up-My-Sleeve (NUMS) construction:
+Each token has a deterministic generator `H_token` derived via a Nothing-Up-My-Sleeve (NUMS) construction (`htr-ct-crypto/src/generators.rs`):
 
 ```
-H_token = NUMS_hash(token_uid)
-
-Algorithm:
-  tag = SHA256("Hathor_AssetTag_v1" || token_uid)
-  H_token = generator_from_tag(tag)
+tag = SHA256("Hathor_AssetTag_v1" || token_uid_32B)
+H_token = Generator::new_unblinded(tag)        # 33-byte point
 ```
 
-The domain separator `"Hathor_AssetTag_v1"` prevents cross-protocol collisions. The construction guarantees no one knows `x` such that `H_token = x*G`, which is essential for the binding property.
+The domain separator `"Hathor_AssetTag_v1"` prevents cross-protocol collisions. The construction guarantees no one knows `x` such that `H_token = x*G`, which is essential for binding. The HTR generator is computed once and cached.
 
-**Token UID normalization**: HTR uses `token_uid = b'\x00'` (1 byte) internally, but the crypto library requires 32 bytes. The normalization function pads HTR's token UID with 31 zero bytes.
+**Token UID normalization** (`hathorlib/crypto/shielded/asset_tag.py::normalize_token_uid`): Hathor uses `b'\x00'` (1 byte) for HTR and 32-byte hashes for custom tokens; the crypto library always expects 32 bytes. A 1-byte UID is right-padded with zeros to 32 bytes (`token_uid.ljust(32, b'\x00')`); a 32-byte UID passes through unchanged; any other length is an error.
 
 ### Blinded Asset Commitments
 
@@ -356,78 +542,75 @@ Where:
 
 An observer sees `A` — a random-looking curve point indistinguishable from any other token's blinded commitment.
 
-### Bulletproof Range Proofs
+### Borromean Range Proofs
 
-Each shielded output includes a Bulletproof range proof demonstrating:
+Each shielded output includes a range proof (secp256k1-zkp's `RangeProof`, a Borromean-style proof — **not** a Bulletproof) demonstrating:
 
 ```
-The committed amount v satisfies: 1 <= v < 2^64
+The committed amount v satisfies: 1 <= v < 2^40
 ```
 
-The lower bound of 1 (not 0) prevents zero-amount outputs that could be used in certain attack vectors.
+(`htr-ct-crypto/src/rangeproof.rs`.)
 
-**Architecture: separate proofs, not aggregated.** Each output carries its own independent Bulletproof. This design supports:
+- **Lower bound `min_value = 1`** prevents zero-amount outputs (enforced both at proof creation and re-checked at verification).
+- **Fixed bit width `RANGE_PROOF_BITS = 40`.** 40 bits covers up to `2^40 − 1 ≈ 1.1 × 10^12` base units (~10 trillion HTR cents), above the maximum supply. Pinning the bit width makes every proof the **same size** regardless of the committed value, eliminating a proof-size side-channel.
+- **Proof size**: ~3213 bytes; bounded by `MAX_RANGE_PROOF_SIZE = 3328`.
 
-- **Multi-party transactions**: Each party generates proofs for their own outputs independently, without revealing amounts.
-- **Atomic swaps**: No need to share blinding factors across parties.
-- **UTXO pruning**: Spent output proofs can be discarded independently.
+**Architecture: separate proofs, not aggregated.** Each output carries its own independent range proof. This supports multi-party transactions and atomic swaps (each party proves its own outputs without sharing blinding factors) and independent UTXO pruning.
 
-Performance optimization is achieved through **batch verification** (`verify_multi`), which amortizes multi-exponentiation cost across proofs (estimated 30-50% CPU reduction for multi-output transactions), and parallel verification across transactions.
-
-**Proof size**: ~675 bytes typical, bounded by `MAX_RANGE_PROOF_SIZE = 1024` bytes.
+> A `batch_verify_range_proofs` helper exists but is currently a sequential loop
+> (`TODO` in code: investigate a true batched secp256k1-zkp API). Treat batch
+> verification as a future optimization, not a current property.
 
 ### Asset Surjection Proofs
 
-For `FullShieldedOutput` only. Proves the output's blinded asset commitment corresponds to one of the input asset commitments, without revealing which one.
+For `FullShieldedOutput` only (`htr-ct-crypto/src/surjection.rs`). Proves the output's blinded asset commitment corresponds to one of the input domain generators, without revealing which one:
 
 ```
 Given:
-  Input asset commitments:   A_1, A_2, ..., A_n
-  Output asset commitment:   A_out
+  Domain generators:   A_1, A_2, ..., A_n   (one per input + per MintHeader entry)
+  Output commitment:   A_out
 
-Compute differences: d_i = A_out - A_i for each input i
-
-For the matching input j (same token):
-  d_j = (H_token + r_out*G) - (H_token + r_j*G) = (r_out - r_j) * G
-  -> discrete log is KNOWN
-
-For non-matching inputs i != j (different token):
-  d_i = (H_out + r_out*G) - (H_i + r_i*G) = (H_out - H_i) + (r_out - r_i)*G
-  -> discrete log is UNKNOWN
-
-A ring signature on {d_1, ..., d_n} proves knowledge of the discrete log
-for exactly one d_i, without revealing which one.
+A ring proof over {A_out - A_i} proves knowledge of the discrete log for exactly
+one difference (the matching token), without revealing which.
 ```
 
-**Proof size**: Grows linearly with the number of inputs in the surjection domain. For a typical transaction with 3 inputs: ~130 bytes. Maximum: `MAX_SURJECTION_PROOF_SIZE = 4096` bytes.
+The domain is built from: every transparent input's NUMS asset tag, every shielded input's on-chain `asset_commitment` (or derived tag for an `AmountShieldedOutput` input), and one NUMS asset tag per `MintHeader` entry (so a freshly-minted token can be the asset of a `FullShieldedOutput`). **Proof size**: grows with the domain size. Maximum: `MAX_SURJECTION_PROOF_SIZE = 4096` bytes.
 
 ### Homomorphic Balance Verification
 
-The balance equation covers all inputs and outputs uniformly:
+The balance equation covers all inputs and outputs uniformly. For transactions with at least one shielded output:
 
 ```
 sum(C_inputs) == sum(C_outputs) + sum(C_fee_entries)
+```
+
+For full-unshield transactions (shielded inputs, no shielded outputs) an excess scalar is added:
+
+```
+sum(C_inputs) == sum(C_outputs) + sum(C_fee_entries) + excess * G
+```
 
 Where:
-  - Shielded inputs/outputs use their on-chain commitment directly
-  - Transparent inputs/outputs use trivial commitments: C = amount * H_token
-  - Fee entries from FeeHeader are treated as transparent outputs
-```
+- Shielded inputs/outputs use their on-chain commitment directly.
+- Transparent inputs/outputs (and `FeeHeader` entries) use trivial commitments `C = amount * H_token`.
+- `excess = sum(r_in) − sum(r_out)`, carried as a 32-byte scalar in `UnshieldBalanceHeader`.
 
-Expanding the equation and grouping by generator:
+Expanding via NUMS generator independence, both scalar coefficients must vanish: values balance per token, and blinding factors balance. For transactions with shielded outputs, the wallet enforces the blinding balance by construction (the last shielded output absorbs the residual via `compute_balancing_blinding_factor`). The Rust entry point is `htr-ct-crypto/src/balance.rs::verify_balance`, taking `BalanceEntry::{Transparent, Shielded}` lists plus an optional `excess`.
 
-```
-(sum(v_in) - sum(v_out) - sum(fees)) * H  +  (sum(r_in) - sum(r_out)) * G  ==  O
-```
-
-Since `H` and `G` are linearly independent (no known discrete log relationship), both scalar coefficients must be zero:
-
-1. `sum(v_in) = sum(v_out) + sum(fees)` — values balance.
-2. `sum(r_in) = sum(r_out)` — blinding factors balance.
-
-The wallet enforces condition (2) by construction: it assigns random blinding factors to all outputs except the last, which receives the balancing residual.
+The mint/melt augmentation (Rule M4) is detailed in [§4.5](#45-mintmelt-reference).
 
 ## 4.2 Data Structures
+
+### OutputMode
+
+A 1-byte discriminator (`hathorlib/transaction/shielded_tx_output.py`):
+
+| Value | Name | Meaning |
+|---|---|---|
+| `0` | `TRANSPARENT` | Standard `TxOutput` (not stored in shielded headers) |
+| `1` | `AMOUNT_ONLY` | Amount hidden, token visible (no surjection proof) |
+| `2` | `FULLY_SHIELDED` | Amount and token hidden (surjection proof required) |
 
 ### AmountShieldedOutput
 
@@ -436,12 +619,10 @@ Hides the amount; token type remains visible.
 | Field | Type | Size | Description |
 |-------|------|------|-------------|
 | `commitment` | bytes | 33 B | Pedersen commitment `C = v*H_token + r*G` |
-| `range_proof` | bytes | ~675 B (max 1024) | Bulletproof range proof |
+| `range_proof` | bytes | ~3213 B (max 3328) | Borromean range proof |
 | `script` | bytes | variable (max 1024) | Locking script (P2PKH, etc.) |
 | `token_data` | int | 1 B | Token index (same semantics as `TxOutput.token_data`) |
-| `ephemeral_pubkey` | bytes | 33 B | Compressed secp256k1 point for ECDH recovery |
-
-**Typical total size**: ~770 bytes per output (with P2PKH script).
+| `ephemeral_pubkey` | bytes \| None | 33 B | Compressed secp256k1 point for ECDH recovery (all-zero on the wire = not present) |
 
 ### FullShieldedOutput
 
@@ -449,26 +630,86 @@ Hides both amount and token type.
 
 | Field | Type | Size | Description |
 |-------|------|------|-------------|
-| `commitment` | bytes | 33 B | Pedersen commitment `C = v*A + r*G` (uses blinded generator) |
-| `range_proof` | bytes | ~675 B (max 1024) | Bulletproof range proof |
+| `commitment` | bytes | 33 B | Pedersen commitment (uses the blinded asset generator) |
+| `range_proof` | bytes | ~3213 B (max 3328) | Borromean range proof |
 | `script` | bytes | variable (max 1024) | Locking script |
 | `asset_commitment` | bytes | 33 B | Blinded asset tag `A = H_token + r_asset*G` |
-| `surjection_proof` | bytes | ~130 B (max 4096) | Asset surjection proof |
-| `ephemeral_pubkey` | bytes | 33 B | Compressed secp256k1 point for ECDH recovery |
+| `surjection_proof` | bytes | variable (max 4096) | Asset surjection proof |
+| `ephemeral_pubkey` | bytes \| None | 33 B | Compressed secp256k1 point for ECDH recovery (all-zero = not present) |
 
-**Typical total size**: ~930 bytes per output (with P2PKH script, 3-input surjection domain).
+**Typical total size**: ~3.3 KB per shielded output, dominated by the range proof.
+
+### Size Constants
+
+| Constant | Value | Location |
+|---|---|---|
+| `COMMITMENT_SIZE` | 33 | `shielded_tx_output.py` |
+| `ASSET_COMMITMENT_SIZE` | 33 | `shielded_tx_output.py` |
+| `EPHEMERAL_PUBKEY_SIZE` | 33 | `shielded_tx_output.py` |
+| `MAX_RANGE_PROOF_SIZE` | 3328 | `shielded_tx_output.py` |
+| `MAX_SURJECTION_PROOF_SIZE` | 4096 | `shielded_tx_output.py` |
+| `MAX_SHIELDED_OUTPUTS` | 32 | `shielded_tx_output.py` |
+| `MAX_SHIELDED_OUTPUT_SCRIPT_SIZE` | 1024 | `shielded_tx_output.py` |
+| `EXCESS_BLINDING_FACTOR_SIZE` | 32 | `unshield_balance_header.py` |
+| `MAX_MINT_MELT_ENTRIES` | 16 | `mint_melt_header.py` |
+| `AMOUNT_SIZE` (mint/melt) | 8 (u64 BE) | `mint_melt_header.py` |
+
+### Vertex Header IDs
+
+All headers are ordered ascending by ID within a transaction (`hathor/transaction/headers/types.py`):
+
+| ID | Header |
+|---|---|
+| `0x10` | `NANO_HEADER` |
+| `0x11` | `FEE_HEADER` |
+| `0x12` | `SHIELDED_OUTPUTS_HEADER` |
+| `0x13` | `UNSHIELD_BALANCE_HEADER` |
+| `0x14` | `MINT_HEADER` |
+| `0x15` | `MELT_HEADER` |
+
+`get_maximum_number_of_headers()` returns **5** when `ENABLE_SHIELDED_TRANSACTIONS` is active (otherwise 3), allowing `FeeHeader + (ShieldedOutputs | UnshieldBalance) + MintHeader + MeltHeader` with one slot of margin for `NanoHeader`.
 
 ### ShieldedOutputsHeader
 
-Shielded outputs are carried in a transaction header, not in the standard `tx.outputs` list.
+Carries the shielded outputs; not part of the standard `tx.outputs` list.
 
 | Field | Size | Description |
 |-------|------|-------------|
-| Header ID | 1 B | `0x12` (`VertexHeaderId.SHIELDED_OUTPUTS_HEADER`) |
-| `num_outputs` | 1 B | Number of shielded outputs (max 32) |
+| Header ID | 1 B | `0x12` |
+| `num_outputs` | 1 B | Number of shielded outputs, `1 ≤ n ≤ 32` |
 | Outputs | variable | Concatenated serialized outputs |
 
-**Maximum shielded outputs per transaction**: `MAX_SHIELDED_OUTPUTS = 32`.
+There is **no** binding signature or excess-point trailer on this header.
+
+### UnshieldBalanceHeader
+
+Carries the balance residual for full-unshield transactions.
+
+| Field | Size | Description |
+|-------|------|-------------|
+| Header ID | 1 B | `0x13` |
+| `excess_blinding_factor` | 32 B | Scalar `excess = sum(r_in) − sum(r_out)` |
+
+Total: 33 bytes. It is a **scalar**, not a point and not a Schnorr signature. The whole serialization is bound into the sighash, so mutating the scalar invalidates all signatures. Mutually exclusive with `ShieldedOutputsHeader`.
+
+### MintHeader / MeltHeader
+
+Publicly declare per-token supply changes (`hathorlib/headers/mint_melt_header.py`).
+
+| Field | Size | Description |
+|-------|------|-------------|
+| Header ID | 1 B | `0x14` (mint) / `0x15` (melt) |
+| `num_entries` | 1 B | `1 ≤ n ≤ 16` |
+| Entries | variable | Concatenated entries |
+
+Each entry (`MintMeltEntry`):
+
+| Field | Size | Description |
+|-------|------|-------------|
+| `token_index` | 1 B | `1 ≤ token_index ≤ 16` (validated against `len(tx.tokens)` during verification; HTR/index 0 forbidden) |
+| `amount` | 8 B BE | Public amount, `1 ≤ amount < 2^64` |
+
+Deserialization rejects duplicate `token_index` within a header, out-of-range indices, and zero amounts.
 
 ### Wire Format
 
@@ -481,200 +722,236 @@ FullShieldedOutput serialization:
   mode(1B=0x02) | commitment(33B) | rp_len(2B BE) | range_proof(var) |
   script_len(2B BE) | script(var) | asset_commitment(33B) |
   sp_len(2B BE) | surjection_proof(var) | ephemeral_pubkey(33B)
+
+ShieldedOutputsHeader:
+  0x12 | num_outputs(1B) | <output_0> | <output_1> | ...
+
+UnshieldBalanceHeader:
+  0x13 | excess_blinding_factor(32B)
+
+MintHeader / MeltHeader:
+  0x14|0x15 | num_entries(1B) | (token_index(1B) | amount(8B BE)) ...
+
+Single-entry MintHeader for 100,000 of token at index 1:
+  0x14 0x01 0x01 0x00 0x00 0x00 0x00 0x00 0x01 0x86 0xA0
 ```
 
-The `mode` byte discriminates output types during deserialization. Length fields use big-endian unsigned 16-bit integers (`!H` struct format).
+The `mode` byte discriminates output types during deserialization. Length fields are big-endian unsigned 16-bit integers (`!H`). `ephemeral_pubkey` is always written as 33 bytes; all-zeros encodes "not present".
 
 ### Sighash Coverage
 
-The transaction sighash includes: `mode`, `commitment`, `script`, `token_data` (amount-shielded) or `asset_commitment` (full-shielded), and `ephemeral_pubkey`. It **excludes** `range_proof` and `surjection_proof` — these are verified independently and do not affect the spending signature.
+| Structure | Included in sighash | Excluded |
+|---|---|---|
+| `AmountShieldedOutput` | mode, commitment, token_data, script, ephemeral_pubkey | range_proof |
+| `FullShieldedOutput` | mode, commitment, asset_commitment, script, ephemeral_pubkey | range_proof, surjection_proof |
+| `ShieldedOutputsHeader` | header_id, num_outputs, per-output sighash bytes | — |
+| `UnshieldBalanceHeader` | full serialization | — |
+| `MintHeader` / `MeltHeader` | full serialization | — |
+
+Range and surjection proofs are excluded because they are verified independently and do not affect the spending signature; `ephemeral_pubkey` is always included to prevent a malleability attack that strips it.
 
 ## 4.3 Transaction Rules
 
-Seven rules govern shielded transactions:
+The following rules govern shielded transactions. Each names the enforcing function in `hathor/verification/transaction_verifier.py` and the exception raised.
 
-### Rule 1: Minimum Structure
+### Rule 1: Commitment / structure validity
 
-At least one input (or Nano Contract withdraw) and at least one output (transparent or shielded, or Nano Contract deposit) required. Standard transaction structure rules apply.
+`verify_commitments_valid` — every commitment, asset commitment, and (present) ephemeral pubkey is a valid 33-byte secp256k1 point, and the output count is within `MAX_SHIELDED_OUTPUTS`. Raises `InvalidShieldedOutputError`. Standard transaction structure rules (≥1 input, ≥1 output) continue to apply.
 
 ### Rule 2: Fee Is Always Transparent
 
-The transaction fee is always a plaintext HTR amount, declared in a `FeeHeader`. The fee enters the balance equation as a trivial commitment: `C_fee = fee * H_HTR`.
+`verify_shielded_fee` — a shielded transaction MUST carry a `FeeHeader`. Fees enter the balance equation as trivial commitments. Raises `InvalidShieldedOutputError`.
 
-### Rule 3: Blinding Factors Must Balance
+### Rule 3: Range Proofs
 
-```
-sum(r_input_shielded) = sum(r_output_shielded)
-```
-
-Transparent inputs and outputs contribute `r = 0`. The wallet enforces this by choosing the last shielded output's blinding factor as the balancing residual. For `FullShieldedOutput`, asset blinding factors must also balance: `sum(s_inputs) = sum(s_outputs)`.
+`verify_range_proofs` — every shielded output MUST include a valid range proof for `[1, 2^40)` against its commitment and generator (unblinded for `AmountShieldedOutput`, blinded for `FullShieldedOutput`). Raises `InvalidRangeProofError`.
 
 ### Rule 4: Trivial Commitment Protection
 
-If **all** inputs are transparent, at least 2 shielded outputs are required.
+`verify_trivial_commitment_protection` — if a transaction has **any** shielded outputs, it MUST have **at least 2**. Raises `TrivialCommitmentError`.
 
-**Rationale**: With all transparent inputs, the total input amount is public. A single shielded output with no transparent outputs would have its blinding factor forced to zero (to satisfy Rule 3), making the commitment trivially deducible as `C = (total_input - fee) * H`.
+> This is stricter than earlier drafts, which relaxed the rule when an input was
+> shielded. The implementation enforces ≥2 unconditionally (a conservative,
+> storage-free check) whenever shielded outputs are present.
 
-**Exception**: This rule is relaxed if any input is shielded (the input's non-zero blinding factor provides the necessary entropy). It also does not apply if there is a transparent output alongside the single shielded output.
+### Rule 5: Homomorphic Balance
 
-### Rule 5: Range Proofs
-
-Every shielded output MUST include a valid Bulletproof range proof proving the committed amount is in `[1, 2^64)`. The minimum value of 1 (not 0) prevents zero-amount outputs.
+`verify_shielded_balance` — the balance equation of [§4.1](#41-cryptographic-primitives) holds (augmented per Rule M4 when mint/melt headers are present). Also enforces the mutual-exclusion invariants on `UnshieldBalanceHeader`. Raises `ShieldedBalanceMismatchError`.
 
 ### Rule 6: Surjection Proofs
 
-Every `FullShieldedOutput` MUST include a valid asset surjection proof proving its asset commitment corresponds to one of the input asset commitments. `AmountShieldedOutput` does not require a surjection proof (its token is visible via `token_data`). Transparent inputs contribute their unblinded NUMS asset tag to the surjection proof domain.
+`verify_surjection_proofs` — every `FullShieldedOutput` MUST include a valid surjection proof whose domain is `(transparent inputs ∪ shielded inputs ∪ MintHeader tokens)`. `AmountShieldedOutput` needs none (its token is visible via `token_data`). Raises `InvalidSurjectionProofError`.
 
 ### Rule 7: Authority Outputs Remain Transparent
 
-Mint and melt authority outputs MUST always be transparent `TxOutput`s. Attempting to set authority bits on a shielded output is invalid (`ShieldedAuthorityError`). Authority tokens control token supply and must remain auditable.
+`verify_authority_restriction` — no shielded output may carry authority bits. `AmountShieldedOutput` with `token_data & TOKEN_AUTHORITY_MASK` set is rejected; `FullShieldedOutput` has no `token_data` field and cannot encode authority. Raises `ShieldedAuthorityError`.
 
-### Rule 8: Mint/Melt Transactions Cannot Have Shielded Outputs
+### Rule M1: Mint/Melt requires a shielded transaction
 
-A transaction that contains any mint or melt operation (i.e., spends a mint or melt authority input) MUST NOT include any shielded outputs (`ShieldedMintMeltForbiddenError`). All value outputs in a mint/melt transaction must be transparent.
+`verify_mint_melt_requires_shielded` — `MintHeader`/`MeltHeader` are valid only when the transaction carries a `ShieldedOutputsHeader` or an `UnshieldBalanceHeader`. Raises `ShieldedMintMeltForbiddenError`.
 
-**Rationale**: Keeping mint/melt transactions fully transparent ensures that token supply remains publicly auditable. Explorers and users can always verify the total circulating supply of any custom token by summing its mint and melt operations. Users who want amount privacy can move minted tokens into shielded outputs in a subsequent transaction.
+### Rule M2: Authority input required per entry
+
+`verify_mint_melt_authority_inputs` — each `MintHeader` entry requires a matching transparent mint authority input; each `MeltHeader` entry requires a matching melt authority input. (A `TokenCreationTransaction` is exempt for `token_index = 1`, which it implicitly authorizes.) Raises `ForbiddenMint` / `ForbiddenMelt`.
+
+### Rule M3: One direction per token
+
+`verify_mint_melt_headers_well_formed` — a `token_index` appearing in `MintHeader` MUST NOT also appear in `MeltHeader`. Also bounds each `token_index` against `len(tx.tokens)`. Raises `InvalidMintMeltHeaderError`.
+
+### Rule M4: Augmented homomorphic balance
+
+`verify_shielded_balance` + `_fold_mint_melt_entry`. The balance equation becomes:
+
+```
+sum(C_in) + sum_T(mint_T · H_T) + withdraw · H_HTR
+  == sum(C_out) + sum_T(melt_T · H_T) + deposit · H_HTR + fee · H_HTR + excess · G
+```
+
+- Each `MintHeader` entry `(T, amount)` adds `amount · H_T` to the **input** side (unblinded).
+- Each `MeltHeader` entry `(T, amount)` adds `amount · H_T` to the **output** side (unblinded).
+- For `DEPOSIT`-version tokens: mint adds a `deposit = 0.01 × amount` HTR term on the output side (paid by the user); melt adds a `withdraw = 0.01 × amount` HTR term on the input side (returned to the user). Computed via `get_deposit_token_deposit_amount` / `get_deposit_token_withdraw_amount`.
+- For `FEE`-version tokens: each entry (mint *or* melt) adds one `FEE_PER_OUTPUT` HTR term on the output side. These per-entry charges are folded into the balance equation, **not** declared in `FeeHeader`.
+
+Raises `ShieldedBalanceMismatchError`.
+
+### Rule M5: No undeclared mint/melt
+
+`verify_no_undeclared_mint_melt` — on a shielded transaction, any non-`NATIVE` token showing a transparent surplus (mint) or deficit (melt) in the token accounting MUST be covered by a corresponding `MintHeader`/`MeltHeader` entry. Without a public scalar, the prover could mint from nothing. Raises `ShieldedMintMeltForbiddenError`.
+
+### Rule M6: Mint/Melt vs. NanoHeader
+
+`verify_mint_melt_nano_compatibility` — a `NanoHeader` may coexist with mint/melt headers, but a single token MUST NOT have its supply changed through both a NanoHeader action and a `MintHeader`/`MeltHeader` entry (this would double-count in the balance equation). Raises `InvalidMintMeltHeaderError`.
+
+### TokenCreationTransaction rules
+
+`verify_minted_tokens` (token creation verifier): a shielded TCT MUST declare initial supply via exactly one `MintHeader` entry for `token_index = 1`, and MUST NOT melt that token. Non-shielded TCTs keep the existing `token_info.amount > 0` check. Raises `InvalidToken`. `MeltHeader` is not permitted on a token creation transaction.
 
 ## 4.4 Verification Pipeline
 
-Verification is split into two phases, matching Hathor's existing architecture.
+Verification follows Hathor's two-phase architecture.
 
-### Phase 1: Without Storage (Basic Verification)
+### Phase 1: Without Storage
 
-Called during `verify_without_storage`. No UTXO lookups needed.
-
-```
-verify_shielded_outputs()
-  |-- verify_commitments_valid()
-  |     Checks: all commitments are 33-byte valid secp256k1 points
-  |     Checks: asset_commitments (FullShielded) are valid points
-  |     Checks: ephemeral_pubkeys are valid secp256k1 points
-  |
-  |-- verify_authority_restriction()              [Rule 7]
-  |     Checks: no shielded output has authority bits set
-  |
-  |-- verify_range_proofs()                       [Rule 5]
-  |     Checks: each shielded output's Bulletproof verifies against
-  |             its commitment and generator (unblinded for Amount,
-  |             blinded for Full)
-  |
-  |-- verify_trivial_commitment_protection()      [Rule 4, conservative]
-  |     Checks: at least 2 shielded outputs (relaxed with storage)
-  |
-  |-- verify_shielded_fee()
-        Checks: FeeHeader exists
-        Checks: total_declared_fee >= shielded_fee (lower bound)
-```
-
-### Phase 2: With Storage (Full Verification)
-
-Called during `verify` / `_verify_shielded_header`. Requires UTXO lookups to resolve input types.
+`verify_shielded_outputs` (no UTXO lookups):
 
 ```
-_verify_shielded_header()
-  |-- verify_surjection_proofs()                  [Rule 6]
-  |     Builds surjection domain from input asset commitments:
-  |       - Transparent inputs: derive_asset_tag(token_uid)
-  |       - Shielded inputs: use on-chain asset_commitment
-  |     Verifies each FullShieldedOutput's proof against the domain
-  |
-  |-- verify_shielded_balance()
-  |     Collects all input commitments (shielded: direct, transparent: trivial)
-  |     Collects all output commitments (shielded: direct, transparent: trivial)
-  |     Appends fee entries as transparent outputs
-  |     Verifies: sum(inputs) == sum(outputs)
-  |
-  |-- _verify_trivial_commitment_with_storage()   [Rule 4, relaxed]
-        If any input is shielded: allow 1 shielded output
-        Otherwise: require >= 2 shielded outputs
+verify_shielded_outputs(tx)
+  |-- verify_commitments_valid            [Rule 1]
+  |-- verify_authority_restriction        [Rule 7]
+  |-- verify_range_proofs                 [Rule 3]
+  |-- verify_trivial_commitment_protection[Rule 4]
+  |-- verify_shielded_fee                 [Rule 2, lower bound]
 
-verify_token_rules(shielded_fee=X)                [Fee exact match]
-  Existing fee verification, augmented with shielded_fee addend
-  Checks: standard_fee + shielded_fee == fees_from_fee_header (exact)
+verify_mint_melt_basic(tx)                (only if a mint/melt header is present)
+  |-- verify_mint_melt_headers_well_formed[Rule M3 + bounds]
+  |-- verify_mint_melt_requires_shielded  [Rule M1]
+  |-- verify_mint_melt_nano_compatibility [Rule M6]
 ```
 
-### Token UID Normalization
+### Phase 2: With Storage
 
-The `_normalize_token_uid()` function handles the mismatch between Hathor's internal 1-byte HTR token UID (`b'\x00'`) and the crypto library's 32-byte requirement. HTR is padded with 31 zero bytes; custom tokens (already 32 bytes) pass through unchanged.
+Requires UTXO lookups to resolve input types:
 
-## 4.5 Fee Mechanism
+```
+verify_shielded_outputs_with_storage(tx)
+  |-- verify_surjection_proofs            [Rule 6]
 
-### Fee Calculation
+(from _verify_tx, the shielded counterpart to transparent balance:)
+  |-- verify_no_undeclared_mint_melt      [Rule M5]
+  |-- verify_mint_melt_authority_inputs   [Rule M2]
+  |-- verify_token_rules(shielded_fee=X)  [exact fee match]
+  |-- verify_shielded_balance             [Rule 5 / Rule M4]
+```
+
+Shielded inputs are detected by index: a `TxInput` whose `index >= len(spent_tx.outputs)` references a shielded output at `index − len(spent_tx.outputs)` in the spent transaction's `ShieldedOutputsHeader`.
+
+## 4.5 Mint/Melt Reference
+[45-mintmelt-reference]: #45-mintmelt-reference
+
+The mint/melt design lives entirely in the headers and the augmented balance equation; there is **no separate feature flag** — it is gated by `SHIELDED_TRANSACTIONS` along with the rest of shielded outputs.
+
+### Disclosure model
+
+Each `MintHeader`/`MeltHeader` entry discloses a **token reference** (`token_index`) and an **amount**, both in plaintext.
+
+- **Token reference: always transparent.** The mint/melt authority output is itself transparent (Rule 7), so the token UID is already exposed; and the verifier must read the token's version (`NATIVE`/`DEPOSIT`/`FEE`) to apply the right deposit-or-fee logic.
+- **Amount: transparent.** Total token supply is publicly computable per token by summing entries across the chain. Plaintext amounts are required for `DEPOSIT`-version tokens because the HTR deposit is `0.01 × amount` and must be verifiable. (Shielded amounts — a Pedersen commitment + range proof in the header — are a deferred business decision; see [Future possibilities](#future-possibilities).)
+
+### Surjection-domain extension
+
+For each `(T, amount)` in `MintHeader`, the unblinded NUMS asset tag `H_T = derive_asset_tag(T)` is appended to the surjection-proof domain so a `FullShieldedOutput` of a freshly-minted token can prove its asset is in `(transparent inputs ∪ shielded inputs ∪ minted tokens)`. `MeltHeader` does NOT extend the domain (melt produces no new outputs of the melted token).
+
+### Header order
+
+`MintHeader` (`0x14`) precedes `MeltHeader` (`0x15`) by the ascending-ID rule. Both follow `ShieldedOutputsHeader`/`UnshieldBalanceHeader`.
+
+## 4.6 Fee Mechanism
+
+### Settings
+
+| Setting | Default | Location | Description |
+|---------|---------|----------|-------------|
+| `FEE_PER_AMOUNT_SHIELDED_OUTPUT` | 1 | `hathor/conf/settings.py` | HTR base units per `AmountShieldedOutput` |
+| `FEE_PER_FULL_SHIELDED_OUTPUT` | 2 | `hathor/conf/settings.py` | HTR base units per `FullShieldedOutput` |
+| `FEE_PER_OUTPUT` | 1 | `hathorlib` settings | HTR per chargeable transparent output and per `FEE`-token mint/melt entry |
+
+### Calculation
 
 ```python
 shielded_fee = (n_amount_shielded * FEE_PER_AMOUNT_SHIELDED_OUTPUT)
              + (n_full_shielded   * FEE_PER_FULL_SHIELDED_OUTPUT)
 ```
 
-Settings in `HathorSettings`:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `FEE_PER_AMOUNT_SHIELDED_OUTPUT` | 1 | HTR base units per `AmountShieldedOutput` |
-| `FEE_PER_FULL_SHIELDED_OUTPUT` | 2 | HTR base units per `FullShieldedOutput` |
-
-These settings are gated by `ENABLE_SHIELDED_TRANSACTIONS`.
-
-### FeeHeader Integration
-
-Fees are declared in the existing `FeeHeader` mechanism. The `FeeHeader` entries are treated as transparent outputs in the homomorphic balance equation:
-
-```
-sum(C_in) == sum(C_out) + sum(C_fee_entry)
-```
-
-Each `C_fee_entry = fee_amount * H_token` for the corresponding token. This means the balance verification function does not need a separate `fee` parameter — fees are simply part of the output side.
-
 ### Two-Phase Fee Verification
 
-1. **Without storage (lower bound)**: `total_declared_fee >= shielded_fee`. Cannot compute exact expected fee without storage (standard token fees depend on `chargeable_outputs` which requires UTXO lookups).
-2. **With storage (exact match)**: `standard_fee + shielded_fee == fees_from_fee_header`. Both over-payment and under-payment are rejected.
+1. **Without storage (lower bound)**: `total_declared_fee >= shielded_fee` (`verify_shielded_fee`). The exact standard-token fee depends on chargeable outputs, which need UTXO lookups.
+2. **With storage (exact match)**: `verify_token_rules(..., shielded_fee=X)` requires `standard_fee + shielded_fee == fees_from_fee_header`, and `verify_shielded_balance` reconciles the fee entries inside the balance equation. Both over- and under-payment are rejected.
 
-### Shielded Fees Subsume Token Fees
+Shielded outputs are not counted in `chargeable_outputs` for standard token fee math; to prevent fee avoidance (shielding an output to dodge `FEE_PER_OUTPUT`), the shielded fee rates are set at least as large as the standard per-output fee.
 
-Shielded outputs are not counted in `chargeable_outputs` for standard FEE-versioned token fee calculation. To prevent fee avoidance (shielding a token output to dodge `FEE_PER_OUTPUT`), the shielded fee rates are configured to be at least as large as the standard token output fee.
+## 4.7 Network-Wide Supply Audit
+[47-network-wide-supply-audit]: #47-network-wide-supply-audit
 
-## 4.6 ECDH Recovery Mechanism
+A monitor with chain access can verify, for each token, that no value was created or destroyed across the entire shielded history — **with no protocol change**:
 
-### Overview
+```
+Σ C_utxo  ==  Σ_token (total_supply_token · H_token)
+```
 
-Every shielded output contains an `ephemeral_pubkey` field (33 bytes). This enables the recipient to recover the committed value without any out-of-band communication.
+This holds because the per-tx balance check is a curve-point equality (`Σ C_in == Σ C_out + fee·H_HTR`, augmented by the public mint/melt scalars), which by NUMS generator independence forces `Σ r_in = Σ r_out` for every shielded tx. Telescoping over the chain gives `Σ r_utxo = 0`, collapsing the residual `G`-component to zero. `total_supply_token` is maintained from the public mint/melt declarations (and genesis allocation for HTR).
+
+A regression test (`hathor_tests/tx/test_shielded_audit_equation.py`) builds small chains using `htr_lib.shielded` directly and checks the equation; the full derivation is in the design memo at `_designs/03-amount-privacy/100-NETWORK-SUPPLY-AUDIT.md`. Inflation-bug monitoring can therefore ship against the current chain immediately.
+
+## 4.8 ECDH Recovery Mechanism
 
 ### Sender Flow
 
-1. Generate ephemeral keypair: `(e, E = e*G)` on secp256k1.
-2. Obtain recipient's scan public key `P = B_scan` (from the shielded address).
-3. Compute shared secret: `s = SHA256(e * P)`.
-4. Derive deterministic nonce: `nonce = SHA256("Hathor_CT_nonce_v1" || s)`.
-5. Create range proof using `nonce` as the nonce key (not random).
-6. For `FullShieldedOutput`: embed `token_uid(32B) || asset_blinding_factor(32B)` in the range proof message.
-7. Store `E` (33 bytes, compressed) in the shielded output's `ephemeral_pubkey` field.
+1. Generate ephemeral keypair `(e, E = e*G)` on secp256k1 (`generate_ephemeral_keypair`).
+2. Obtain the recipient's scan public key `P = B_scan`.
+3. Compute shared secret `s = ECDH(e, P)` (secp256k1 `SharedSecret`, i.e. SHA256 over the shared point).
+4. Derive deterministic nonce `nonce = SHA256("Hathor_CT_nonce_v1" || s)` (re-hashed with a counter in the ~2⁻¹²⁸ case where the result is not a valid scalar).
+5. Create the range proof using `nonce` as the proof's nonce key (not random), enabling rewind.
+6. For `FullShieldedOutput`: embed `token_uid(32B) || asset_blinding_factor(32B)` (64-byte message) in the range proof.
+7. Store `E` (33 bytes, compressed) in the output's `ephemeral_pubkey` field.
 
 ### Recipient Flow
 
-1. Parse output script; check if script contains `hash(spend_pubkey)` matching a wallet key.
-2. Extract ephemeral pubkey `E` from the shielded output.
-3. Compute shared secret: `s = SHA256(scan_privkey * E)` (same result since `scan_privkey*E = scan_privkey*e*G = e*scan_privkey*G = e*B_scan`).
-4. Derive nonce: `nonce = SHA256("Hathor_CT_nonce_v1" || s)`.
-5. Call `rewind_range_proof(proof, commitment, nonce, generator)`:
-   - `generator` = `derive_asset_tag(token_uid)` for `AmountShieldedOutput`
-   - `generator` = `output.asset_commitment` for `FullShieldedOutput`
-6. Returns: `(value, blinding_factor, message)`.
-7. For `FullShieldedOutput`: extract `token_uid` and `asset_blinding_factor` from `message`, reconstruct expected asset commitment, and cross-check against on-chain value.
+1. Match the output script against a wallet key.
+2. Extract `E`; compute `s = ECDH(scan_privkey, E)` (equal to the sender's `s`).
+3. Derive `nonce = SHA256("Hathor_CT_nonce_v1" || s)`.
+4. Call `rewind_range_proof(proof, commitment, nonce, generator)` with `generator = derive_asset_tag(token_uid)` for `AmountShieldedOutput` or `output.asset_commitment` for `FullShieldedOutput`.
+5. Receive `(value, blinding_factor, message)`.
+6. For `FullShieldedOutput`: extract `token_uid` and `asset_blinding_factor` from `message`, recompute the expected asset commitment, and cross-check it against the on-chain `asset_commitment` (rejects a fraudulent token UID).
 
 ### Security Properties
 
-- **Sighash binding**: The ephemeral pubkey is included in the transaction sighash, preventing MITM replacement.
-- **Nonce uniqueness**: Each output uses a fresh ephemeral keypair.
-- **Failed rewind**: Returns an error (not garbage) when the nonce is wrong — no false positives.
-- **Forward secrecy**: Ephemeral keys are single-use.
-- **Domain separation**: `"Hathor_CT_nonce_v1"` prefix isolates this derivation from other uses of the ECDH shared secret.
-- **Token UID cross-check**: For `FullShieldedOutput`, the recovered `token_uid` is verified against the `asset_commitment` to prevent a malicious sender from embedding a fraudulent token UID.
-- **No value logging**: Recovered amounts are never logged, even at DEBUG level.
+- **Sighash binding**: `ephemeral_pubkey` is in the sighash, preventing MITM replacement.
+- **Failed rewind**: returns an error (not garbage) on the wrong nonce — no false positives.
+- **Forward secrecy / nonce uniqueness**: ephemeral keys are single-use.
+- **Domain separation**: `"Hathor_CT_nonce_v1"` isolates this derivation; `"Hathor_AssetTag_v1"` isolates asset-tag derivation.
+- **Token UID cross-check**: for `FullShieldedOutput`, the recovered UID is bound to the `asset_commitment`.
 
-## 4.7 Feature Activation
-
-### Feature Flag
+## 4.9 Feature Activation
 
 ```python
 # hathor/feature_activation/feature.py
@@ -682,203 +959,162 @@ class Feature(StrEnum):
     SHIELDED_TRANSACTIONS = 'SHIELDED_TRANSACTIONS'
 ```
 
-### Settings
-
 ```python
 # hathor/conf/settings.py
 ENABLE_SHIELDED_TRANSACTIONS: FeatureSetting = FeatureSetting.DISABLED
 ```
 
-`FeatureSetting` is an enum with values: `DISABLED`, `ENABLED`, `FEATURE_ACTIVATION`.
+`FeatureSetting` is an enum with values `DISABLED`, `ENABLED`, `FEATURE_ACTIVATION`. A single flag gates **all** shielded functionality, including mint/melt headers — there is no separate `SHIELDED_MINT_MELT` flag. The vertex parser only parses shielded headers when the flag is active, and `get_maximum_number_of_headers()` is raised from 3 to 5 under the same gate.
 
-### Crypto Library Availability
+The native `htr_lib` crypto extension must be available for shielded operations to function; it is imported by the `hathorlib` wrappers at runtime.
 
-At startup, if `ENABLE_SHIELDED_TRANSACTIONS != DISABLED`, the system validates that the native `hathor_ct_crypto` library is available via `validate_shielded_crypto_available()`. This prevents silent failures where all shielded output operations would fail at runtime.
-
-Build command:
-```bash
-poetry run maturin develop --manifest-path hathor-ct-crypto/Cargo.toml --features python
-```
-
-## 4.8 Interaction with Other Features
+## 4.10 Interaction with Other Features
 
 ### Silent Payments (Phase A)
 
-The `ephemeral_pubkey` in shielded outputs serves double duty when Silent Payments are active:
-
-- **Without SP**: The ephemeral key derives blinding factors only. The recipient address is visible in the script.
-- **With SP**: The same ECDH shared secret derives both the one-time recipient address and the blinding factors. A single ECDH operation provides recipient privacy + blinding factor communication.
-
-Combined: a shielded output hides the recipient (one-time address), the amount (Pedersen commitment), and optionally the token type (blinded asset tag).
+The `ephemeral_pubkey` serves double duty: without SP it derives blinding factors only (the recipient address is visible in the script); with SP the same ECDH shared secret derives both a one-time recipient address and the blinding factors. A single ECDH operation then provides recipient privacy + blinding-factor communication.
 
 ### Ring Signatures / Nullifiers (Phase C)
 
-Shielded outputs simplify decoy selection for ring signatures:
-
-- **Without shielded outputs**: Decoys must match on amount (otherwise amount mismatch reveals the real input). This limits the anonymity set.
-- **With shielded outputs**: All outputs are opaque commitments — any shielded output is a valid decoy regardless of hidden amount or token. Larger anonymity sets with simpler selection logic.
-
-Surjection proofs naturally compose with ring signatures: the surjection domain includes all ring members (real + decoys), hiding which input is real.
+All shielded outputs are opaque commitments, so any shielded output is a valid decoy regardless of hidden amount or token — larger anonymity sets with simpler selection. Surjection proofs compose naturally: the domain can include ring members (real + decoys).
 
 ### Nano Contracts
 
-The `nc_caller` field in Nano Contract transactions identifies the calling address. Shielded outputs do not affect `nc_caller` — it remains a standard address. However, if Nano Contracts consume or produce shielded outputs in the future, the balance equation and proof generation would need to account for the contract's logic. This is out of scope for this RFC.
+A `NanoHeader` may coexist with mint/melt headers, subject to Rule M6 (no same-token supply change via both channels). Deeper interaction — contracts consuming or producing shielded outputs — is out of scope for this RFC.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
-1. **Transaction size increase.** A shielded output is ~770-930 bytes vs ~40 bytes for a transparent output (~20-25x larger). This increases storage, bandwidth, and propagation time. However, Hathor's logarithmic weight formula means the fee increase is moderate (not proportional to the size increase).
+1. **Transaction size increase.** A shielded output is ~3.3 KB (dominated by the ~3213-byte Borromean range proof) vs ~40 bytes for a transparent output — roughly two orders of magnitude larger. This increases storage, bandwidth, and propagation time. The range proof is the single largest contributor; a Bulletproof-based proof (~675 B) would shrink this substantially but is not available in the current `secp256k1-zkp` build.
 
-2. **Verification cost.** Bulletproof range proof verification takes ~1ms per proof. For a transaction with 4 shielded outputs, this adds ~4ms of CPU time per transaction. Batch verification and parallelization can amortize this, but it remains significantly more expensive than transparent output verification.
+2. **Verification cost.** Each range proof and each surjection proof is verified independently. Batch verification is not yet truly batched (the helper loops sequentially), so multi-output transactions pay close to linear cost.
 
-3. **Wallet complexity.** Wallets must implement ECDH key exchange, range proof rewind, blinding factor management, surjection proof generation, and fee computation. This is a substantial increase in wallet complexity compared to transparent-only transactions.
+3. **Wallet complexity.** Wallets must implement ECDH key exchange, range-proof rewind, blinding-factor management and balancing, surjection-proof generation, and fee computation — a substantial increase over transparent-only transactions.
 
-4. **Explorer capability reduction.** Block explorers lose the ability to display amounts and compute balances for shielded outputs. This fundamentally changes the user experience of public blockchain explorers, which are a key tool for transparency and debugging.
+4. **Explorer capability reduction.** Explorers lose amount/balance display for shielded outputs (though per-token supply remains auditable from the mint/melt headers).
 
-5. **Recipient public key requirement.** The sender must know the recipient's full compressed public key (not just the address hash) to establish the ECDH shared secret. This requires either a prior on-chain spend, a payment protocol, or a new address format.
+5. **Recipient public key requirement.** The sender must know the recipient's full compressed public key (not just the address hash) to establish the ECDH shared secret. This requires a prior on-chain spend, a payment protocol, or a new address format.
+
+6. **Full-unshield scalar leak.** `UnshieldBalanceHeader` exposes `Σ r_in` as a raw scalar. A point-form replacement with a binding signature would close this but is not implemented (see Future possibilities).
+
+7. **40-bit value ceiling.** Range proofs prove `[1, 2^40)`. This is above the maximum HTR supply but is a smaller domain than the full `u64` amount space; any token whose supply could exceed `2^40 − 1` base units cannot be fully represented in a shielded output.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
 ## Why header-based (not a new TxVersion)?
 
-A new `TxVersion` would require changes throughout the codebase — every `match vertex.version:` statement, serialization logic, feature gating, and verification path. The header-based approach reuses Hathor's existing header infrastructure (already used by `NanoHeader` and `FeeHeader`), attaching shielded outputs to standard transactions (`REGULAR_TRANSACTION` and `TOKEN_CREATION_TRANSACTION`) with zero structural changes. This means existing transaction processing, mempool logic, and DAG management continue to work unmodified.
+A new `TxVersion` would require changes throughout the codebase — every `match vertex.version:`, serialization path, feature gate, and verification path. The header-based approach reuses Hathor's existing header infrastructure (already used by `NanoHeader` and `FeeHeader`), attaching shielded data to standard transactions with zero structural changes, so existing mempool logic and DAG management continue to work unmodified.
 
 ## Why two output types (not one)?
 
-`AmountShieldedOutput` (amount hidden, token visible) is substantially smaller and cheaper to verify than `FullShieldedOutput` (both hidden). Many use cases only need amount privacy — e.g., hiding salaries paid in HTR, where the fact that the token is HTR is not sensitive. Offering both tiers lets users pay only for the privacy they need.
+`AmountShieldedOutput` (amount hidden, token visible) skips the surjection proof and so is smaller and cheaper to verify than `FullShieldedOutput`. Many use cases only need amount privacy (e.g. salaries paid in HTR), so offering both tiers lets users pay only for the privacy they need.
 
-## Why separate Bulletproofs (not aggregated)?
+## Why separate range proofs (not aggregated)?
 
-Aggregated Bulletproofs would require the prover to know all values and blinding factors for every output in the transaction. This is fundamentally incompatible with atomic swaps and multi-party transactions where each party independently constructs their outputs. The MPC workaround from Bünz et al. §4.3 is not implemented in `secp256k1-zkp` v0.11. Separate proofs also avoid permanently linking all outputs as created by the same party, and allow UTXO pruning. Performance is recovered through batch verification.
+Aggregated proofs would require the prover to know all values and blinding factors for every output, which is incompatible with atomic swaps and multi-party transactions where each party independently constructs their outputs. Separate proofs also avoid permanently linking all outputs as same-party and allow independent UTXO pruning.
+
+## Why Borromean range proofs (not Bulletproofs)?
+
+The implementation uses `secp256k1-zkp`'s `RangeProof` (a Borromean-style proof). It is the proof type exposed by the library version in use, battle-tested in production (Liquid/Elements), and supports the ECDH-rewind recovery mechanism directly. The cost is size: ~3213 bytes vs a Bulletproof's ~675 bytes. Bit width is pinned to 40 so all proofs are constant-size, removing a value-size side-channel. Migrating to Bulletproofs is a future optimization gated on library support.
 
 ## Why secp256k1-zkp (not custom crypto)?
 
-`secp256k1-zkp` is the industry-standard library for Confidential Transactions, maintained by Blockstream and used in production by Liquid/Elements. It provides battle-tested implementations of Pedersen commitments, Bulletproofs, and surjection proofs on the same secp256k1 curve Hathor already uses. Writing custom cryptographic primitives would be a security liability.
+`secp256k1-zkp` is the industry-standard library for Confidential Transactions, maintained by Blockstream and used by Liquid/Elements. It provides battle-tested Pedersen commitments, range proofs, and surjection proofs on the same secp256k1 curve Hathor already uses. Writing custom cryptographic primitives would be a security liability.
 
 ## Why ECDH rewind (not encrypted messages)?
 
-Range proof rewinding is an established technique (used by Monero, Grin, Elements) that embeds recovery data inside the proof itself, adding zero bytes to the transaction. The alternative — encrypting amount/blinding data in a separate field — would increase transaction size and add a new encryption scheme to audit. Rewinding also provides a natural authentication mechanism: only the correct ECDH shared secret produces valid rewind results.
+Range-proof rewinding is an established technique (Monero, Grin, Elements) that embeds recovery data inside the proof itself, adding zero bytes to the transaction. Encrypting amount/blinding data in a separate field would increase size and add a new encryption scheme to audit. Rewinding also authenticates: only the correct ECDH shared secret produces valid rewind results.
+
+## Why declare mint/melt amounts publicly?
+
+Pedersen commitments cannot, on their own, distinguish "minted from nothing" from "received from an input". A public scalar declaring the mint binds it into the balance equation, preserving the no-inflation guarantee and keeping supply auditable. A purely private alternative (a ZK "I am minting Y ≤ my authority limit" proof) is an order of magnitude more complex and loses auditability.
+
+## Why a scalar excess (not a binding signature) today?
+
+The implemented full-unshield path publishes the residual as a scalar in `UnshieldBalanceHeader`. The scalar form is functional and prevents inflation (the verifier checks balance directly against it). A point-form excess plus a Schnorr binding signature (Sapling-style) would additionally hide `Σ r_in` and enable receiver-chosen blindings and non-interactive multi-party construction — but those capabilities are not yet required, so the simpler scalar form ships first. See Future possibilities.
 
 ## Alternative: ZK-SNARKs (Zcash model)
 
-Zcash's Sapling/Orchard circuits use Groth16/Halo 2 proofs to hide amounts, token types, and the sender simultaneously. While more powerful (combining Phases B and C), this approach requires:
-- Trusted setup (Groth16) or substantially larger proofs (Halo 2 ~1.8KB vs Bulletproof ~675B)
-- A different curve (BLS12-381 or Pallas/Vesta), incompatible with Hathor's secp256k1
-- Complex circuit design and auditing
-- Significantly longer proof generation time (~25-274ms vs ~2ms for Bulletproofs)
-
-Hathor's phased approach achieves the same end-state with individually simpler, more auditable components.
+Zcash's Sapling/Orchard circuits hide amounts, token types, and the sender in one proof. This requires a trusted setup (Groth16) or larger proofs (Halo 2 ~1.8 KB), a different curve (BLS12-381 or Pallas/Vesta) incompatible with secp256k1, complex circuit auditing, and far slower proving. Hathor's phased approach reaches a similar end-state with individually simpler, more auditable components.
 
 ## Alternative: Mimblewimble
 
-Mimblewimble (used by Grin, Beam, Litecoin MWEB) provides amount hiding with transaction cut-through (pruning intermediate transactions). However:
-- Mimblewimble requires interactive transaction construction (sender and receiver must communicate to build the transaction)
-- It fundamentally changes the UTXO model and transaction structure
-- It cannot support scripting or multi-asset transactions in their current form
-- Hathor's DAG structure is incompatible with Mimblewimble's linear chain assumptions
+Mimblewimble (Grin, Beam, Litecoin MWEB) provides amount hiding with cut-through, but requires interactive transaction construction, fundamentally changes the UTXO model, cannot support scripting or multi-asset transactions in its current form, and is incompatible with Hathor's DAG structure.
 
 ## Impact of not doing this
 
-Without shielded outputs, all Hathor transactions remain fully transparent. Users who need amount or token privacy would have no on-chain option, limiting Hathor's utility for business payments, DeFi, and personal finance. Competitors with privacy features (Monero, Zcash, Litecoin MWEB, Liquid) would have a structural advantage for privacy-sensitive use cases.
+Without shielded outputs, all Hathor transactions remain fully transparent, with no on-chain option for amount or token privacy — limiting Hathor's utility for business payments, DeFi, and personal finance, while competitors with privacy features hold a structural advantage.
 
 # Prior art
 [prior-art]: #prior-art
 
 ## Liquid / Elements Confidential Assets
 
-The primary inspiration for this design. Liquid (Blockstream's Bitcoin sidechain) implements Confidential Transactions with Pedersen commitments, Bulletproofs, and asset surjection proofs on secp256k1. Hathor's implementation uses the same `secp256k1-zkp` library and the same cryptographic constructions.
+The primary inspiration. Liquid implements Confidential Transactions with Pedersen commitments, range proofs, and asset surjection proofs on secp256k1. Hathor uses the same `secp256k1-zkp` library and constructions. Liquid also supports confidential asset issuance with a public asset_id and amount — directly analogous to `MintHeader`. The two-output-type split (amount-only vs. full) is a Hathor addition.
 
-**Lessons learned:**
-- Separate Bulletproofs per output are the practical choice (Liquid uses this).
-- Asset surjection proofs are essential for multi-asset chains.
-- ECDH-based range proof rewind works well for recovery.
-- The two-output-type approach (amount-only vs. full) is a Hathor innovation not present in Liquid.
+## Monero (RingCT)
 
-## Monero (RingCT + Bulletproofs)
-
-Monero uses Pedersen commitments and Bulletproofs for amount hiding, combined with ring signatures for sender privacy. All transactions are mandatory CT.
-
-**Differences from Hathor:**
-- Monero uses Ed25519, not secp256k1.
-- Monero's CT is mandatory; Hathor's is opt-in per output.
-- Monero combines amount hiding with sender privacy (ring signatures) in a single protocol; Hathor separates these into independent phases.
-- Monero does not support custom tokens.
-
-**Lessons learned:**
-- Bulletproof range proofs are production-proven at scale (Monero processes millions of CT transactions).
-- ECDH-based recovery with deterministic nonces is the standard approach.
-- Mandatory CT provides larger anonymity sets but increases chain size.
+Monero uses Pedersen commitments and range proofs for amount hiding plus ring signatures for sender privacy; all transactions are mandatory CT. Differences: Ed25519 (not secp256k1), mandatory (not opt-in), combined amount+sender privacy, no custom tokens. Lessons: range-proof CT is production-proven at scale; ECDH recovery with deterministic nonces is the standard approach.
 
 ## Zcash (Sapling / Orchard)
 
-Zcash uses ZK-SNARKs (Groth16 in Sapling, Halo 2 in Orchard) to provide full transaction privacy: hidden amounts, hidden token types, and hidden senders, all in a single proof.
+Zcash uses ZK-SNARKs for full transaction privacy in a single proof, on BLS12-381 / Pallas-Vesta. Sapling's `valueBalance` field and binding signature are the closest analogs to a per-asset public delta on an otherwise-shielded transaction (the inspiration for the deferred point-form excess). Differences: different curves, more expensive proving, separate shielded pool. Lesson: opt-in privacy reduces the anonymity set, so shielded usage should be encouraged.
 
-**Differences from Hathor:**
-- Zcash uses different curves (BLS12-381, Pallas/Vesta).
-- Zcash's proofs are more expensive to generate (~25ms Groth16, ~274ms Halo 2 vs ~2ms Bulletproof).
-- Zcash requires circuit compilation and trusted setup (Groth16) or larger proofs (Halo 2).
-- Zcash's shielded pool is separate from its transparent pool (different address types); Hathor mixes them freely.
+## Grin / Beam (Mimblewimble) and Litecoin MWEB
 
-**Lessons learned:**
-- Opt-in privacy (Zcash's shielded pools) means most transactions remain transparent, reducing the effective anonymity set. Hathor should encourage shielded usage to grow the anonymity set.
-- ZIP 317 fee structure (per-action fees) is a good model for incentive alignment.
-
-## Grin / Beam (Mimblewimble)
-
-Mimblewimble protocols use Pedersen commitments with transaction cut-through for amount hiding and chain compaction.
-
-**Not adopted because:** Interactive transaction construction, incompatibility with scripting and multi-asset support, and incompatibility with Hathor's DAG structure.
-
-## Litecoin MWEB
-
-Litecoin's MimbleWimble Extension Blocks (activated May 2022) add opt-in confidential transactions via a sidechain-like extension block.
-
-**Relevant parallels:**
-- Opt-in privacy (like Hathor).
-- Shield/unshield operations at the boundary between transparent and MWEB pools.
-- ECDH-based stealth addresses for recipient privacy.
-
-**Differences:** MWEB is a separate block structure with different consensus rules; Hathor integrates shielded outputs directly into the existing transaction format via headers.
+Mimblewimble provides amount hiding with cut-through; MWEB adds opt-in CT via extension blocks with ECDH stealth addresses. Not adopted because of interactive construction, incompatibility with scripting/multi-asset, and incompatibility with Hathor's DAG. Mimblewimble's per-tx "kernel excess" (a point + Schnorr signature) is structurally the binding signature discussed under Future possibilities.
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-1. **Shielded address format.** Option A (compact, 53-byte payload) vs Option B (full keys, 66-byte payload). The key tradeoff is address length vs. Silent Payments compatibility. This should be resolved before wallet implementations begin.
+1. **Shielded address format.** Option A (compact) vs Option B (full keys) vs Option C (spend-only). The tradeoff is address length vs. Silent Payments compatibility and light-client scanning. Should be resolved before wallet implementations begin. (Code currently assumes the full public key — Option B.)
 
-2. **Final fee amounts.** The placeholder values (`FEE_PER_AMOUNT_SHIELDED_OUTPUT = 1`, `FEE_PER_FULL_SHIELDED_OUTPUT = 2`) are not final. Production values should be determined based on actual verification cost differentials, network economics, and desired incentive structure.
+2. **Final fee amounts.** The placeholders (`FEE_PER_AMOUNT_SHIELDED_OUTPUT = 1`, `FEE_PER_FULL_SHIELDED_OUTPUT = 2`) are not final and should be set from measured verification-cost differentials and network economics.
 
-3. **Batch verification optimization timeline.** The implementation currently verifies range proofs individually. Batch verification (`verify_multi`) would reduce CPU cost by an estimated 30-50% for multi-output transactions. The secp256k1-zkp API supports this, but the integration timeline is not yet determined.
+3. **Batch verification.** The current `batch_verify_range_proofs` is a sequential loop. A true batched multi-exponentiation API would reduce CPU for multi-output transactions; timeline depends on library support.
 
-4. **Light client scanning support.** Full nodes must verify all proofs, but light clients need an efficient protocol for detecting their own shielded payments without downloading every transaction. Possible approaches include SP-style scanning filters, trusted server-side scanning, or compact proof summaries.
+4. **Light client scanning.** Full nodes verify all proofs, but light clients need an efficient protocol for detecting their own shielded payments without downloading every transaction (SP-style filters, server-side scanning, or compact summaries).
 
-5. **Shielded Nano Contract interactions.** How should Nano Contracts interact with shielded outputs? Can a contract consume shielded inputs or produce shielded outputs? What are the implications for contract state visibility? This is deferred to a future RFC.
+5. **Shielded Nano Contract interactions.** Beyond the Rule M6 same-token guard, can a contract consume shielded inputs or produce shielded outputs? Deferred to a future RFC.
 
-6. **Fee adjustment mechanism.** Should per-output fees be fixed consensus constants or adjustable via feature activation? Fixed constants are simpler but cannot adapt to changing verification costs or network conditions.
+6. **`get_maximum_number_of_headers()` value.** 5 is the current value; whether to leave more margin for future headers is a consensus parameter decision.
+
+7. **40-bit range bound.** Whether `RANGE_PROOF_BITS = 40` is the right ceiling for all current and future tokens, or whether a per-token bit width is warranted.
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-## Sender Privacy (Phase C)
+## Binding signature / point-form excess (designed, not implemented)
 
-Ring signatures or nullifier-based protocols would hide which input is being spent, completing the privacy trifecta (hidden recipient + hidden amount/token + hidden sender). Shielded outputs simplify Phase C by making all outputs valid decoys regardless of their hidden amount or token.
+Two related upgrades share one primitive — a per-tx Schnorr "binding signature" over a Pedersen value-balance commitment, with the kernel-excess point `E_tx = e_tx · G` as the public key:
 
-## Aggregated Bulletproofs for Multi-Party
+- **Point-form `UnshieldBalanceHeader`.** Replace the 32-byte scalar `excess_blinding_factor` with `E_tx = excess · G` (33 B) plus a Schnorr signature (`R` 33 B, `z` 32 B). This keeps `Σ r_in` behind a discrete-log barrier (closing the full-unshield scalar leak) while the signature preserves inflation prevention. Cost: ~+66 B per full-unshield transaction; affects no other shape. *Recommended as the first follow-up.*
 
-If a multi-party computation (MPC) protocol for aggregated Bulletproofs becomes available in `secp256k1-zkp`, transactions where all outputs are controlled by the same party (the common case for non-atomic-swap transactions) could use a single aggregated proof, reducing total proof size logarithmically.
+- **Binding signature for every shielded transaction.** Extend `ShieldedOutputsHeader` with the same `(E_tx, R, z)` trailer, removing the "last output absorbs the residual" construction. This enables independent per-output blindings, receiver-chosen (Sapling-style) blindings, composable output addition (no range-proof recomputation when adding an output), and non-interactive multi-party construction. Cost: ~+98 B per shielded transaction plus a verifier change. Justified only when a concrete trigger lands: Sapling-style payment proofs, hardware-wallet cold-signer flows, shielded coin-join / atomic swaps, or measured output-addition latency.
 
-## Shielded Fee Amounts
+The construction is exactly Sapling's binding signature (also used by Mimblewimble and Liquid CT): deterministic Schnorr over secp256k1 with a `"HathorBindingSig/v1"` domain separator, batch-verifiable across a block. Neither variant is in the current code; the network-wide supply audit ([§4.7](#47-network-wide-supply-audit)) already works without it.
 
-The fee amount is currently transparent. A future extension could allow the fee itself to be committed — the sender would prove (via range proof) that the committed fee exceeds the minimum, without revealing the exact amount. This would hide the number of shielded outputs (which is currently inferrable from the fee).
+## Bulletproof range proofs
 
-## Cross-Chain Atomic Swaps with CT
+Migrating from Borromean (~3213 B) to Bulletproof (~675 B) range proofs would cut shielded-output size ~5× and enable true batch verification, gated on `secp256k1-zkp` exposing a compatible Bulletproof + rewind API.
 
-Shielded outputs on both sides of a cross-chain atomic swap would hide the amounts exchanged. Since each party independently balances their own blinding factors (see Section 4.1), no blinding factor exchange is needed. The atomic swap protocol only needs to coordinate the hash-time-lock, not the privacy layer.
+## Shielded mint/melt amounts
 
-## View Key Delegation for Compliance
+Extend `MintHeader`/`MeltHeader` to optionally carry a Pedersen commitment plus a range proof (and, for `DEPOSIT`-version tokens, a proof binding the HTR deposit to 1% of the committed amount), hiding total supply at the cost of the public-supply-auditor property. A business decision deferred to a later RFC; retrofittable via a new feature flag without invalidating already-issued tokens.
 
-Users could derive a "view key" that allows a designated party (auditor, regulator, exchange) to decrypt all shielded outputs addressed to them, without granting spending authority. This is analogous to Monero's view keys and could be implemented by sharing the scan private key.
+## Aggregated Bulletproofs for single-party transactions
 
-## Tiered Privacy Fees
+When all outputs are controlled by one party (the common non-swap case), a single aggregated proof could reduce total proof size logarithmically, if an MPC-free aggregation path becomes available.
 
-As the privacy stack matures, fees could be tiered by privacy level: transparent < amount-shielded < full-shielded < ring-shielded. This naturally extends the per-output-type fee model established in this RFC.
+## View key delegation for compliance
+
+A scan-key-derived view key would let a designated party (auditor, regulator, exchange) decrypt shielded outputs addressed to them without spending authority — analogous to Monero view keys.
+
+## Asset-balance binding signature
+
+The (future) binding signature covers value balance; a second one over asset balance would enable chain-wide *asset* audit for `FullShieldedOutput` transactions, detecting cross-asset forgery the same way inflation is detected today.
+
+## Tiered privacy fees
+
+As the privacy stack matures, fees could be tiered by privacy level (transparent < amount-shielded < full-shielded < ring-shielded), extending the per-output-type fee model established here.
